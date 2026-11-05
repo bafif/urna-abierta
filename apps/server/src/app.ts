@@ -1,146 +1,77 @@
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
-import pg from 'pg';
-import { fakeRoll, MarkState, MAX_BATCH, parseOperation, type Operation } from '@urna-abierta/domain';
-
-const MAX_PULL = 200;
-const SUMMARY_CACHE_MS = 5_000;
-const TABLE_ID = /^[\w-]{1,64}$/;
+import type pg from 'pg';
+import { fakeRoll } from '@urna-abierta/domain';
+import { setSetting } from './actor.ts';
+import { adminRoutes } from './routes-admin.ts';
+import { authRoutes, createInvitation } from './routes-auth.ts';
+import { syncRoutes } from './routes-sync.ts';
+import { workRoutes } from './routes-work.ts';
 
 export async function migrate(pool: pg.Pool): Promise<void> {
   const sql = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
   await pool.query(sql);
 }
 
-/**
- * Stores a batch in one transaction. Locking the row of the table gives every operation of
- * that table a number in commit order. With one global sequence, a reader could pass a number
- * whose transaction had not committed yet and never see that row.
- */
-async function storeBatch(pool: pg.Pool, table: string, operations: Operation[]): Promise<void> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('INSERT INTO polling_tables (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [table]);
-    const locked = await client.query<{ last_seq: string }>(
-      'SELECT last_seq FROM polling_tables WHERE id = $1 FOR UPDATE',
-      [table],
+/** An election with invented people and one person per role, for tests and for trying the app. */
+export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 'Demo' }: { size?: number; tables?: number; label?: string } = {}) {
+  const election = randomUUID();
+  await pool.query(`INSERT INTO elections (id, name, kind, days, status, categories) VALUES ($1, $2, 'estudiantil', ARRAY[current_date, current_date + 1, current_date + 2], 'jornada', $3)`, [
+    election,
+    `Elección de prueba ${label}`,
+    JSON.stringify([{ id: 'cat-1', name: 'Consejo Directivo', lists: [{ id: 'l1', name: 'Lista Azul' }, { id: 'l2', name: 'Lista Verde' }, { id: 'blanco', name: 'En blanco' }, { id: 'nulo', name: 'Nulos' }] }]),
+  ]);
+  const unit = randomUUID();
+  await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [unit, election, 'Distrito de prueba']);
+  const person = async (name: string, phone: string, role: string, assignment: { table?: string; unit?: string } = {}) => {
+    const id = randomUUID();
+    await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [id, name, phone]);
+    await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id) VALUES ($1, $2, $3, $4, $5)', [randomUUID(), id, role, assignment.table ?? null, assignment.unit ?? null]);
+    return id;
+  };
+  const chief = await person('Rubén', '+54 9 341 000-0000', 'jefe', { unit });
+  const links: Record<string, string> = { jefe: await createInvitation(pool, chief) };
+  const fiscales: { table: string; invitations: string[] }[] = [];
+  const roll = fakeRoll(size, 1);
+  for (let t = 0; t < tables; t += 1) {
+    const table = randomUUID();
+    await pool.query('INSERT INTO polling_tables (id, election_id, unit_id, name, place, position) VALUES ($1, $2, $3, $4, $5, $6)', [table, election, unit, `Mesa ${t + 12}`, 'Escuela Normal 1', t]);
+    await pool.query(
+      `INSERT INTO electors (election_id, id, table_id, order_number, full_name, search, document)
+       SELECT $1, $2 || '-' || id, $2, ord, name, search, '99' || lpad(ord::text, 6, '0') FROM unnest($3::text[], $4::int[], $5::text[], $6::text[]) AS t (id, ord, name, search)`,
+      [election, table, roll.map((r) => r.id), roll.map((r) => r.order), roll.map((r) => r.name), roll.map((r) => r.search)],
     );
-    const last = Number(locked.rows[0]!.last_seq);
-    const inserted = await client.query(
-      `INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload)
-       SELECT id, $1, $2 + ordinality, type, device, device_seq, device_time, payload
-       FROM unnest($3::uuid[], $4::text[], $5::text[], $6::bigint[], $7::timestamptz[], $8::jsonb[])
-         WITH ORDINALITY AS t (id, type, device, device_seq, device_time, payload, ordinality)
-       ON CONFLICT (id) DO NOTHING`,
-      [
-        table,
-        last,
-        operations.map((o) => o.id),
-        operations.map((o) => o.type),
-        operations.map((o) => o.device),
-        operations.map((o) => o.device_seq),
-        operations.map((o) => o.device_time),
-        operations.map((o) => JSON.stringify(o.payload)),
-      ],
-    );
-    if (inserted.rowCount) {
-      await client.query('UPDATE polling_tables SET last_seq = $2 WHERE id = $1', [table, last + operations.length]);
+    const two = [];
+    for (const name of t === 0 ? ['Marta', 'Laura'] : [`Fiscal ${t}`]) {
+      const fiscal = await person(name, '+54 9 341 111-1111', 'fiscal', { table });
+      two.push(await createInvitation(pool, fiscal));
+      if (name === 'Laura') two.push(await createInvitation(pool, fiscal));
     }
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
+    fiscales.push({ table, invitations: two });
   }
+  links.semaforo = await createInvitation(pool, await person('Juli', '', 'semaforo'));
+  links.estadistico = await createInvitation(pool, await person('Ana', '', 'estadistico'));
+  links.coordinacion = await createInvitation(pool, await person('Coordinación', '+54 9 341 222-2222', 'coordinacion'));
+  await setSetting(pool, 'party', { name: 'Agrupación Ejemplo', theme: 'aula' });
+  return { election, links, tables: fiscales };
 }
 
-export function buildApp(pool: pg.Pool): FastifyInstance {
-  const app = Fastify({ logger: false, bodyLimit: 128 * 1024 });
-  const summaries = new Map<string, { at: number; voted: number; last_seq: number }>();
+export function buildApp(pool: pg.Pool, { testMode = false }: { testMode?: boolean } = {}): FastifyInstance {
+  const app = Fastify({ logger: false, bodyLimit: 256 * 1024 });
 
   app.get('/api/health', async () => {
     await pool.query('SELECT 1');
     return { ok: true };
   });
 
-  app.get<{ Params: { table: string }; Querystring: { size?: string } }>(
-    '/api/tables/:table/bundle',
-    async (request, reply) => {
-      const { table } = request.params;
-      if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
-      const size = Math.min(Number(request.query.size) || 350, 20_000);
-      return { table, source: 'fake', electors: fakeRoll(size, 1) };
-    },
-  );
+  authRoutes(app, pool);
+  syncRoutes(app, pool);
+  adminRoutes(app, pool);
+  workRoutes(app, pool);
 
-  app.post<{ Body: { table?: unknown; operations?: unknown } }>('/api/sync/push', async (request, reply) => {
-    const { table, operations } = request.body ?? {};
-    if (typeof table !== 'string' || !TABLE_ID.test(table) || !Array.isArray(operations)) {
-      return reply.code(400).send({ error: 'invalid_request' });
-    }
-    if (operations.length > MAX_BATCH) return reply.code(413).send({ error: 'batch_too_large', max: MAX_BATCH });
-    const valid: Operation[] = [];
-    const rejected: { id: unknown; reason: string }[] = [];
-    for (const raw of operations) {
-      const parsed = parseOperation(raw);
-      if (!parsed) rejected.push({ id: (raw as { id?: unknown })?.id, reason: 'invalid' });
-      else if (parsed.table !== table) rejected.push({ id: parsed.id, reason: 'wrong_table' });
-      else valid.push(parsed);
-    }
-    if (valid.length > 0) await storeBatch(pool, table, valid);
-    return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };
-  });
-
-  app.get<{ Querystring: { table?: string; since?: string } }>('/api/sync/pull', async (request, reply) => {
-    const { table, since } = request.query;
-    const cursor = Number(since ?? 0);
-    if (!table || !TABLE_ID.test(table) || !Number.isSafeInteger(cursor) || cursor < 0) {
-      return reply.code(400).send({ error: 'invalid_request' });
-    }
-    const result = await pool.query(
-      `SELECT id, table_id AS table, seq, type, device, device_seq, device_time, payload
-       FROM operations WHERE table_id = $1 AND seq > $2 ORDER BY seq LIMIT $3`,
-      [table, cursor, MAX_PULL + 1],
-    );
-    const rows = result.rows.slice(0, MAX_PULL);
-    return {
-      operations: rows.map((row) => ({
-        id: row.id,
-        schema: 1,
-        table: row.table,
-        type: row.type,
-        device: row.device,
-        device_seq: Number(row.device_seq),
-        device_time: new Date(row.device_time).toISOString(),
-        payload: row.payload,
-      })),
-      next: rows.length > 0 ? Number(rows[rows.length - 1].seq) : cursor,
-      more: result.rows.length > MAX_PULL,
-    };
-  });
-
-  /** What a district chief polls. Counted once every few seconds, however many are watching. */
-  app.get<{ Params: { table: string } }>('/api/tables/:table/summary', async (request, reply) => {
-    const { table } = request.params;
-    if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
-    const cached = summaries.get(table);
-    if (cached && Date.now() - cached.at < SUMMARY_CACHE_MS) return cached;
-    const result = await pool.query(
-      `SELECT id, type, payload FROM operations
-       WHERE table_id = $1 AND type IN ('voter.marked', 'voter.unmarked')`,
-      [table],
-    );
-    const state = new MarkState();
-    for (const row of result.rows) {
-      state.apply({ id: row.id, type: row.type, payload: row.payload } as Operation);
-    }
-    const seq = await pool.query<{ last_seq: string }>('SELECT last_seq FROM polling_tables WHERE id = $1', [table]);
-    const summary = { at: Date.now(), voted: state.voters().length, last_seq: Number(seq.rows[0]?.last_seq ?? 0) };
-    summaries.set(table, summary);
-    return summary;
-  });
-
+  if (testMode) {
+    app.post<{ Body: { size?: number; tables?: number; label?: string } }>('/api/test/seed', async (request) => seedDemo(pool, request.body ?? {}));
+  }
   return app;
 }
