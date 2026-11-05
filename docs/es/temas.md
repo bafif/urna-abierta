@@ -2,11 +2,19 @@
 
 [English](../en/themes.md) · [Volver a la instalación](instalacion.md)
 
-Un tema son datos: colores para cada modo, letras, formas y unas pocas recetas. No lleva código, y la app no carga nada de afuera.
+Un tema son datos: colores para cada modo, letras, formas y unas pocas recetas. No lleva código, y la app no carga nada de afuera. Se importa
+**un solo archivo, con todo adentro:** colores, logo y letras.
 
 1. Copiá uno de los temas de [`apps/web/src/lib/temas.js`](../../apps/web/src/lib/temas.js) a un archivo tuyo, y cambiale `id`, `nombre` y
-   los colores. Las letras tienen que ser de las que ya vienen con la app.
-2. Si tiene logo, poné en `logo` la ruta a un SVG, PNG o WebP.
+   los colores.
+2. Si tiene logo, poné en `logo` la ruta a un SVG, PNG o WebP. Para usar letras propias, declaralas (WOFF2, WOFF, TTF u OTF):
+
+   ```js
+   fuentes: { titulo: "'Mi Letra'", texto: "'Mi Letra'", boton: "'Mi Letra'", numero: "'Mi Letra'" },
+   archivosFuentes: [{ familia: 'Mi Letra', peso: '400', archivo: 'mi-letra.woff2' }],
+   ```
+
+   Con letras de peso variable, poné el rango: `peso: '200 800'`. Las que el tema use de las que trae la app se incluyen solas.
 3. Convertilo, con el repo instalado:
 
    ```sh
@@ -19,6 +27,9 @@ Un tema son datos: colores para cada modo, letras, formas y unas pocas recetas. 
    - **Con la app ya instalada:** entrá a **Más cosas**, **Ajustes**, **Agregar un tema propio**, y elegí ese archivo.
 
 Los temas propios no vienen con la app ni con el instalador: viajan solo de tu computadora a tu servidor. A partir de ahí, cualquiera de tu partido lo puede elegir. Si usás el mismo `id`, reemplaza al anterior.
+
+Cada teléfono baja las letras una vez y las guarda, así que el tema se ve igual sin señal. Si incluís letras, asegurate de que su licencia te
+deje distribuirlas: van a ir a los teléfonos de tu equipo.
 
 ## Las recetas
 
