@@ -15,12 +15,15 @@ export async function migrate(pool: pg.Pool): Promise<void> {
 }
 
 /** An election with invented people and one person per role, for tests and for trying the app. */
-export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 'Demo' }: { size?: number; tables?: number; label?: string } = {}) {
+export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 'Demo', startsInDays }: { size?: number; tables?: number; label?: string; startsInDays?: number } = {}) {
   const election = randomUUID();
-  await pool.query(`INSERT INTO elections (id, name, kind, days, status, categories) VALUES ($1, $2, 'estudiantil', ARRAY[current_date, current_date + 1, current_date + 2], 'jornada', $3)`, [
+  // From yesterday, so that today is a voting day whatever the time zone of the phone.
+  const offsets = startsInDays === undefined ? [-1, 0, 1, 2] : [startsInDays];
+  await pool.query(`INSERT INTO elections (id, name, kind, days, status, categories) VALUES ($1, $2, 'estudiantil', (SELECT array_agg(current_date + o) FROM unnest($4::int[]) AS o), 'jornada', $3)`, [
     election,
     `Elección de prueba ${label}`,
     JSON.stringify([{ id: 'cat-1', name: 'Consejo Directivo', lists: [{ id: 'l1', name: 'Lista Azul' }, { id: 'l2', name: 'Lista Verde' }, { id: 'blanco', name: 'En blanco' }, { id: 'nulo', name: 'Nulos' }] }]),
+    offsets,
   ]);
   const unit = randomUUID();
   await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [unit, election, 'Distrito de prueba']);
@@ -39,7 +42,7 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
     await pool.query('INSERT INTO polling_tables (id, election_id, unit_id, name, place, position) VALUES ($1, $2, $3, $4, $5, $6)', [table, election, unit, `Mesa ${t + 12}`, 'Escuela Normal 1', t]);
     await pool.query(
       `INSERT INTO electors (election_id, id, table_id, order_number, full_name, search, document)
-       SELECT $1, $2 || '-' || id, $2, ord, name, search, '99' || lpad(ord::text, 6, '0') FROM unnest($3::text[], $4::int[], $5::text[], $6::text[]) AS t (id, ord, name, search)`,
+       SELECT $1, $2 || '-' || id, $2, ord, name, search || ' 99' || lpad(ord::text, 6, '0'), '99' || lpad(ord::text, 6, '0') FROM unnest($3::text[], $4::int[], $5::text[], $6::text[]) AS t (id, ord, name, search)`,
       [election, table, roll.map((r) => r.id), roll.map((r) => r.order), roll.map((r) => r.name), roll.map((r) => r.search)],
     );
     const two = [];
@@ -58,7 +61,8 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
 }
 
 export function buildApp(pool: pg.Pool, { testMode = false }: { testMode?: boolean } = {}): FastifyInstance {
-  const app = Fastify({ logger: false, bodyLimit: 256 * 1024 });
+  // Caddy is the only way in, and it says which address each request came from.
+  const app = Fastify({ logger: false, bodyLimit: 256 * 1024, trustProxy: true });
 
   app.get('/api/health', async () => {
     await pool.query('SELECT 1');
@@ -71,7 +75,7 @@ export function buildApp(pool: pg.Pool, { testMode = false }: { testMode?: boole
   workRoutes(app, pool);
 
   if (testMode) {
-    app.post<{ Body: { size?: number; tables?: number; label?: string } }>('/api/test/seed', async (request) => seedDemo(pool, request.body ?? {}));
+    app.post<{ Body: { size?: number; tables?: number; label?: string; startsInDays?: number } }>('/api/test/seed', async (request) => seedDemo(pool, request.body ?? {}));
   }
   return app;
 }

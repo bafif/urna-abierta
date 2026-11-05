@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY,
   name text NOT NULL,
   phone text,
+  totp_sealed text,
   created_at timestamptz NOT NULL DEFAULT now(),
   removed_at timestamptz
 );
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS polling_tables (
   name text NOT NULL DEFAULT '',
   place text NOT NULL DEFAULT '',
   position integer NOT NULL DEFAULT 0,
-  last_seq bigint NOT NULL DEFAULT 0
+  last_seq bigint NOT NULL DEFAULT 0,
+  last_contact timestamptz
 );
 CREATE INDEX IF NOT EXISTS polling_tables_election ON polling_tables (election_id, position);
 
@@ -65,6 +67,7 @@ CREATE TABLE IF NOT EXISTS devices (
   token_hash text NOT NULL UNIQUE,
   created_at timestamptz NOT NULL DEFAULT now(),
   last_seen_at timestamptz NOT NULL DEFAULT now(),
+  second_factor_at timestamptz,
   revoked_at timestamptz
 );
 

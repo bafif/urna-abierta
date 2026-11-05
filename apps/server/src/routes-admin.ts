@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, isRole, isSecurityProfile, readCsvRoll, readPadron, SECURITY_PROFILES, type PadronRead } from '@urna-abierta/domain';
-import { audit, getSetting, requires, setSetting } from './actor.ts';
+import { foldText, isRole, isSecurityProfile, readCsvRoll, readPadron, SECURITY_PROFILES, themeProblems, type PadronRead } from '@urna-abierta/domain';
+import { audit, authenticated, can, getSetting, requires, setSetting } from './actor.ts';
 import { createInvitation } from './routes-auth.ts';
 
 const MAX_ROLL_BYTES = 64 * 1024 * 1024;
@@ -22,6 +22,17 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     await setSetting(pool, 'party', { name, theme });
     await audit(pool, request.actor, 'party.changed');
     return { name, theme };
+  });
+
+  /** Themes a party adds. Each has to pass the same reading check as the ones that come with the app. */
+  app.put<{ Body: { theme?: unknown } }>('/api/themes', { preHandler: manageElection, bodyLimit: 1024 * 1024 }, async (request, reply) => {
+    const { theme } = request.body ?? {};
+    const problems = themeProblems(theme);
+    if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
+    const themes = await getSetting<{ id: string }[]>(pool, 'themes', []);
+    await setSetting(pool, 'themes', [...themes.filter((other) => other.id !== (theme as { id: string }).id), theme]);
+    await audit(pool, request.actor, 'theme.added', (theme as { id: string }).id);
+    return { ok: true };
   });
 
   app.put<{ Body: { profile?: unknown } }>('/api/security', { preHandler: requires(pool, 'security.manage') }, async (request, reply) => {
@@ -91,6 +102,14 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
        FROM elections e ORDER BY e.created_at DESC`,
     );
     return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((d: Date) => d.toISOString().slice(0, 10)) })) };
+  });
+
+  /** Which elections someone working with numbers or the traffic light can pick: names only. */
+  app.get('/api/open-elections', { preHandler: authenticated(pool) }, async (request, reply) => {
+    const { actor } = request;
+    if (!can(actor, 'semaphore.read') && !can(actor, 'stats.read') && !can(actor, 'semaphore.sensitive')) return reply.code(403).send({ error: 'forbidden' });
+    const rows = await pool.query(`SELECT id, name, status FROM elections WHERE status <> 'purgada' ORDER BY created_at DESC`);
+    return { elections: rows.rows };
   });
 
   app.post<{ Body: { name?: unknown; kind?: unknown; days?: unknown; categories?: unknown } }>('/api/elections', { preHandler: manageElection }, async (request, reply) => {
@@ -264,6 +283,17 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       await audit(pool, request.actor, 'fiscal.assigned', request.params.table, { user: fiscal });
     }
     return { ok: true };
+  });
+
+  app.get<{ Params: { id: string } }>('/api/elections/:id/units', { preHandler: manageElection }, async (request) => {
+    const rows = await pool.query(
+      `SELECT n.id, n.name,
+              (SELECT u.name FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.unit_id = n.id AND a.role = 'jefe' AND u.removed_at IS NULL LIMIT 1) AS chief,
+              (SELECT count(*)::int FROM polling_tables t WHERE t.unit_id = n.id) AS tables
+       FROM units n WHERE n.election_id = $1 ORDER BY n.name`,
+      [request.params.id],
+    );
+    return { units: rows.rows };
   });
 
   app.post<{ Params: { id: string }; Body: { name?: unknown } }>('/api/elections/:id/units', { preHandler: manageElection }, async (request, reply) => {

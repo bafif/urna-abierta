@@ -47,11 +47,11 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const key = `${request.actor.userId}:${request.params.id}`;
     const cached = cache.get(key);
     if (cached && Date.now() - cached.at < SUMMARY_CACHE_MS) return cached.value;
-    const [tables, votes, incidents] = await Promise.all([
+    const [tables, votes, incidents, counts] = await Promise.all([
       pool.query(
         `SELECT t.id, t.name, t.place, t.last_seq,
                 (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total,
-                (SELECT max(o.received_at) FROM operations o WHERE o.table_id = t.id) AS last_sync,
+                t.last_contact AS last_sync,
                 (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id
                  WHERE a.table_id = t.id AND a.role = 'fiscal' LIMIT 1) AS fiscal
          FROM polling_tables t WHERE t.id = ANY($1) ORDER BY t.position`,
@@ -65,10 +65,26 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
          ORDER BY o.device_time DESC`,
         [scope],
       ),
+      pool.query(`SELECT table_id, type, payload FROM operations WHERE table_id = ANY($1) AND type IN ('envelopes.counted', 'tally.submitted') AND NOT quarantined ORDER BY seq`, [scope]),
     ]);
+    const decided = await pool.query('SELECT table_id, category FROM tally_decisions WHERE table_id = ANY($1)', [scope]);
+    const settled = new Set(decided.rows.map((row) => `${row.table_id}:${row.category}`));
+    const needsReview = (table: string) => {
+      const own = counts.rows.filter((row) => row.table_id === table);
+      const envelopes = own.filter((row) => row.type === 'envelopes.counted').at(-1)?.payload;
+      const versions = new Map<string, Set<string>>();
+      for (const { type, payload } of own) {
+        if (type !== 'tally.submitted') continue;
+        versions.set(payload.category, (versions.get(payload.category) ?? new Set()).add(JSON.stringify(payload.results)));
+      }
+      return {
+        envelopesDiffer: Boolean(envelopes && envelopes.envelopes !== envelopes.marked),
+        talliesDiffer: [...versions].some(([category, distinct]) => distinct.size > 1 && !settled.has(`${table}:${category}`)),
+      };
+    };
     const value = {
       tables: tables.rows.map((t) => ({
-        id: t.id, name: t.name, place: t.place, total: t.total, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal,
+        id: t.id, name: t.name, place: t.place, total: t.total, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal, ...needsReview(t.id),
         incidents: incidents.rows.filter((i) => i.table_id === t.id).map((i) => ({ id: i.id, at: i.device_time, kind: i.payload.kind })),
       })),
     };

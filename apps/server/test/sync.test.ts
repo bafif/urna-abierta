@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { uuidv7, writePadron, type Operation } from '@urna-abierta/domain';
+import { totpCode } from '../src/actor.ts';
 import { buildApp, migrate, seedDemo } from '../src/app.ts';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -81,6 +82,31 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await setup({ code: 'codigo', name: 'Ana' })).statusCode).toBe(400);
       expect((await setup({ code: 'codigo', name: 'Ana', accepted: true })).statusCode).toBe(200);
       expect((await setup({ code: 'codigo', name: 'Eva', accepted: true })).statusCode).toBe(409);
+    });
+
+    it('a code brings a session to an installed app, once, and guessing gets blocked', async () => {
+      const { code } = (await call('fiscal', 'POST', '/api/auth/handoff')).json();
+      expect(code).toMatch(/^\d{8}$/);
+      const redeem = (token: string, ip = '10.0.0.1') => app.inject({ method: 'POST', url: '/api/auth/redeem', payload: { token }, remoteAddress: ip });
+      expect((await redeem(code)).statusCode).toBe(200);
+      expect((await redeem(code)).statusCode).toBe(410);
+      for (let i = 0; i < 9; i += 1) expect((await redeem(`mal-${i}`, '10.0.0.2')).statusCode).toBe(410);
+      expect((await redeem('otra', '10.0.0.2')).statusCode).toBe(410);
+      expect((await redeem('otra', '10.0.0.2')).statusCode).toBe(429);
+      expect((await redeem('otra', '10.0.0.3')).statusCode).toBe(410);
+    });
+
+    it('with the stricter profiles, chiefs need a second step on each device and poll watchers do not', async () => {
+      await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"local"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', `/api/tables/${table}/bundle`)).json().error).toBe('second_factor_needed');
+      expect((await call('jefe', 'GET', '/api/me')).json().secondFactorNeeded).toBe(true);
+      const { secret } = (await call('jefe', 'POST', '/api/auth/second-factor/start')).json();
+      expect((await call('jefe', 'POST', '/api/auth/second-factor/verify', { code: '000000' })).statusCode).toBe(403);
+      const code = totpCode(secret, Math.floor(Date.now() / 30_000));
+      expect((await call('jefe', 'POST', '/api/auth/second-factor/verify', { code })).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      expect((await call('jefe', 'POST', '/api/auth/second-factor/start')).json().enrolled).toBe(true);
     });
 
     it('removing someone stops their phone', async () => {
@@ -275,8 +301,23 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await upload(id, new TextEncoder().encode('nada'))).statusCode).toBe(422);
       await call('coordinacion', 'POST', `/api/users`, { name: 'x', role: 'sistema' });
       await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"nacional"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
+      await pool.query('UPDATE devices SET second_factor_at = now()');
       const res = await upload(id, writePadron({ electors: people(2) as never, externalAi: true }));
       expect(res.json().error).toBe('external_ai_forbidden');
+    });
+  });
+
+  describe('themes a party adds', () => {
+    it('only takes a theme that can be read, and anyone can see it before logging in', async () => {
+      const color = '#101010';
+      const colors = (texto: string) => Object.fromEntries(['superficie', 'superficie2', 'linea', 'margen', 'sobrePrimario', 'sobrePeligro', 'bienFondo'].map((k) => [k, '#ffffff']).concat([['fondo', '#ffffff'], ['texto', texto], ['suave', '#555555'], ['primario', color], ['acento', color], ['marca', color], ['peligro', '#a00000'], ['peligroFondo', '#ffffff'], ['peligroTexto', '#a00000'], ['bien', '#0a5a2a']]));
+      const theme = { id: 'propio', nombre: 'Propio', fuentes: { titulo: 'Poppins' }, forma: { radio: '8px' }, recetas: { tachado: 'linea', cabecera: 'simple' }, claro: colors('#101010'), oscuro: colors('#101010') };
+      const put = (body: object) => call('coordinacion', 'PUT', '/api/themes', { theme: body });
+      expect((await put({ ...theme, claro: colors('#999999') })).json().error).toBe('theme_not_usable');
+      expect((await put({ ...theme, forma: { radio: '8px;background:url(x)' } })).statusCode).toBe(422);
+      expect((await call('fiscal', 'PUT', '/api/themes', { theme })).statusCode).toBe(403);
+      expect((await put(theme)).statusCode).toBe(200);
+      expect((await app.inject({ url: '/api/public' })).json().themes[0].id).toBe('propio');
     });
   });
 

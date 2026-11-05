@@ -40,6 +40,10 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
   }
 }
 
+/** At most one write every half a minute: hearing from a phone is frequent and tells little. */
+const heardFrom = (pool: pg.Pool, table: string) =>
+  pool.query(`UPDATE polling_tables SET last_contact = now() WHERE id = $1 AND (last_contact IS NULL OR last_contact < now() - interval '30 seconds')`, [table]);
+
 export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
   const signedIn = authenticated(pool);
 
@@ -78,6 +82,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
     // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
     const late = ['cerrada', 'purgada'].includes(status.rows[0].status);
     if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
+    await heardFrom(pool, table);
     return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };
   });
 
@@ -92,6 +97,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
       [table, cursor, MAX_PULL + 1],
     );
     const rows = result.rows.slice(0, MAX_PULL);
+    await heardFrom(pool, table);
     return {
       operations: rows.map((row) => ({ id: row.id, schema: 1, table: row.table, type: row.type, device: row.device, device_seq: Number(row.device_seq), device_time: new Date(row.device_time).toISOString(), payload: row.payload })),
       next: rows.length > 0 ? Number(rows[rows.length - 1].seq) : cursor,
