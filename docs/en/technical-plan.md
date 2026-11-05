@@ -11,8 +11,8 @@
 | Server | TypeScript on Node, with Fastify |
 | Database | Postgres, with a versioned SQL schema |
 | Tally sheet photos | Server disk; S3 compatible as an option |
-| Installation | `compose` with app, Postgres and Caddy (automatic TLS) |
-| Installer | Desktop app for Windows, macOS and Linux, published on GitHub Releases |
+| Installation | A rootless Podman pod with app, Postgres and Caddy (automatic TLS), which a script leaves running on Ubuntu or Debian |
+| Installer | A single executable for Windows, macOS and Linux, published on GitHub Releases. It is Node with its files inside: it opens its screens in the browser, shares the themes with the app, and could be tested end to end |
 | Scanner | Python CLI, with local text recognition |
 
 I chose a PWA to avoid depending on app stores or a central account: each party serves it from its own domain, and poll
@@ -76,7 +76,7 @@ My name may appear in a signature. What must not get out is my address or anythi
 |---|---|---|
 | Windows | Unsigned. Once there is a release, I apply for the free signature of SignPath Foundation, whose certificate is in the foundation's name and carries none of my data | SmartScreen warns until it is signed: “More info” and “Run anyway” |
 | macOS | Ad-hoc signature, which identifies nobody. If the warning has to go: Developer ID and notarization, for USD 99 a year | macOS blocks it the first time: Settings, Privacy & Security, “Open Anyway” |
-| Linux | AppImage | No warning |
+| Linux | One executable | No warning |
 
 I rule out the Certum open source certificate, because it publishes the city and province, and Microsoft Artifact Signing, which
 for individuals is only available in the United States and Canada.
@@ -130,8 +130,8 @@ sending it again duplicates nothing.
 | Roll, schedule, permissions, traffic light | Edited only with signal |
 
 No rule depends on the clock of a phone. Each table numbers its operations under a lock on its row, because with one global
-sequence a reader can miss rows that commit out of order. What arrives late, or from a revoked phone, goes to quarantine for
-review instead of being discarded.
+sequence a reader can miss rows that commit out of order. What arrives after the close goes to quarantine for
+review instead of being discarded. A revoked phone stops sending, and what it had stays saved on it.
 
 A phone with no space is the worst case, because writing to the database can break it and lose everything. The app checks when
 it opens, when preparing the table and every 10 minutes, with a separate write. With no room it warns and blocks crossing out
@@ -167,7 +167,9 @@ fixed list; roles are editable combinations. The server checks every request and
 - Sensitive categories of the traffic light need a separate permission and are encrypted per field. That protects disk
   copies and backups, though not a running server, where the key is.
 - The audit log cannot be edited.
-- Poll watchers join with a single-use invitation and a PIN; other roles, with a passkey or a password and TOTP.
+- Each person gets in with a single-use invitation, which becomes a credential for that device. The municipal and national profiles
+  also ask for a TOTP code on each device, except for poll watchers, who only see their table.
+- On iPhone, the installed app starts with its own empty storage: it gets in with an 8-digit number, single-use and valid for 15 minutes.
 
 ## Roll format
 

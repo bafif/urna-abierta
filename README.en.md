@@ -28,7 +28,7 @@ belong to any party or group.
 
 ## Made for someone who has never opened it
 
-This is how it will work. No menus: one question per screen, one main button and a plan that tells you what comes next. Each person
+No menus: one question per screen, one main button and a plan that tells you what comes next. Each person
 sees only their work.
 
 | Who | What they do |
@@ -43,7 +43,7 @@ sees only their work.
 </p>
 
 With themes for every taste, in light and dark mode: you choose with a preview when installing, and each person can change it the first
-time they open it. You will also be able to create your own, with your party's colors. You can go through
+time they open it. You can also add your own, with your party's colors. You can go through
 [the design proposal](design/index.html) by opening it in your browser.
 
 ## What makes it different
@@ -54,15 +54,14 @@ time they open it. You will also be able to create your own, with your party's c
 - **Designed not to pay for a server.** It aims at free tiers: I measured it within the limits of those machines, 1 GB of memory and a
   quarter of a processor, and it was plenty for 200 tables.
 - **Reads your rolls.** It reads a scanned PDF with a model that runs on your computer, without sending the roll to anyone.
-- **With Argentine law in mind.** It will bring tools to comply with personal data protection.
+- **With Argentine law in mind.** It brings permissions, a log nobody can change and tools to handle requests from people and erase the data at the end.
 
 ## Installation
 
-You will download an installer for Windows, macOS or Linux that guides you through creating your server and leaves everything set
-up.
+You download an installer for Windows, macOS or Linux that asks you three questions, creates your server and leaves everything set up.
 
-**It is not ready yet.** Today there is a test version, with invented people, for trying it out or joining development:
-**[how to install it](docs/en/installation.md)**.
+**There is no published version yet.** Meanwhile it can run from the source code, with invented people or with the installer itself:
+**[how to install it](docs/en/installation.md)**. Before using it in an election, run a [drill](docs/en/drill.md).
 
 ## Status
 
@@ -72,18 +71,23 @@ The first real test is a university election, in April 2027.
 - [x] Local reading of scanned rolls
 - [x] Server measured on a small machine
 - [x] Design proposal and theme system
-- [ ] Login, real rolls, tables and permissions
-- [ ] Irregularities, envelope count, vote count and chief panel
-- [ ] Traffic light, audit and installer
-- [ ] Dry run with real people
+- [x] Login, real rolls, tables and permissions
+- [x] Irregularities, envelope count, vote count and chief panel
+- [x] Traffic light, audit, personal data and backups
+- [x] Installer, tested over SSH on Ubuntu and restoring a backup on another server
+- [ ] Creating servers on the real clouds: tested against simulations of their APIs
+- [ ] Test on a real iPhone
+- [ ] Drill with real people
 
 ## Documentation
 
 | | |
 |---|---|
-| [Installation](docs/en/installation.md) | How to try it today, and what the installer will be like |
+| [Installation](docs/en/installation.md) | The installer, and how to try it |
+| [Creating a server](docs/en/servers.md) | Oracle, AWS and Google, step by step, and how to maintain it |
+| [Drill](docs/en/drill.md) | What to test with real people before an election |
 | [Technical plan](docs/en/technical-plan.md) | Architecture, sync, permissions and roll format |
-| [Measurements](docs/en/stage-1-results.md) | What was tested and what it showed |
+| [Measurements](docs/en/stage-4-results.md) | What was tested and what it showed, with the [initial risks](docs/en/stage-1-results.md) |
 | [Legal](LEGAL.en.md) | License, responsibilities and personal data |
 | [Roll scanner](https://github.com/bafif/urna-abierta-padrones) | The repository that converts rolls to the open format |
 

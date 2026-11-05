@@ -2,10 +2,9 @@
 
 [Español](../es/instalacion.md) · [Back to the README](../../README.en.md)
 
-**It cannot be used in a real election yet.** Today's version has no login and uses invented people. This page explains how to try
-it, and what installation will be like once it is ready.
+**There is no published version yet, and it has not been used in a real election.** Before using it, run a [drill](drill.md).
 
-## Try it today
+## Try it with invented people
 
 You need Node 24 and Podman.
 
@@ -16,32 +15,38 @@ corepack pnpm install
 deploy/serve.sh
 ```
 
-Open `http://localhost:8090`. To see it as on a phone, turn on device mode with F12, or follow the
-[test on an Android emulator](phone-tests.md).
+It gives you a link for each role: poll watcher, district chief, coordination, traffic light and statistics. Each link works once. To
+see it as on a phone, turn on device mode with F12, or follow the [test on an Android emulator](phone-tests.md).
 
 To see the design proposal, just open `design/index.html` in a browser.
 
-## What it will be like
+## The installer
 
-You will download an installer from the GitHub releases page, for Windows, macOS or Linux. It asks three questions and does the rest.
+It is downloaded from the GitHub releases page, for Windows, macOS or Linux. It opens in your browser and can only be seen from your
+computer. Until a version is published, run it from the source with `node apps/installer/src/main.ts`, with the container images built.
+
+It asks three questions and does the rest.
 
 **1. Where will your Urna Abierta live?** Any of these options works:
 
 | Option | What you need |
 |---|---|
-| Create a new server | An account on Oracle Cloud, AWS or Google Cloud. We guide you through creating it |
-| I already have a server | Its address and an SSH key |
+| Create a new server | An account on Oracle Cloud, AWS or Google Cloud. [This is how to create it](servers.md) |
+| I already have a server | Ubuntu or Debian, its address and an SSH key of a user with passwordless `sudo` |
 | Paste a text | Paste a block when creating the server, without giving the installer any credential |
-| Try it on this computer | Nothing. It can only be seen from there |
+| Try it on this computer | Podman or Docker running. It can only be seen from there |
 
-**2. How do we read scanned rolls?** On your computer, which is recommended because a roll holds personal data; with your own AI,
-pasting your key; or you decide later.
+**2. How do we read scanned rolls?** On your computer, which is the recommended way because a roll has people's data, or you decide
+later. Using your own AI is not available yet. Today the [roll reader](https://github.com/bafif/urna-abierta-padrones) runs from a terminal
+and builds the `.padron` file that gets uploaded to the app. The app also takes a CSV sheet.
 
 **3. How do you want it to look?** You choose one of the themes, seeing them first in light and dark. Each person can change it later on
 their phone.
 
 At the end it gives you your server's address and a recovery key for the backups, and opens the app. An assistant then continues with
 the party, the team and the first election.
+
+**Keep that key.** It is the only thing that opens your backups, and it cannot be generated again.
 
 ## Which server to choose
 
