@@ -1,0 +1,23 @@
+{
+	admin off
+	skip_install_trust
+}
+
+{$URNA_SITE::80} {
+	{$URNA_TLS:}
+
+	handle /api/* {
+		reverse_proxy {$URNA_API:server:3000}
+	}
+
+	handle {
+		root * /srv
+		header /service-worker.js Cache-Control "no-cache"
+		header /index.html Cache-Control "no-cache"
+		header /_app/immutable/* Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server {
+			precompressed br gzip
+		}
+	}
+}

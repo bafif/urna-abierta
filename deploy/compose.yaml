@@ -1,0 +1,54 @@
+# Early test server: no login yet, invented data only.
+services:
+  database:
+    image: docker.io/library/postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: urna
+      POSTGRES_DB: urna
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?definí POSTGRES_PASSWORD en deploy/.env}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=20
+      - -c
+      - work_mem=4MB
+      - -c
+      - effective_cache_size=384MB
+    volumes:
+      - database:/var/lib/postgresql
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/server.Containerfile
+    restart: unless-stopped
+    environment:
+      URNA_TEST_SERVER: fake-data-only
+      PG_POOL_MAX: 8
+      DATABASE_URL: postgres://urna:${POSTGRES_PASSWORD}@database:5432/urna
+    depends_on:
+      - database
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Containerfile
+    restart: unless-stopped
+    environment:
+      URNA_SITE: ${URNA_SITE:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - server
+
+volumes:
+  database:
+  caddy-data:
+  caddy-config:
