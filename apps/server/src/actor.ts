@@ -32,7 +32,11 @@ export const hashToken = (token: string) => createHash('sha256').update(token).d
  */
 const ACTOR_MEMORY_MS = 30_000;
 const actors = new Map<string, { until: number; actor: Actor }>();
-export const forgetActors = () => actors.clear();
+let edited: RoleOverrides | null = null;
+export const forgetActors = () => {
+  actors.clear();
+  edited = null;
+};
 
 export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | null> {
   const key = hashToken(token);
@@ -53,7 +57,8 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
   );
   const assignments = roles.rows.filter((r) => isRole(r.role)) as Assignment[];
   const unique = [...new Set(assignments.map((a) => a.role))];
-  const permissions = permissionsOf(unique, await getSetting<RoleOverrides>(pool, 'role_permissions', {}));
+  edited ??= await getSetting<RoleOverrides>(pool, 'role_permissions', {});
+  const permissions = permissionsOf(unique, edited);
   const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, assignments, roles: unique, permissions };
   if (actors.size > 5_000) actors.clear();
   actors.set(key, { until: Date.now() + ACTOR_MEMORY_MS, actor });

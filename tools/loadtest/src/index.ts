@@ -20,6 +20,7 @@ const { values: args } = parseArgs({
     seconds: { type: 'string', default: '60' },
     'votes-per-hour': { type: 'string', default: '120' },
     run: { type: 'string', default: `${Date.now()}` },
+    settle: { type: 'string', default: '60' },
   },
 });
 
@@ -133,6 +134,8 @@ const tokens = new Map<string, string>();
 for (const item of seeded.tables) tokens.set(item.table, await redeem(item.invitations[0]!));
 const chiefTokens = await Promise.all(seeded.chiefs.map((item) => redeem(item.invitation)));
 setup.close();
+// A real election loads its roll days before: this waits for the database to digest it, so as not to measure that.
+await sleep(Number(args.settle) * 1000);
 counters.latencies.length = 0;
 const phoneOf = (table: string) => {
   const phone = new Phone();

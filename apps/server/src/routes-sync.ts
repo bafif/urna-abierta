@@ -11,6 +11,15 @@ const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const TABLE_ID = /^[\w-]{1,64}$/;
 const photosDir = () => process.env.URNA_PHOTOS_DIR ?? '/tmp/urna-fotos';
 
+/** At most one write every half a minute: hearing from a phone is frequent and tells little. */
+const HEARD_EVERY_MS = 30_000;
+const heard = new Map<string, number>();
+async function heardFrom(pool: pg.Pool, table: string): Promise<void> {
+  if (Date.now() - (heard.get(table) ?? 0) < HEARD_EVERY_MS) return;
+  heard.set(table, Date.now());
+  await pool.query('UPDATE polling_tables SET last_contact = now() WHERE id = $1', [table]);
+}
+
 /**
  * Stores a batch in one transaction. Locking the row of the table gives every operation of
  * that table a number in commit order. With one global sequence, a reader could pass a number
@@ -30,7 +39,9 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
        ON CONFLICT (id) DO NOTHING`,
       [table, last, operations.map((o) => o.id), operations.map((o) => o.type), operations.map((o) => o.device), operations.map((o) => o.device_seq), operations.map((o) => o.device_time), operations.map((o) => JSON.stringify(o.payload)), author, quarantined],
     );
-    if (inserted.rowCount) await client.query('UPDATE polling_tables SET last_seq = $2 WHERE id = $1', [table, last + operations.length]);
+    // It writes this row anyway, so it also says the phone was heard from.
+    await client.query('UPDATE polling_tables SET last_seq = $2, last_contact = now() WHERE id = $1', [table, last + (inserted.rowCount ? operations.length : 0)]);
+    heard.set(table, Date.now());
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -40,25 +51,20 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
   }
 }
 
-/** At most one write every half a minute: hearing from a phone is frequent and tells little. */
-const HEARD_EVERY_MS = 30_000;
-const heard = new Map<string, number>();
-async function heardFrom(pool: pg.Pool, table: string): Promise<void> {
-  if (Date.now() - (heard.get(table) ?? 0) < HEARD_EVERY_MS) return;
-  heard.set(table, Date.now());
-  await pool.query('UPDATE polling_tables SET last_contact = now() WHERE id = $1', [table]);
-}
-
 /** A status only changes through one route of this same process, which clears this at that moment. */
 const statuses = new Map<string, string>();
 export const forgetStatuses = () => statuses.clear();
 async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
   const known = statuses.get(table);
   if (known) return known;
-  const found = await pool.query('SELECT e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1', [table]);
-  const status: string | undefined = found.rows[0]?.status;
-  if (status) statuses.set(table, status);
-  return status ?? null;
+  // All the tables of that election at once: they tend to ask together, when the signal comes back.
+  const found = await pool.query(
+    `SELECT t.id, e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id
+     WHERE t.election_id = (SELECT election_id FROM polling_tables WHERE id = $1)`,
+    [table],
+  );
+  for (const row of found.rows) statuses.set(row.id, row.status);
+  return statuses.get(table) ?? null;
 }
 
 export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
@@ -111,7 +117,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
     // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
     const late = ['cerrada', 'purgada'].includes(status);
     if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
-    await heardFrom(pool, table);
+    else await heardFrom(pool, table);
     return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };
   });
 
