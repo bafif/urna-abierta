@@ -21,6 +21,8 @@
   let date = $state('');
   let means = $state('');
   let message = $state('');
+  let fixedName = $state('');
+  let fixedDocument = $state('');
 
   const base = $derived(person ? `/persons/${person.election_id}/${encodeURIComponent(person.id)}` : '');
 
@@ -38,6 +40,20 @@
     link.click();
     URL.revokeObjectURL(url);
     message = t('persons.exported');
+  }
+
+  function open(found: Person) {
+    person = found;
+    fixedName = found.full_name;
+    fixedDocument = found.document ?? '';
+    message = '';
+  }
+
+  /** Art. 16: whoever finds a mistake in their data has the right to have it corrected. */
+  async function correct() {
+    await session.api(`/elections/${person!.election_id}/electors/${encodeURIComponent(person!.id)}`, { method: 'PUT', body: { full_name: fixedName, document: fixedDocument } });
+    person = { ...person!, full_name: fixedName.trim(), document: fixedDocument.replace(/\D/g, '') || person!.document };
+    message = t('persons.corrected');
   }
 
   async function saveConsent() {
@@ -64,6 +80,10 @@
       {#if person.consent}<dt>{t('persons.consent')}</dt><dd>{person.consent.date}</dd>{/if}
     </dl>
     <button class="boton secundario" data-testid="person-export" onclick={exportData}>{t('persons.export')}</button>
+    <p class="etiqueta">{t('persons.correct')}</p>
+    <label class="campo"><span>{t('review.name')}</span><input bind:value={fixedName} data-testid="person-fix-name" /></label>
+    <label class="campo"><span>{t('review.document')}</span><input bind:value={fixedDocument} inputmode="numeric" /></label>
+    <button class="enlace" disabled={!fixedName.trim()} data-testid="person-fix" onclick={correct}>{t('persons.correct.save')}</button>
     <p class="etiqueta">{t('persons.consent')}</p>
     <label class="campo"><span>{t('persons.consentDate')}</span><input type="date" bind:value={date} /></label>
     <label class="campo"><span>{t('persons.consentMeans')}</span><input bind:value={means} /></label>
@@ -83,7 +103,7 @@
     {#if message}<p class="resultado bien" role="status"><Ic name="tilde" />{message}</p>{/if}
     <div class="tarjetas compactas">
       {#each people as found (`${found.election_id}:${found.id}`)}
-        <button class="tarjeta fila-mesa" data-testid="found-person" onclick={() => { person = found; message = ''; }}>
+        <button class="tarjeta fila-mesa" data-testid="found-person" onclick={() => open(found)}>
           <strong>{found.full_name}</strong><span>{found.election}</span>
         </button>
       {/each}

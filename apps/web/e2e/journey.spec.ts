@@ -355,6 +355,10 @@ test('someone asks for their data and to be erased', async ({ page, request }) =
   const download = page.waitForEvent('download');
   await page.getByTestId('person-export').click();
   expect((await download).suggestedFilename()).toMatch(/^datos-/);
+  await page.getByTestId('person-fix-name').fill('Nombre Corregido');
+  await page.getByTestId('person-fix').click();
+  await expect(page.getByText('Datos corregidos.')).toBeVisible();
+  await expect(page.getByRole('heading')).toHaveText('Nombre Corregido');
   await page.getByTestId('person-erase').click();
   await expect(page.getByText('Sus datos se borraron.')).toBeVisible();
   await page.getByRole('searchbox').fill('borrado a pedido');
