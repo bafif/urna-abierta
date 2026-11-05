@@ -566,6 +566,7 @@ const es = {
   'perm.audit.read': 'Leer el registro',
   'action.role.edited': 'Cambió los permisos de una tarea',
   'action.semaphore.fiscal_view': 'Cambió si los fiscales ven el semáforo',
+  'table.photo.waiting': 'Avisaron que hay una foto del acta, pero todavía no llegó. Aparece sola cuando llegue.',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1138,6 +1139,7 @@ const en: Record<MessageKey, string> = {
   'perm.audit.read': 'Read the log',
   'action.role.edited': 'Changed the permissions of a task',
   'action.semaphore.fiscal_view': 'Changed whether poll watchers see the traffic light',
+  'table.photo.waiting': 'A photo of the tally sheet was announced, but it has not arrived yet. It appears by itself when it does.',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;

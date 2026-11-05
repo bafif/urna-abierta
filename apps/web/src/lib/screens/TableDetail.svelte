@@ -22,6 +22,8 @@
   let detail = $state.raw<Detail | null>(null);
   let photos = $state.raw<string[]>([]);
   let problem = $state(false);
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const REFRESH_MS = 20_000;
 
   async function load() {
     try {
@@ -39,8 +41,17 @@
     }
   }
 
-  onMount(load);
-  onDestroy(() => photos.forEach((url) => URL.revokeObjectURL(url)));
+  // It stays up to date by itself, like the panel: this is usually open while something is being resolved.
+  onMount(() => {
+    void load();
+    timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, REFRESH_MS);
+  });
+  onDestroy(() => {
+    clearInterval(timer);
+    photos.forEach((url) => URL.revokeObjectURL(url));
+  });
 
   async function resolve(id: string) {
     await session.api(`/incidents/${id}/resolve`, { method: 'POST' });
@@ -95,6 +106,9 @@
       <p class="etiqueta">{t('table.photo')}</p>
       <a href={photo} target="_blank" rel="noreferrer"><img class="foto-chica" src={photo} alt={t('photo.alt')} data-testid="tally-photo" /></a>
     {/each}
+    {#if detail.photos.length > photos.length}
+      <p class="aclara" data-testid="photo-waiting">{t('table.photo.waiting')}</p>
+    {/if}
     {#snippet pie()}
       {#if detail?.fiscal?.phone}
         <a class="boton {detail.incidents.length > 0 ? 'peligro' : 'secundario'}" href="tel:{detail.fiscal.phone}"><Ic name="tel" /><span>{t('alert.call', { name: firstName })}</span></a>
