@@ -79,7 +79,8 @@
       pantallas: [
         pantalla('f-hola', 'plan', { nota: 'Llega por un link o un QR, sin usuario ni contraseña. Primero sabe quién es y dónde está.', titulo: 'Hola, Marta', bajada: 'Sos fiscal de la mesa 12, en la Escuela Normal 1. Te vamos a ir diciendo qué hacer.' },
           '<div class="tarjeta dato"><span>Si tenés dudas, llamá a</span><strong>Rubén, tu jefe de distrito</strong></div>',
-          boton('Empezar', { ir: 'f-plan', ic: 'flecha' })),
+          boton('Empezar', { ir: 'f-tema', ic: 'flecha' })),
+        { id: 'f-tema', nota: 'La primera vez que alguien abre la app, en el celular o en la computadora. Toda la pantalla cambia al probar: lo que ve es lo que va a tener. Un toque en «Usar este» y sigue, sin pensar. Probalo.', dinamica: 'primeraVez' },
         pantalla('f-plan', 'plan', { nota: 'Es la pantalla de inicio: una línea de estaciones. Siempre se ve qué ya pasó, dónde estás y qué sigue.', ojo: 'Martes 6 de abril', titulo: 'Lo que sigue' },
           plan([['Preparar la mesa', 'Hecho', 'hecho'], ['Tachar a quienes votan', 'Hoy, hasta las 18', 'ahora', 'Cuando alguien vote, buscalo en el padrón y tocá su nombre.'], ['Contar los sobres', 'Hoy, al cerrar', ''], ['Escrutinio', 'Jueves 8, al final', '']]),
           boton('Abrir el padrón', { ir: 'f-padron', ic: 'flecha' })),
@@ -104,12 +105,11 @@
       explicacion: 'Lo primero que ve quien instaló la app. El instalador ya resolvió el servidor: acá se arma el partido, de a una pregunta por vez. Se hace una sola vez.',
       pantallas: [
         pantalla('a-plan', 'partido', { nota: 'Cuatro estaciones. Puede cerrar y seguir mañana: la app recuerda dónde quedó.', titulo: 'Hola, Laura', bajada: 'Vamos a dejar todo listo en cuatro pasos.' },
-          plan([['Tu partido', 'Nombre y apariencia', 'ahora', 'Empezamos por el nombre. Tarda un minuto.'], ['Tu equipo', 'Quién hace qué', ''], ['Seguridad', 'Qué tan delicada es', ''], ['Tu primera elección', 'Fechas, padrón y mesas', '']]),
+          plan([['Tu partido', 'Su nombre', 'ahora', 'Empezamos por el nombre. Tarda un minuto.'], ['Tu equipo', 'Quién hace qué', ''], ['Seguridad', 'Qué tan delicada es', ''], ['Tu primera elección', 'Fechas, padrón y mesas', '']]),
           boton('Empezar', { ir: 'a-partido', ic: 'flecha' })),
         pantalla('a-partido', 'partido', { nota: 'Una pregunta, un campo.', volver: true, ojo: 'Paso 1 de 4', titulo: '¿Cómo se llama tu partido o agrupación?' },
           '<label class="campo"><input value="Agrupación Ejemplo" aria-label="Nombre"></label>',
-          boton('Seguir', { ir: 'a-tema', ic: 'flecha' })),
-        { id: 'a-tema', nota: 'Acá entra el sistema de temas: se elige uno, o se crea otro con los colores y el logo del partido. La app avisa si un color no se llega a leer.', dinamica: 'selectorTemas' },
+          boton('Seguir', { ir: 'a-equipo', ic: 'flecha' })),
         pantalla('a-equipo', 'equipo', { nota: 'Sumar gente es lo único que hay que hacer acá. Cada persona recibe su link.', ojo: 'Paso 2 de 4', titulo: '¿Quién trabaja con vos?' },
           `<div class="tarjetas">
              <div class="tarjeta persona"><strong>Rubén Quiroga</strong><span>Jefe de distrito</span></div>
@@ -185,13 +185,14 @@
     titulo: 'Instalador',
     explicacion: 'Se baja de un release de GitHub y corre en la computadora del administrador. Pide todo lo técnico una sola vez, para que la app arranque directamente con el partido.',
     pantallas: [
-      { id: 'i-hola', nota: 'Dice qué va a pasar y cuánto tarda, antes de pedir nada.', titulo: 'Vamos a instalar Urna Abierta', bajada: 'Tarda unos 15 minutos. Solo necesitás una cuenta en la nube, y te ayudamos a crearla.', cuerpo: '<div class="tarjeta"><strong>Vamos a preguntarte dos cosas</strong><span>Dónde va a vivir tu Urna Abierta, y cómo leer los padrones. Lo demás lo hacemos solos.</span></div>', boton: ['Empezar', 'i-donde'] },
+      { id: 'i-hola', nota: 'Dice qué va a pasar y cuánto tarda, antes de pedir nada.', titulo: 'Vamos a instalar Urna Abierta', bajada: 'Tarda unos 15 minutos. Solo necesitás una cuenta en la nube, y te ayudamos a crearla.', cuerpo: '<div class="tarjeta"><strong>Vamos a preguntarte tres cosas</strong><span>Dónde va a vivir tu Urna Abierta, cómo leer los padrones y cómo querés que se vea. Lo demás lo hacemos solos.</span></div>', boton: ['Empezar', 'i-donde'] },
       { id: 'i-donde', nota: 'Las cuatro opciones funcionan, y cada una lleva a su propia guía. La primera es la más directa.', ojo: 'Paso 1 de 3', titulo: '¿Dónde va a vivir tu Urna Abierta?', cuerpo: opciones([['Crear un servidor nuevo', 'En Oracle, AWS o Google. Te guiamos con la cuenta y hacemos el resto.'], ['Ya tengo un servidor', 'Pegás su dirección y una llave SSH.'], ['Prefiero pegar un texto', 'Te damos un bloque para pegar al crear el servidor.'], ['Probar en esta computadora', 'Para mirarla antes de decidir. Solo se ve desde acá.']]), boton: ['Seguir', 'i-nube'] },
       { id: 'i-nube', nota: 'Oracle primero, porque es el único gratis sin plazo. La credencial se usa una vez y no se guarda.', ojo: 'Paso 1 de 3', titulo: '¿En qué nube?', cuerpo: opciones([['Oracle Cloud', 'Gratis y sin plazo. Recomendado.'], ['AWS', 'Gratis por 6 meses: alcanza para una elección.'], ['Google Cloud', 'Unos USD 3,65 por mes, por la dirección IP.']]) + '<label class="campo con-titulo"><span>Clave de acceso de tu cuenta</span><input value="" placeholder="Te mostramos cómo sacarla" aria-label="Clave"></label><p class="aclara">Se usa una sola vez, directamente con esa nube, para crear el servidor. No se guarda.</p>', boton: ['Crear el servidor', 'i-vision'] },
-      { id: 'i-vision', nota: 'El modelo de visión se elige acá. Lo privado es lo recomendado, y queda claro qué implica cada opción.', ojo: 'Paso 2 de 3', titulo: '¿Cómo leemos los padrones escaneados?', cuerpo: opciones([['En esta computadora', 'Privado y gratis. Un padrón trae datos de personas: es lo recomendado.'], ['Con mi propia IA', 'Pegás tu clave. Los datos pasan por esa empresa.'], ['Después', 'Se puede elegir al cargar el primer padrón.']]), boton: ['Instalar', 'i-listo'] },
+      { id: 'i-vision', nota: 'El modelo de visión se elige acá. Lo privado es lo recomendado, y queda claro qué implica cada opción.', ojo: 'Paso 2 de 3', titulo: '¿Cómo leemos los padrones escaneados?', cuerpo: opciones([['En esta computadora', 'Privado y gratis. Un padrón trae datos de personas: es lo recomendado.'], ['Con mi propia IA', 'Pegás tu clave. Los datos pasan por esa empresa.'], ['Después', 'Se puede elegir al cargar el primer padrón.']]), boton: ['Seguir', 'i-tema'] },
+      { id: 'i-tema', nota: 'Todos los temas se pueden ver antes de elegir, en claro y en oscuro. Es el que van a ver todos al entrar, y cada persona lo puede cambiar en su teléfono.', dinamica: 'selectorInstalador', ojo: 'Paso 3 de 3', titulo: '¿Cómo querés que se vea?', boton: ['Instalar', 'i-listo'] },
       { id: 'i-listo', nota: 'Termina abriendo la app, que sigue con el partido. La llave es lo único que hay que guardar.', titulo: 'Tu Urna Abierta ya está andando', bajada: 'Guardá esta llave en un lugar seguro: sin ella no se pueden abrir tus copias de seguridad.', cuerpo: '<div class="tarjeta llave"><span>Dirección</span><strong>https://203.0.113.24</strong><span>Llave de recuperación</span><strong class="mono">TIZA-URNA-4821-SOBRE-7730</strong></div>', boton: ['Abrir Urna Abierta', 'a-plan'] },
     ],
   };
 
-  window.URNA = { FLUJOS, INSTALADOR, svg, boton, cabeza, opciones, plan };
+  window.URNA = { FLUJOS, INSTALADOR, GENTE, fila, svg, boton, cabeza, opciones, plan };
 })();

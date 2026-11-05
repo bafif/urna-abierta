@@ -1,6 +1,6 @@
 // The gallery: applies a theme's data to the screens, and lets people try them.
 (() => {
-  const { FLUJOS, INSTALADOR, svg, boton, cabeza, opciones, plan } = window.URNA;
+  const { FLUJOS, INSTALADOR, GENTE, fila, svg, boton, cabeza, opciones, plan } = window.URNA;
   const TEMAS = window.TEMAS;
   const estado = { vista: 'comparar', tema: 'aula', modo: 'claro', idioma: 'es' };
   for (const parte of location.hash.slice(1).split('&')) {
@@ -24,14 +24,13 @@
       '--radio': f.radio, '--r-boton': f.radioBoton, '--borde': f.borde, '--peso-titulo': f.pesoTitulo, '--caja-titulo': f.tituloCaja, '--tracking-titulo': f.tituloTracking,
       '--alto-titulo': f.tituloAlto, '--escala-titulo': f.escalaTitulo, '--peso-boton': f.pesoBoton, '--caja-boton': f.botonCaja, '--tracking-boton': f.botonTracking,
     };
-    if (f.anchoTitulo) v['--ancho-titulo'] = f.anchoTitulo;
-    if (f.ojoCaja) v['--ojo-caja'] = f.ojoCaja;
-    if (f.ojoTracking) v['--ojo-tracking'] = f.ojoTracking;
-    if (c.fondoPie) v['--fondo-pie'] = c.fondoPie;
-    if (c.sobrePie) v['--sobre-pie'] = c.sobrePie;
+    v['--ancho-titulo'] = f.anchoTitulo ?? '100%';
+    v['--ojo-caja'] = f.ojoCaja ?? 'none';
+    v['--ojo-tracking'] = f.ojoTracking ?? '0';
+    v['--fondo-pie'] = c.fondoPie ?? 'transparent';
+    v['--sobre-pie'] = c.sobrePie ?? c.acento;
     v['--peligro-borde'] = c.peligroBorde ?? c.peligro;
-    if (c.sombraBanda) v['--sombra-banda'] = c.sombraBanda;
-    if (c.ojoBanda) v['--ojo-banda'] = c.ojoBanda;
+    v['--sombra-banda'] = c.sombraBanda ?? 'transparent';
     if (c.aurora) c.aurora.forEach((color, i) => (v[`--a${i + 1}`] = color));
     if (tema.recetas.material === 'vidrio') {
       const claro = modo === 'claro';
@@ -41,6 +40,7 @@
     }
     if (tema.recetas.material === 'almohada') v['--almohada'] = modo === 'claro' ? 'rgba(47,74,58,.13)' : 'rgba(0,0,0,.32)';
     const banda = c.bandas && (c.bandas[accion] ?? c.bandas.todas ?? c.bandas.plan);
+    v['--ojo-banda'] = c.ojoBanda ?? banda?.[1] ?? 'currentColor';
     if (banda) {
       v['--banda'] = banda[0];
       v['--sobre-banda'] = banda[1];
@@ -77,32 +77,80 @@
     return `<div class="pantalla-in" data-accion="eleccion">${cabeza({ volver: true, ojo: 'Abril de 2027', titulo: '¿Qué días se vota?', bajada: 'Tocá cada día.' })}<main class="cuerpo"><div class="mes">${celdas.join('')}</div><p class="resultado bien">${svg('tilde')}Son 3 días. La urna se cierra cada noche.</p></main><footer class="pie">${boton('Seguir', { ir: 'e-padron', ic: 'flecha' })}</footer></div>`;
   };
 
-  function htmlDe(pantalla, tema) {
-    if (pantalla.dinamica === 'selectorTemas') return selectorTemas(tema);
+  /** The first time the app opens. The whole screen is the preview: what you see is what you get. */
+  const primeraVez = (tema, modo) => {
+    const posicion = TEMAS.findIndex((t) => t.id === tema.id) + 1;
+    return `<div class="pantalla-in" data-accion="plan">${cabeza({ titulo: '¿Cómo te queda más cómodo?', bajada: 'Así se va a ver. Podés probar otras formas.' })}
+      <main class="cuerpo">
+        <p class="nombre-tema">${tema.nombre}<small>${posicion} de ${TEMAS.length}</small></p>
+        <div class="muestra-lista lista">${GENTE.slice(0, 2).map((p) => fila(p, true)).join('')}${fila(GENTE[2])}</div>
+        <div class="modos">
+          <button class="modo" data-vista-modo="claro" aria-pressed="${modo === 'claro'}">Claro</button>
+          <button class="modo" data-vista-modo="oscuro" aria-pressed="${modo === 'oscuro'}">Oscuro</button>
+        </div>
+      </main>
+      <footer class="pie"><div class="pila">${boton('Usar este', { ic: 'tilde', tipo: 'primario' }).replace('<button', '<button data-usar-tema')}${boton('Ver otro', { tipo: 'secundario', ic: 'flecha' }).replace('<button', '<button data-ver-otro')}</div></footer>
+    </div>`;
+  };
+
+  function htmlDe(pantalla, tema, modo) {
+    if (pantalla.dinamica === 'primeraVez') return primeraVez(tema, modo);
     if (pantalla.dinamica === 'calendario') return calendario();
     return pantalla.html;
   }
 
   function telefono(pantalla, tema, modo, { mini = false, nota = true } = {}) {
-    const accion = /data-accion="(\w+)"/.exec(htmlDe(pantalla, tema))?.[1];
+    const accion = /data-accion="(\w+)"/.exec(htmlDe(pantalla, tema, modo))?.[1];
     return `<div class="celda ${mini ? 'mini' : ''}" data-celda="${pantalla.id}">
-      <div class="marco"><div class="pantalla" ${atributos(tema)} data-tema="${tema.id}" style="${variables(tema, modo, accion)}">${htmlDe(pantalla, tema)}</div></div>
+      <div class="marco"><div class="pantalla" ${atributos(tema)} data-tema="${tema.id}" data-modo="${modo}" style="${variables(tema, modo, accion)}">${htmlDe(pantalla, tema, modo)}</div></div>
       ${nota && pantalla.nota ? `<p class="nota">${pantalla.nota}</p>` : ''}
     </div>`;
   }
 
+  const vistasPrevias = (tema) => {
+    const muestra = FLUJOS.fiscal.pantallas.find((p) => p.id === 'f-votaron');
+    return ['claro', 'oscuro'].map((m) => telefono(muestra, tema, m, { nota: false })).join('');
+  };
+
+  /** In the installer: every theme, seen in both modes before choosing. */
+  const selectorInstalador = (tema) => `<div class="vista-doble">
+      <div class="opciones" data-grupo>${TEMAS.map((t) => `<button class="opcion ${t.id === tema.id ? 'elegida' : ''}" data-opcion data-previa="${t.id}"><span class="radio"></span><span><strong>${t.nombre}</strong></span></button>`).join('')}
+        <button class="enlace">Crear uno propio</button>
+      </div>
+      <div class="vistas-previas" data-vistas>${vistasPrevias(tema)}</div>
+    </div>`;
+
+  /** Repaints a single screen in another theme, leaving the rest of the gallery alone. */
+  function repintar(el, tema, modo) {
+    const accion = 'plan';
+    el.dataset.tema = tema.id;
+    el.dataset.modo = modo;
+    const r = tema.recetas;
+    Object.assign(el.dataset, { tachado: r.tachado, fondo: r.fondo, material: r.material, cabecera: r.cabecera, decor: r.decor ?? '', sombraTitulo: String(Boolean(r.sombraTitulo)), pieBanda: String(Boolean(tema.claro.fondoPie)) });
+    el.setAttribute('style', variables(tema, modo, accion));
+    el.innerHTML = primeraVez(tema, modo);
+    ponerLogos(el);
+  }
+
+  function ponerLogos(dentroDe) {
+    dentroDe.querySelectorAll('.logo-tema').forEach((logo) => {
+      const t = TEMAS.find((x) => x.id === logo.closest('[data-tema]')?.dataset.tema);
+      if (t?.logo) logo.innerHTML = `<img src="${t.logo}" alt="${t.nombre}">`;
+    });
+  }
+
   function ventana(paso, tema, modo, i) {
-    const pasos = [['Dónde va a vivir', 'Tu servidor'], ['Cómo leer los padrones', 'Con qué se leen'], ['Instalar', 'Lo hacemos solos']];
-    const actual = paso.id === 'i-hola' || paso.id === 'i-donde' || paso.id === 'i-nube' ? 0 : paso.id === 'i-vision' ? 1 : 3;
+    const pasos = [['Dónde va a vivir', 'Tu servidor'], ['Cómo leer los padrones', 'Con qué se leen'], ['Cómo se ve', 'Su apariencia'], ['Instalar', 'Lo hacemos solos']];
+    const actual = paso.id === 'i-hola' || paso.id === 'i-donde' || paso.id === 'i-nube' ? 0 : paso.id === 'i-vision' ? 1 : paso.id === 'i-tema' ? 2 : 4;
     const estados = pasos.map(([a, b], n) => [a, b, n < actual ? 'hecho' : n === actual ? 'ahora' : '']);
     return `<div class="celda ancha" data-celda="${paso.id}">
-      <div class="marco ventana-marco"><div class="ventana" ${atributos(tema)} data-tema="${tema.id}" style="${variables(tema, modo, 'plan')}">
-        <aside class="riel"><div class="marca-app">${logoUrna}<span>Urna Abierta</span></div>${plan(estados)}</aside>
+      <div class="marco ventana-marco"><div class="ventana" ${paso.dinamica === 'selectorInstalador' ? `data-pie-banda="${Boolean(tema.claro.fondoPie)}" data-fondo="${tema.recetas.fondo === 'aurora' ? 'aurora' : 'liso'}"` : atributos(tema)} data-tema="${tema.id}" style="${variables(tema, modo, 'plan')}">
+        <aside class="riel" ${paso.dinamica === 'selectorInstalador' ? `data-cabecera-riel="${tema.recetas.cabecera}"` : ''}><div class="marca-app">${logoUrna}<span>Urna Abierta</span></div>${plan(estados)}</aside>
         <section class="ventana-derecha">
           ${paso.ojo ? `<p class="ojo" style="margin:0">${paso.ojo}</p>` : ''}
           <h1 class="t1">${paso.titulo}</h1>
           ${paso.bajada ? `<p class="bajada">${paso.bajada}</p>` : ''}
-          <div class="cuerpo-v">${paso.cuerpo}</div>
+          <div class="cuerpo-v">${paso.dinamica === 'selectorInstalador' ? selectorInstalador(tema) : paso.cuerpo}</div>
           <div class="pie-v">${boton(paso.boton[0], { ir: paso.boton[1], ic: 'flecha' })}</div>
         </section>
       </div></div>
@@ -178,10 +226,7 @@
       contenido = `<p class="intro"><strong>${flujo.titulo}</strong>${flujo.explicacion}</p><div class="tira">${modos.map((m) => flujo.pantallas.map((p) => telefono(p, tema, m)).join('')).join('')}</div>`;
     }
     raiz.innerHTML = `${barra}<div class="contenido">${contenido}</div>`;
-    raiz.querySelectorAll('.logo-tema').forEach((el) => {
-      const t = TEMAS.find((x) => x.id === el.closest('[data-tema]')?.dataset.tema);
-      if (t?.logo) el.innerHTML = `<img src="${t.logo}" alt="${t.nombre}">`;
-    });
+    ponerLogos(raiz);
     location.hash = `vista=${estado.vista}&tema=${tema.id}&modo=${estado.modo}`;
   }
 
@@ -213,6 +258,37 @@
     if (volver) {
       const previa = volver.closest('[data-celda]')?.previousElementSibling;
       if (previa?.dataset.celda) irA(previa.dataset.celda);
+      return;
+    }
+    const otro = de('[data-ver-otro]');
+    if (otro) {
+      const el = otro.closest('.pantalla');
+      const i = TEMAS.findIndex((t) => t.id === el.dataset.tema);
+      repintar(el, TEMAS[(i + 1) % TEMAS.length], el.dataset.modo);
+      return;
+    }
+    const modoVista = de('[data-vista-modo]');
+    if (modoVista) {
+      const el = modoVista.closest('.pantalla');
+      repintar(el, TEMAS.find((t) => t.id === el.dataset.tema), modoVista.dataset.vistaModo);
+      return;
+    }
+    const usar = de('[data-usar-tema]');
+    if (usar) {
+      const el = usar.closest('.pantalla');
+      estado.tema = el.dataset.tema;
+      estado.modo = el.dataset.modo;
+      dibujar();
+      irA('f-plan');
+      return;
+    }
+    const previa = de('[data-previa]');
+    if (previa) {
+      previa.closest('[data-grupo]').querySelectorAll('.opcion').forEach((o) => o.classList.remove('elegida'));
+      previa.classList.add('elegida');
+      const zona = previa.closest('.vista-doble').querySelector('[data-vistas]');
+      zona.innerHTML = vistasPrevias(TEMAS.find((t) => t.id === previa.dataset.previa));
+      ponerLogos(zona);
       return;
     }
     const opcion = de('[data-opcion]');
