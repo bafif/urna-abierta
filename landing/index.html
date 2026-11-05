@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'" />
+    <title>Urna Abierta: la app libre para organizar a los fiscales de tu partido</title>
+    <meta name="description" content="Tus datos en tu servidor. Funciona sin señal. La puede usar cualquiera, desde la primera vez. Gratis y de código abierto." />
+    <link rel="alternate" hreflang="en" href="en/" />
+    <link rel="stylesheet" href="estilo.css" />
+  </head>
+  <body>
+    <header class="arriba">
+      <a class="marca" href="./">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg>
+        <span>Urna Abierta</span>
+      </a>
+      <a href="en/" lang="en">English</a>
+    </header>
+
+    <main>
+      <div class="envase tapa">
+        <h1>La app libre para organizar a tus fiscales</h1>
+        <p class="bajada">Tus datos en tu servidor. Funciona sin señal. La puede usar cualquiera, desde la primera vez.</p>
+        <div class="acciones">
+          <a class="boton principal" href="https://github.com/bafif/urna-abierta/releases/latest">Bajar el instalador</a>
+          <a class="boton otro" href="#instalar">Cómo se instala</a>
+        </div>
+        <p class="nota">Para Windows, macOS y Linux. Gratis. Está en desarrollo: su primera prueba real es en abril de 2027, así que antes de usarla hacé un <a href="https://github.com/bafif/urna-abierta/blob/main/docs/es/simulacro.md">simulacro</a>.</p>
+        <img src="img/portada.png" alt="Tres pantallas de la app de fiscales, en tres temas distintos" width="1600" />
+      </div>
+
+      <section>
+        <div class="envase">
+          <h2>Por qué existe</h2>
+          <p>Una elección se gana también en las mesas: alguien tiene que estar ahí, saber quién votó, avisar si algo anda mal y cuidar el escrutinio hasta el final. Hoy, hacer eso bien exige una estructura que solo tienen los partidos grandes, y eso es una ventaja que no debería existir.</p>
+          <p>Hago Urna Abierta para que a una agrupación estudiantil o a un partido chico le alcance con una app gratuita, un servidor propio y un rato de configuración. Es un proyecto personal mío, y no pertenece a ningún partido.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="envase">
+          <h2>Cada persona ve solo su trabajo</h2>
+          <p>Sin menús: una pregunta por pantalla, un botón principal y un plan que te dice qué sigue.</p>
+          <div class="rejilla">
+            <div class="tarjeta"><h3>Fiscal</h3><p>Entra con un link, tacha a quienes votan aunque no haya señal, cuenta los sobres cada noche y carga el escrutinio.</p></div>
+            <div class="tarjeta"><h3>Jefe de distrito</h3><p>Ve primero las mesas que lo necesitan, y las llama con un toque.</p></div>
+            <div class="tarjeta"><h3>Administración</h3><p>Arma una vez el partido y el equipo, y crea una elección cada vez que hace falta.</p></div>
+            <div class="tarjeta"><h3>Semáforo y estadísticas</h3><p>Con permisos aparte: uno anota de a una persona, y el otro solo ve números, nunca nombres.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="envase">
+          <h2>Lo que la hace distinta</h2>
+          <div class="rejilla">
+            <div class="tarjeta"><h3>Tus datos son tuyos</h3><p>Cada partido usa su propio servidor. El proyecto no aloja nada ni recibe nada: no hay servidor central ni telemetría.</p></div>
+            <div class="tarjeta"><h3>Anda sin señal</h3><p>Muchas aulas no tienen conexión. Todo se guarda primero en el teléfono y se manda solo cuando vuelve.</p></div>
+            <div class="tarjeta"><h3>Sin pagar servidor</h3><p>Apunta a los planes gratuitos: se midió con 1 GB de memoria y un cuarto de procesador.</p></div>
+            <div class="tarjeta"><h3>Lee tus padrones</h3><p>Lee un PDF escaneado con un modelo que corre en tu computadora, sin mandarle el padrón a nadie.</p></div>
+            <div class="tarjeta"><h3>Con la ley en mente</h3><p>Trae permisos, registro y herramientas para atender pedidos de personas y borrar los datos al terminar. Cumplir sigue siendo responsabilidad del partido.</p></div>
+            <div class="tarjeta"><h3>Libre</h3><p>Licencia AGPL. Podés leer el código, modificarlo y compartirlo.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="envase">
+          <h2>Con la cara que quieras</h2>
+          <p>Cinco temas, en claro y en oscuro. Se eligen con vista previa al instalarla, y cada persona lo puede cambiar en su teléfono. También podés hacer el tuyo.</p>
+          <img src="img/temas.png" alt="La misma pantalla en cinco temas: Aula, Vidrio, Feria, Tablero y Mate" width="1600" />
+        </div>
+      </section>
+
+      <section id="instalar">
+        <div class="envase">
+          <h2>Se instala en tres preguntas</h2>
+          <ol class="pasos">
+            <li><div><h3>Dónde va a vivir</h3><p>Crea un servidor en Oracle, AWS o Google con tu cuenta, instala en uno que ya tengas, te da un texto para pegar, o la prueba en tu computadora.</p></div></li>
+            <li><div><h3>Cómo leer los padrones</h3><p>En tu computadora, que es lo recomendado porque un padrón trae datos de personas.</p></div></li>
+            <li><div><h3>Cómo se ve</h3><p>Elegís el tema mirándolo. Al terminar, te da la dirección y una llave para tus copias de seguridad.</p></div></li>
+          </ol>
+          <h3 class="separado">Dónde puede vivir</h3>
+          <table>
+            <thead><tr><th>Proveedor</th><th>Costo</th><th>A tener en cuenta</th></tr></thead>
+            <tbody>
+              <tr><td>Oracle Cloud</td><td>Gratis y sin plazo</td><td>Puede recuperar instancias inactivas, y a veces no hay capacidad</td></tr>
+              <tr><td>AWS</td><td>Gratis hasta 6 meses</td><td>Alcanza para una elección. Después la cuenta se cierra</td></tr>
+              <tr><td>Google Cloud</td><td>Unos USD 3,65 por mes</td><td>La máquina es gratis, y se paga la dirección IP</td></tr>
+            </tbody>
+          </table>
+          <p class="chico cerca">Estos planes cambian seguido: confirmalo en la página de cada proveedor. Hay una <a href="https://github.com/bafif/urna-abierta/blob/main/docs/es/servidores.md">guía paso a paso</a>.</p>
+          <p class="chico">El instalador puede estar sin firmar, así que tu computadora te va a avisar. Bajalo solamente de la <a href="https://github.com/bafif/urna-abierta/releases/latest">página de releases</a> y comprobá su SHA-256. La <a href="https://github.com/bafif/urna-abierta/blob/main/docs/es/instalacion.md">guía de instalación</a> explica cada aviso.</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="envase">
+          <h2>Quién responde por los datos</h2>
+          <p>Tu partido. Vos instalás, vos administrás y vos decidís qué se carga. El proyecto no ve nada: no tiene cómo. Antes de usarla, leé la <a href="https://github.com/bafif/urna-abierta/blob/main/LEGAL.md">información legal</a>.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="envase">
+        <p>Lo hago yo, <strong>Bautista D. Fiori</strong>. <a href="https://www.linkedin.com/in/b-d-fiori/">LinkedIn</a> · <a href="https://github.com/bafif">GitHub</a> · <a href="https://github.com/bafif/urna-abierta">Código</a></p>
+        <p>Licencia AGPL-3.0-or-later. Esta página no mide nada, no tiene cookies y no carga nada de otros sitios.</p>
+      </div>
+    </footer>
+  </body>
+</html>
