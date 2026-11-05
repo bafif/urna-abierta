@@ -1,0 +1,21 @@
+{
+  "name": "@urna-abierta/server",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "vitest run",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1"
+  },
+  "dependencies": {
+    "@urna-abierta/domain": "workspace:*",
+    "fastify": "^5.12.8",
+    "pg": "^8.23.1"
+  }
+}
