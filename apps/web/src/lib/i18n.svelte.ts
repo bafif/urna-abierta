@@ -509,6 +509,34 @@ const es = {
   'revoked.other': 'Tengo otra invitación',
   'noRole.title': 'Todavía no tenés tareas',
   'noRole.text': 'Quien organiza tu partido te las va a asignar.',
+  'roll.seeVoted.one': 'Ver a la persona que votó',
+  'voted.count.one': '1 persona. Si la tachaste por error, tocá su nombre.',
+  'envelopes.match.one': 'Coincide con la persona que tachaste.',
+  'tally.review.match.one': 'Coincide con el sobre.',
+  'district.need.one': '1 mesa te necesita',
+  'district.eyebrow.one': '{name} · 1 mesa',
+  'district.othersFine.one': 'La otra anda bien.',
+  'elections.missingFiscales.one': 'Falta el fiscal de 1 mesa',
+  'election.st.people.one': '1 persona',
+  'election.st.tablesCount.one': '1 mesa',
+  'election.st.fiscalesMissing.one': 'Falta en 1 mesa',
+  'election.toReview.one': 'Hay 1 persona del padrón para revisar',
+  'roll.upload.people.one': '1 persona',
+  'roll.upload.toReview.one': '1 fila queda para que la mires.',
+  'roll.upload.missing.one': 'Hay 1 persona de antes que este archivo no trae. Queda como estaba.',
+  'review.title.one': 'Queda 1 para revisar',
+  'tables.proposal.one': 'Te proponemos 1 mesa',
+  'tables.title.one': '1 mesa',
+  'tables.people.one': '1 persona',
+  'fiscales.missing.one': 'Falta 1 mesa sin fiscal',
+  'fiscales.links.one': '1 invitación lista',
+  'districts.summary.one': '1 mesa',
+  'more.backups': 'Copias de seguridad',
+  'more.backups.detail': 'Bajalas a tu computadora.',
+  'backups.title': 'Copias de seguridad',
+  'backups.text': 'El servidor hace una cada 6 horas y queda cifrada. Bajá una antes de la elección y otra cada noche: se abre solo con tu llave de recuperación.',
+  'backups.none': 'Todavía no hay ninguna.',
+  'action.backup.downloaded': 'Bajó una copia de seguridad',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1024,6 +1052,34 @@ const en: Record<MessageKey, string> = {
   'revoked.other': 'I have another invitation',
   'noRole.title': 'You have no tasks yet',
   'noRole.text': 'Whoever organizes your party will assign them.',
+  'roll.seeVoted.one': 'See the person who voted',
+  'voted.count.one': '1 person. If you crossed them out by mistake, tap their name.',
+  'envelopes.match.one': 'It matches the person you crossed out.',
+  'tally.review.match.one': 'It matches the envelope.',
+  'district.need.one': '1 table needs you',
+  'district.eyebrow.one': '{name} · 1 table',
+  'district.othersFine.one': 'The other one is fine.',
+  'elections.missingFiscales.one': 'The poll watcher of 1 table is missing',
+  'election.st.people.one': '1 person',
+  'election.st.tablesCount.one': '1 table',
+  'election.st.fiscalesMissing.one': 'Missing at 1 table',
+  'election.toReview.one': '1 person of the roll needs a look',
+  'roll.upload.people.one': '1 person',
+  'roll.upload.toReview.one': '1 row is left for you to look at.',
+  'roll.upload.missing.one': '1 person from before is not in this file. They stay as they were.',
+  'review.title.one': '1 left to review',
+  'tables.proposal.one': 'We propose 1 table',
+  'tables.title.one': '1 table',
+  'tables.people.one': '1 person',
+  'fiscales.missing.one': '1 table has no poll watcher',
+  'fiscales.links.one': '1 invitation ready',
+  'districts.summary.one': '1 table',
+  'more.backups': 'Backups',
+  'more.backups.detail': 'Download them to your computer.',
+  'backups.title': 'Backups',
+  'backups.text': 'The server makes one every 6 hours, encrypted. Download one before the election and another each night: it only opens with your recovery key.',
+  'backups.none': 'There are none yet.',
+  'action.backup.downloaded': 'Downloaded a backup',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;
@@ -1051,8 +1107,11 @@ export const i18n = {
   },
 };
 
+/** With a count of one it uses the «.one» version of the message, when there is one. */
 export function t(key: MessageKey, values: Record<string, string | number> = {}): string {
-  return dictionaries[current][key].replace(/\{(\w+)\}/g, (_, name: string) => String(values[name] ?? ''));
+  const dictionary = dictionaries[current];
+  const singular = values.count === 1 ? dictionary[`${key}.one` as MessageKey] : undefined;
+  return (singular ?? dictionary[key]).replace(/\{(\w+)\}/g, (_, name: string) => String(values[name] ?? ''));
 }
 
 /** «Martes 6 de abril»: a day as a date, at midday so that no time zone can move it to another day. */

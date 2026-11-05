@@ -3,7 +3,7 @@
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import VirtualList from '../components/VirtualList.svelte';
-  import { app } from '../app.svelte.ts';
+  import { app, shownDocument } from '../app.svelte.ts';
   import { t } from '../i18n.svelte.ts';
 
   let query = $state('');
@@ -34,7 +34,7 @@
           <button class="fila tachada" data-testid="voted-person" onclick={() => (asking = entry)}>
             <span class="num">{entry.order}</span>
             <span class="nombre"><span class="nombre-t">{entry.name}</span></span>
-            <span class="doc">…{entry.documentSuffix}</span>
+            <span class="doc">{shownDocument(entry.documentSuffix)}</span>
           </button>
         {/snippet}
       </VirtualList>
