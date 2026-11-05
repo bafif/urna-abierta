@@ -7,6 +7,13 @@ if (!testMode && process.env.URNA_ACEPTO_RESPONSABILIDAD !== 'si') {
   console.error('El partido es el responsable de esta base y de cumplir la ley. Definí URNA_ACEPTO_RESPONSABILIDAD=si para aceptarlo, o URNA_TEST_SERVER=fake-data-only para probar con personas inventadas.');
   process.exit(1);
 }
+if (!process.env.URNA_FIELD_KEY) {
+  if (!testMode) {
+    console.error('Falta URNA_FIELD_KEY: es la clave que protege las categorías sensibles y los segundos pasos. El instalador la genera; sin ella no arranca.');
+    process.exit(1);
+  }
+  process.env.URNA_FIELD_KEY = randomBytes(32).toString('base64url');
+}
 if (!process.env.URNA_SETUP_CODE) {
   process.env.URNA_SETUP_CODE = randomBytes(9).toString('base64url');
   console.log(`Código de instalación: ${process.env.URNA_SETUP_CODE}`);
