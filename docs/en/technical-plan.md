@@ -49,14 +49,19 @@ The landing page is a static page that presents the app and links to a GitHub re
 macOS and Linux. There is no version hosted by the project: it would hold the data of the parties, and I would become a data
 processor.
 
-1. The party administrator downloads the installer and creates a free cloud account, following the guide.
-2. The installer generates an SSH key. The administrator pastes it when creating the server, and copies its IP into the
-   installer.
-3. The installer connects over SSH, installs and configures everything, and opens `https://<IP>`, where the party gets set up:
-   name, type of election, security values, their user and the liability notice.
-4. From there they create the accounts and send each poll watcher their link or QR code.
+The installer asks for everything technical once, so that the app starts directly with the party:
 
-That leaves one path for the three providers, and the installer never handles the party's cloud credentials.
+1. **Where it will live.** Four options, and all of them have to work:
+
+   | Option | What it does | For whom |
+   |---|---|---|
+   | Create a new server | With an Oracle, AWS or Google credential, used once and never stored | Most people |
+   | I already have a server | Connects over SSH with an address and a key | Whoever already has one, with any provider |
+   | Paste a text | Gives a block to paste into the startup field when creating the server | Whoever prefers not to give the installer a credential |
+   | Try it on this computer | Runs everything locally | Whoever wants to look at it before deciding |
+
+2. **How to read rolls.** On that computer, which is recommended; with their own AI, pasting their key; or later.
+3. **Install.** It ends with the address, a recovery key for the backups, and opening the app.
 
 ### Signing
 
@@ -77,6 +82,34 @@ for individuals is only available in the United States and Canada.
 
 Since an unsigned installer is easy to fake, each release publishes its SHA-256 and a GitHub attestation, which ties it to the
 repository and the build process. The guide explains each warning, with screenshots, so that nobody skips them blindly.
+
+## Design
+
+The guide is that someone who barely uses a phone can use it alone, for the first time. The proposal can be seen in
+`design/index.html`.
+
+- **One screen, one question, one main button.** There are no menus.
+- **A default plan.** The home screen is a line of stations: what happened, where you are and what comes next. Each role has its
+  own, and the current step explains what to do.
+- **First the party, then each election.** Whoever administers sets up the party, the team and the security once. Then they create
+  an election whenever needed, because the same party uses the app several times a year.
+- **Roles in words.** You choose “look after a table”, not a table of permissions, which can still be adjusted.
+
+### Themes
+
+A theme is a data file, and a party can create its own: colors for light and dark mode, fonts, shapes, and a few recipes, such as
+how to cross out or what panels are made of. `design/verificar-contraste.mjs` rejects what cannot be read: text must reach 7:1,
+thinking of older eyes.
+
+| Theme | Idea |
+|---|---|
+| Aula | The default: a ruled notebook by day and a blackboard by night, with a typeface made for low vision |
+| Vidrio | Translucent panels over sky blue and white; the most demanding on a cheap phone |
+| Feria | One color per task, so that you can say over the phone “tap the green one” |
+| Tablero | No ornaments: the number rules, like a results board |
+| Mate | The calmest: round shapes, and whoever voted moves aside with a tick |
+
+Fonts travel with the app, because it has to work without signal, and all of them are under the OFL.
 
 ## Without signal, and sync
 
@@ -164,7 +197,8 @@ chosen, never guessed. The code is in English.
 3. **Full election day:** irregularities, daily envelope count, count with photo, chief panel, schedule, several days and
    practice mode.
 4. **Compliance:** traffic light, full permissions, audit, security profiles, legal tools, purge, installer, backups and
-   server guides. This is also when a real iPhone gets tested, because there is a server with HTTPS by then.
+   installer with its four options, backups and server guides. This is also when a real iPhone gets tested, because there is a
+   server with HTTPS by then.
 5. **Dry run** with real people and invented data, including restoring a backup on another server.
 6. **Landing page:** a static site, with no analytics, forms or cookies, to promote the app and link to the installer.
 

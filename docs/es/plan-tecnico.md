@@ -49,13 +49,19 @@ La landing es una página estática que presenta la app y enlaza a un release de
 Windows, macOS y Linux. No hay una versión alojada por el proyecto: alojaría los datos de los partidos, y yo pasaría a ser
 encargado del tratamiento.
 
-1. El administrador del partido baja el instalador y crea su cuenta gratuita en la nube, siguiendo la guía.
-2. El instalador genera una llave SSH. El administrador la pega al crear el servidor, y copia su IP en el instalador.
-3. El instalador entra por SSH, instala y configura todo, y abre `https://<IP>`, donde se completa el partido: nombre, tipo de
-   elección, valores de seguridad, su usuario y el aviso de responsabilidad.
-4. Desde ahí crea las cuentas y le manda a cada fiscal su link o QR.
+El instalador pide todo lo técnico una sola vez, para que la app arranque directamente con el partido:
 
-Así hay un solo camino para los tres proveedores, y el instalador nunca maneja las credenciales de la nube del partido.
+1. **Dónde va a vivir.** Cuatro opciones, y todas tienen que funcionar:
+
+   | Opción | Qué hace | Para quién |
+   |---|---|---|
+   | Crear un servidor nuevo | Con una credencial de Oracle, AWS o Google, que se usa una vez y no se guarda | La mayoría |
+   | Ya tengo un servidor | Entra por SSH a una dirección y una llave | Quien ya tiene uno, en cualquier proveedor |
+   | Pegar un texto | Da un bloque para pegar en el campo de inicio al crear el servidor | Quien no quiere darle una credencial al instalador |
+   | Probar en esta computadora | Levanta todo localmente | Quien quiere mirarla antes de decidir |
+
+2. **Cómo leer los padrones.** En esa computadora, que es lo recomendado; con su propia IA, pegando su clave; o después.
+3. **Instalar.** Termina con la dirección, una llave de recuperación para las copias de seguridad, y abriendo la app.
 
 ### Firma
 
@@ -76,6 +82,34 @@ para personas solo está disponible en Estados Unidos y Canadá.
 
 Como un instalador sin firmar es fácil de falsificar, cada release publica su SHA-256 y una atestación de GitHub, que lo ata al
 repo y al proceso de compilación. La guía explica cada aviso, con capturas, para que nadie los salte a ciegas.
+
+## Diseño
+
+La guía es que la use, sola y por primera vez, una persona que casi no usa el teléfono. La propuesta se puede ver en
+`design/index.html`.
+
+- **Una pantalla, una pregunta, un botón principal.** No hay menús.
+- **Un plan por defecto.** La pantalla de inicio es una línea de estaciones: qué pasó, dónde estás y qué sigue. Cada rol tiene
+  la suya, y el paso actual explica qué hacer.
+- **Primero el partido, después cada elección.** Quien administra arma una vez el partido, el equipo y la seguridad. Después
+  crea una elección cada vez que hace falta, porque un mismo partido usa la app varias veces al año.
+- **Roles en palabras.** Se elige «cuidar una mesa», no una tabla de permisos, que igual se puede ajustar.
+
+### Temas
+
+Un tema es un archivo de datos, y un partido puede crear el suyo: colores para el modo claro y el oscuro, letras, formas, y unas
+pocas recetas, como la forma de tachar o el material de los paneles. `design/verificar-contraste.mjs` rechaza lo que no se lee:
+el texto tiene que llegar a 7:1, pensando en la vista de la gente grande.
+
+| Tema | Idea |
+|---|---|
+| Aula | El tema por defecto: cuaderno rayado de día y pizarrón de noche, con letra hecha para quien ve poco |
+| Vidrio | Paneles translúcidos sobre celeste y blanco; el que más le pide a un teléfono barato |
+| Feria | Un color por tarea, para poder explicar por teléfono «tocá el verde» |
+| Tablero | Sin adornos: el número manda, como un tablero de resultados |
+| Mate | El más tranquilo: formas redondas, y quien ya votó se aparta con un tilde |
+
+Las fuentes viajan con la app, porque tiene que funcionar sin señal, y todas tienen licencia OFL.
 
 ## Sin señal y sincronización
 
@@ -160,8 +194,8 @@ nunca se adivina. El código va en inglés.
 3. **Jornada completa:** irregularidades, conteo diario de sobres, escrutinio con foto, panel del jefe, cronograma, varios días
    y modo práctica.
 4. **Cumplimiento:** semáforo, permisos completos, auditoría, perfiles de seguridad, herramientas de la ley, purga,
-   instalador, backups y guías de servidor. Es también cuando se prueba un iPhone de verdad, porque ya hay un servidor con
-   HTTPS.
+   instalador con sus cuatro opciones, backups y guías de servidor. Es también cuando se prueba un iPhone de verdad, porque ya hay
+   un servidor con HTTPS.
 5. **Simulacro** con personas reales y datos falsos, incluido restaurar un backup en otro servidor.
 6. **Landing:** un sitio estático, sin analíticas, formularios ni cookies, para publicitar la app y enlazar al instalador.
 

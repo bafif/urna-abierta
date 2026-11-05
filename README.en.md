@@ -1,49 +1,98 @@
-# Urna Abierta
+<p align="center">
+  <img src="docs/assets/portada-en.png" alt="Urna Abierta: three screens of the poll watcher app, in three different themes" width="100%">
+</p>
 
-[Español](README.md)
+<p align="center">
+  <strong>The free app to organize your party's poll watchers, in any election.</strong><br>
+  Your data on your server. Works without signal. Anyone can use it, from the very first time.
+</p>
 
-An open source app to organize poll watchers for any party, in any kind of election. The goal is that a student group
-or a small party can watch an election easily, without depending on a huge organization.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-1E5A44" alt="License AGPL-3.0"></a>
+  <img src="https://img.shields.io/badge/status-in%20development-D42F06" alt="Status: in development">
+  <img src="https://img.shields.io/badge/telemetry-none-14233A" alt="No telemetry">
+  <a href="README.md"><img src="https://img.shields.io/badge/leer%20en-espa%C3%B1ol-555" alt="Leer en español"></a>
+</p>
 
-Each party installs it on its own server. The project never touches any data: there is no central server, no hosting
-and no telemetry.
+---
 
-This is a personal project of mine: it does not belong to any party or group.
+## Why it exists
+
+Elections are also won at the tables: someone has to be there, know who voted, report when something goes wrong and watch the
+count until the end. Today, doing that well takes a structure only big parties have, and that is an advantage that should not
+exist.
+
+I am building Urna Abierta to break the monopoly of old political machines over election monitoring: so that a student group or a
+small party only needs a free app, its own server and a little setup time. It is a personal project of mine, and it does not
+belong to any party or group.
+
+## Made for someone who has never opened it
+
+This is how it will work. No menus: one question per screen, one main button and a plan that tells you what comes next. Each person
+sees only their work.
+
+| Who | What they do |
+|---|---|
+| **Poll watcher** | Joins with a link, crosses out voters even without signal, counts envelopes each night and enters the count |
+| **District chief** | Sees first the tables that need them, and calls with one tap |
+| **Administration** | Sets up the party and the team once, and creates an election whenever needed |
+| **Traffic light and statistics** | With separate permissions: one notes one person at a time, the other sees only numbers, never names |
+
+<p align="center">
+  <img src="docs/assets/temas.png" alt="The same screen in five themes: Aula, Vidrio, Feria, Tablero and Mate" width="100%">
+</p>
+
+With themes for every taste, in light and dark mode, and the option to create your own with your party's colors. You can go through
+[the design proposal](design/index.html) by opening it in your browser.
+
+## What makes it different
+
+- **Your data is yours.** Each party uses its own server. The project hosts nothing and receives nothing: no central server, no
+  telemetry.
+- **Works without signal.** Many classrooms have no connection. Everything is saved on the phone first and sent when it returns.
+- **Designed not to pay for a server.** It aims at free tiers: I measured it within the limits of those machines, 1 GB of memory and a
+  quarter of a processor, and it was plenty for 200 tables.
+- **Reads your rolls.** It reads a scanned PDF with a model that runs on your computer, without sending the roll to anyone.
+- **With Argentine law in mind.** It will bring tools to comply with personal data protection.
+
+## Installation
+
+You will download an installer for Windows, macOS or Linux that guides you through creating your server and leaves everything set
+up.
+
+**It is not ready yet.** Today there is a test version, with invented people, for trying it out or joining development:
+**[how to install it](docs/en/installation.md)**.
 
 ## Status
 
-It is in its first stage, where I test the riskiest parts before building the rest. What exists today is a test version
-**without login and with invented people**. It is not ready for a real election and must not be used with real data.
+The first real test is a university election, in April 2027.
 
-- Poll watcher view without signal: cross out who voted, undo, and search without accents.
-- Sync that neither loses nor duplicates anything, and does not depend on the clocks of the phones.
-- Urgent alert with a fallback: call, WhatsApp or SMS.
-- Interface in Spanish and English.
+- [x] Poll watcher view without signal, and sync without losses
+- [x] Local reading of scanned rolls
+- [x] Server measured on a small machine
+- [x] Design proposal and theme system
+- [ ] Login, real rolls, tables and permissions
+- [ ] Irregularities, envelope count, vote count and chief panel
+- [ ] Traffic light, audit and installer
+- [ ] Dry run with real people
 
-How to try it on a phone: [docs/en/phone-tests.md](docs/en/phone-tests.md). The plan is in
-[docs/en/technical-plan.md](docs/en/technical-plan.md) and what has been measured so far in
-[docs/en/stage-1-results.md](docs/en/stage-1-results.md).
+## Documentation
 
-## Development
+| | |
+|---|---|
+| [Installation](docs/en/installation.md) | How to try it today, and what the installer will be like |
+| [Technical plan](docs/en/technical-plan.md) | Architecture, sync, permissions and roll format |
+| [Measurements](docs/en/stage-1-results.md) | What was tested and what it showed |
+| [Legal](LEGAL.en.md) | License, responsibilities and personal data |
+| [Roll scanner](https://github.com/bafif/urna-abierta-padrones) | The repository that converts rolls to the open format |
 
-You need Node 24 and Podman.
+## Author
 
-```sh
-corepack pnpm install
-corepack pnpm test           # without a database, the server tests are skipped
-deploy/e2e.sh                # browser tests against the real containers
-```
+Made by me, **Bautista D. Fiori**. If you want to use it in your election or join in, write to me.
 
-To also run the server tests, set `TEST_DATABASE_URL` to a test Postgres.
-
-`deploy/measure.sh` measures how much the server takes within the limits of a small machine.
-
-## The voter roll scanner
-
-Turning scanned PDF rolls into the open format this app reads is the job of
-the `urna-abierta-padrones` repository. Each one can be used on its own.
+[GitHub](https://github.com/bafif)
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE). If you modify the app and other people use it over a network, you must offer them the
-source of your version.
+[AGPL-3.0-or-later](LICENSE). You may use, modify and share it; if you offer a modified version over a network, you must also offer
+its source.
