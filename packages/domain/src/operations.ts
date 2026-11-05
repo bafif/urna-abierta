@@ -6,6 +6,7 @@ export const MAX_BATCH = 50;
 
 const uuid = v.pipe(v.string(), v.uuid());
 const shortId = v.pipe(v.string(), v.minLength(1), v.maxLength(64));
+const count = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1_000_000));
 
 const common = {
   id: uuid,
@@ -17,24 +18,18 @@ const common = {
 };
 
 export const operationSchema = v.variant('type', [
-  v.object({
-    ...common,
-    type: v.literal('voter.marked'),
-    payload: v.object({ elector: shortId }),
-  }),
+  v.object({ ...common, type: v.literal('voter.marked'), payload: v.object({ elector: shortId }) }),
   v.object({
     ...common,
     type: v.literal('voter.unmarked'),
-    payload: v.object({
-      elector: shortId,
-      cancels: v.pipe(v.array(uuid), v.minLength(1), v.maxLength(64)),
-    }),
+    payload: v.object({ elector: shortId, cancels: v.pipe(v.array(uuid), v.minLength(1), v.maxLength(64)) }),
   }),
-  v.object({
-    ...common,
-    type: v.literal('incident.reported'),
-    payload: v.object({ kind: shortId }),
-  }),
+  v.object({ ...common, type: v.literal('incident.reported'), payload: v.object({ kind: shortId }) }),
+  /** Each night: how many envelopes the box holds, and how many were crossed out at that moment. */
+  v.object({ ...common, type: v.literal('envelopes.counted'), payload: v.object({ day: v.pipe(v.string(), v.isoDate()), envelopes: count, marked: count }) }),
+  /** A count is a version: nothing ever merges two of them. */
+  v.object({ ...common, type: v.literal('tally.submitted'), payload: v.object({ category: shortId, results: v.record(shortId, count) }) }),
+  v.object({ ...common, type: v.literal('tally.photo'), payload: v.object({ sha256: v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/)) }) }),
 ]);
 
 export type Operation = v.InferOutput<typeof operationSchema>;
