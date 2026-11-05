@@ -13,7 +13,8 @@ import { checkSsh } from './ssh.ts';
  * browser. The token in the address keeps other pages or programs from using it.
  */
 const token = randomBytes(18).toString('base64url');
-const MAX_BODY = 1024 * 1024;
+/** A theme with all its fonts inside fits. */
+const MAX_BODY = 32 * 1024 * 1024;
 
 interface Job {
   lines: string[];
@@ -133,7 +134,7 @@ const server = createServer((request, response) => {
     const name = path === '' ? 'index.html' : path;
     const content = asset(name);
     if (!content || !/^[\w./-]+$/.test(name) || name.includes('..') || name === 'urna' || name === 'instalar.sh') return send(response, 404, { error: 'not_found' });
-    response.writeHead(200, { 'content-type': TYPES[name.split('.').pop() ?? ''] ?? 'application/octet-stream', 'cache-control': 'no-store', 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" });
+    response.writeHead(200, { 'content-type': TYPES[name.split('.').pop() ?? ''] ?? 'application/octet-stream', 'cache-control': 'no-store', 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:" });
     response.end(content);
   })().catch((error) => {
     send(response, 500, { error: (error as Error).message });

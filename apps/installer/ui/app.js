@@ -83,6 +83,7 @@
       'theme.custom.notTheme': 'Ese archivo no es un tema.',
       'theme.custom.taken': 'Ya hay un tema con ese id. Cambialo en tu archivo.',
       'theme.custom.refused': 'Ese tema no se puede usar:',
+      'theme.custom.badFont': 'Una de las letras del archivo no se puede abrir: {name}',
       'progress.title': 'Instalando',
       'progress.text': 'Podés dejar esta ventana abierta y hacer otra cosa.',
       'log.address': 'Reservando una dirección fija',
@@ -196,6 +197,7 @@
       'theme.custom.notTheme': 'That file is not a theme.',
       'theme.custom.taken': 'There is already a theme with that id. Change it in your file.',
       'theme.custom.refused': 'That theme cannot be used:',
+      'theme.custom.badFont': 'One of the fonts in the file cannot be opened: {name}',
       'progress.title': 'Installing',
       'progress.text': 'You can leave this window open and do something else.',
       'log.address': 'Reserving a fixed address',
@@ -514,7 +516,7 @@
     state.customProblems = [];
     let theme;
     try {
-      if (file.size > 1024 * 1024) throw new Error('too large');
+      if (file.size > 24 * 1024 * 1024) throw new Error('too large');
       theme = JSON.parse(await file.text());
     } catch {
       state.customProblems = [t('theme.custom.notTheme')];
@@ -529,6 +531,15 @@
       state.customProblems = [t('theme.custom.refused'), ...problems.slice(0, 3)];
       return render();
     }
+    // Its fonts have to open here too: this is the preview of what everyone is going to see.
+    const faces = (theme.archivosFuentes ?? []).map((font) => new FontFace(font.familia, `url(${font.datos})`, { weight: font.peso ?? 'normal', style: font.estilo ?? 'normal', stretch: font.ancho ?? 'normal' }));
+    const opened = await Promise.allSettled(faces.map((face) => face.load()));
+    const broken = opened.findIndex((result) => result.status === 'rejected');
+    if (broken !== -1) {
+      state.customProblems = [t('theme.custom.badFont', { name: theme.archivosFuentes[broken].familia })];
+      return render();
+    }
+    faces.forEach((face) => document.fonts.add(face));
     window.TEMAS.splice(0, window.TEMAS.length, ...window.TEMAS.filter((item) => BUILT_IN.includes(item.id)), theme);
     state.custom = theme;
     state.theme = theme.id;
