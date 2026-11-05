@@ -1,0 +1,36 @@
+<script lang="ts">
+  import Ic from '../components/Ic.svelte';
+  import Options from '../components/Options.svelte';
+  import Pantalla from '../components/Pantalla.svelte';
+  import { t } from '../i18n.svelte.ts';
+  import { nav } from '../nav.svelte.ts';
+  import { session } from '../session.svelte.ts';
+
+  let profile = $state<string | null>(session.me?.security.profile ?? 'estudiantil');
+  let failed = $state(false);
+
+  const items = $derived([
+    { id: 'estudiantil', title: t('security.student.title'), detail: t('security.student.detail') },
+    { id: 'local', title: t('security.local.title'), detail: t('security.local.detail') },
+    { id: 'nacional', title: t('security.national.title'), detail: t('security.national.detail') },
+  ]);
+
+  async function save() {
+    failed = false;
+    try {
+      await session.api('/security', { method: 'PUT', body: { profile } });
+      await session.refresh();
+      nav.back();
+    } catch {
+      failed = true;
+    }
+  }
+</script>
+
+<Pantalla accion="seguridad" volver titulo={t('security.title')} bajada={t('security.text')}>
+  <Options {items} bind:value={profile} />
+  {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
+  {#snippet pie()}
+    <button class="boton primario" onclick={save}><Ic name="flecha" /><span>{t('next')}</span></button>
+  {/snippet}
+</Pantalla>

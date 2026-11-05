@@ -1,3 +1,4 @@
+// @ts-nocheck: plain script shared with the design gallery.
 // Turns a theme's data into CSS variables and recipe attributes. Shared by the app and the design gallery.
 (() => {
   function variables(tema, modo, accion) {
@@ -39,10 +40,14 @@
     return Object.entries(v).map(([k, val]) => `${k}:${val}`).join(';');
   }
 
-  const atributos = (tema) => {
+  const recetas = (tema) => {
     const r = tema.recetas;
-    return `data-tachado="${r.tachado}" data-fondo="${r.fondo}" data-material="${r.material}" data-cabecera="${r.cabecera}" data-decor="${r.decor ?? ''}" data-sombra-titulo="${Boolean(r.sombraTitulo)}" data-pie-banda="${Boolean(tema.claro.fondoPie)}"`;
+    return {
+      'data-tachado': r.tachado, 'data-fondo': r.fondo, 'data-material': r.material, 'data-cabecera': r.cabecera, 'data-decor': r.decor ?? '',
+      'data-sombra-titulo': String(Boolean(r.sombraTitulo)), 'data-pie-banda': String(Boolean(tema.claro.fondoPie)),
+    };
   };
+  const atributos = (tema) => Object.entries(recetas(tema)).map(([k, val]) => `${k}="${val}"`).join(' ');
 
-  window.URNA_TEMA = { variables, atributos };
+  window.URNA_TEMA = { variables, atributos, recetas };
 })();

@@ -1,3 +1,4 @@
+// @ts-nocheck: plain script shared with the design gallery.
 // Themes of Urna Abierta. A theme is data: colors for each mode, fonts, shapes, and a few named
 // recipes (how a crossed-out name looks, what the background is, what panels are made of).
 // A party can write its own by adding one more object like these.
