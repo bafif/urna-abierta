@@ -120,16 +120,18 @@ function percentile(sorted: number[], fraction: number): number {
 /** A test election with invented people, and a credential per table, the way the phones get in. */
 const setup = new Phone();
 const SEED_LIMIT_MS = 10 * 60_000;
-const seeded = (await setup.request('POST', '/api/test/seed', { size: 350, tables: Number(args.tables), label: args.run }, SEED_LIMIT_MS)).json as {
+const TABLES_PER_CHIEF = 10;
+const seeded = (await setup.request('POST', '/api/test/seed', { size: 350, tables: Number(args.tables), label: args.run, tablesPerChief: TABLES_PER_CHIEF, fresh: true }, SEED_LIMIT_MS)).json as {
   election: string;
   links: Record<string, string>;
   tables: { table: string; invitations: string[] }[];
+  chiefs: { invitation: string; tables: string[] }[];
 };
 const redeem = async (invitation: string) => (await setup.request('POST', '/api/auth/redeem', { token: invitation })).json.token as string;
 const tableIds = seeded.tables.map((item) => item.table);
 const tokens = new Map<string, string>();
 for (const item of seeded.tables) tokens.set(item.table, await redeem(item.invitations[0]!));
-const chiefToken = await redeem(seeded.links.jefe!);
+const chiefTokens = await Promise.all(seeded.chiefs.map((item) => redeem(item.invitation)));
 setup.close();
 counters.latencies.length = 0;
 const phoneOf = (table: string) => {
@@ -212,22 +214,20 @@ async function steady(): Promise<Record<string, unknown>> {
     }
     phone.close();
   };
+  // Like the app: the panel refreshes every 20 seconds, and now and then the chief opens one table.
   const chief = async (index: number) => {
     const phone = new Phone();
-    phone.token = chiefToken;
-    await sleep(Math.random() * 15_000);
+    phone.token = chiefTokens[index]!;
+    const own = seeded.chiefs[index]!.tables;
+    await sleep(Math.random() * 20_000);
     while (Date.now() < stopAt) {
       await phone.withRetries('GET', `/api/district/${seeded.election}`);
-      for (let i = index; i < Math.min(index + 10, tableIds.length); i += 1) {
-        await phone.withRetries('GET', `/api/tables/${tableIds[i]}/detail`);
-      }
-      await sleep(15_000);
+      if (Math.random() < 0.25) await phone.withRetries('GET', `/api/tables/${own[Math.floor(Math.random() * own.length)]}/detail`);
+      await sleep(20_000);
     }
     phone.close();
   };
-  const chiefs: Promise<void>[] = [];
-  for (let i = 0; i < tableIds.length; i += 10) chiefs.push(chief(i));
-  await Promise.all([...tableIds.map(fiscal), ...chiefs]);
+  await Promise.all([...tableIds.map(fiscal), ...seeded.chiefs.map((_, index) => chief(index))]);
   return {};
 }
 
