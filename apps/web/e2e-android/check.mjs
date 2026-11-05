@@ -13,7 +13,12 @@ import { chromium } from '@playwright/test';
 const ADB = process.env.ADB ?? 'adb';
 const PORT = 8090;
 const SITE = `http://localhost:${PORT}`;
-const TABLE = `android-${Date.now()}`;
+// Starts in ten days, so that moving the clock does not end the election and the roll stays.
+const seed = async (body) => (await fetch(`${SITE}/api/test/seed`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+const demo = await seed({ size: 350, tables: 1, startsInDays: 10 });
+const TABLE = demo.tables[0].table;
+// The second poll watcher of the table is the one that reads what reached the server.
+const { token: READER } = await (await fetch(`${SITE}/api/auth/redeem`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: demo.tables[0].invitations[1] }) })).json();
 const [resultsPath, shotsDirectory] = process.argv.slice(2);
 const results = [];
 
@@ -65,10 +70,11 @@ function signal(on) {
   else adb('reverse', '--remove-all');
 }
 
-async function openChrome() {
+async function openChrome(invitation) {
   shell('am force-stop com.android.chrome');
   await sleep(1_000);
-  shell(`am start -a android.intent.action.VIEW -d "${SITE}/?mesa=${TABLE}" -n com.android.chrome/com.google.android.apps.chrome.Main`);
+  const address = invitation ? `${SITE}/#invitacion=${invitation}` : `${SITE}/`;
+  shell(`am start -a android.intent.action.VIEW -d "${address}" -n com.android.chrome/com.google.android.apps.chrome.Main`);
   adb('forward', 'tcp:9222', 'localabstract:chrome_devtools_remote');
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -90,19 +96,27 @@ async function openChrome() {
   }
 }
 
+/** From the plan to the roll. Before the election it is the secondary way in. */
+async function openRoll(page) {
+  await page.getByRole('button', { name: /Abrir el padrón/ }).click({ timeout: 90_000 });
+  await page.getByTestId('remaining').waitFor({ timeout: 30_000 });
+}
+
+const inOneLine = (text) => text.replace(/\s+/g, ' ').trim();
+
 async function status(page) {
-  await page.getByRole('button', { name: 'Estado', exact: true }).click();
+  const faltan = inOneLine(await page.getByTestId('remaining').innerText());
+  const envios = await page.getByTestId('sync-status').innerText();
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await page.getByRole('button', { name: 'Ajustes' }).click();
   const values = await page.locator('dl').evaluate((list) => {
     const terms = [...list.querySelectorAll('dt')].map((item) => item.textContent.trim());
     const details = [...list.querySelectorAll('dd')].map((item) => item.textContent.trim());
     return Object.fromEntries(terms.map((term, index) => [term, details[index]]));
   });
-  await page.getByRole('button', { name: 'Mesa', exact: true }).click();
-  return {
-    ...values,
-    faltan: await page.getByTestId('remaining').innerText().catch(() => null),
-    envios: await page.getByTestId('sync-status').innerText(),
-  };
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await openRoll(page);
+  return { ...values, faltan, envios };
 }
 
 async function markFirst(page, count) {
@@ -125,7 +139,7 @@ async function pendingOnServer() {
   let since = 0;
   let total = 0;
   for (;;) {
-    const body = await (await fetch(`${SITE}/api/sync/pull?table=${TABLE}&since=${since}`)).json();
+    const body = await (await fetch(`${SITE}/api/sync/pull?table=${TABLE}&since=${since}`, { headers: { authorization: `Bearer ${READER}` } })).json();
     total += body.operations.length;
     since = body.next;
     if (!body.more) return total;
@@ -133,12 +147,11 @@ async function pendingOnServer() {
 }
 
 async function loadTest(size) {
-  const { browser, page } = await openChrome();
-  await page.getByRole('button', { name: 'Estado', exact: true }).click();
-  await page.getByRole('button', { name: 'Empezar de nuevo' }).click();
-  await page.locator('#size').waitFor({ timeout: 30_000 });
-  await page.locator('#size').selectOption(String(size));
-  await page.getByRole('button', { name: 'Preparar mesa' }).click();
+  // Another table for the same phone: it lets go of the previous roll and prepares this one.
+  const other = await seed({ size, tables: 1 });
+  const { browser, page } = await openChrome(other.tables[0].invitations[0]);
+  await page.getByRole('button', { name: 'Preparar la mesa' }).click({ timeout: 90_000 });
+  await openRoll(page);
   await page.getByTestId('remaining').filter({ hasText: `de ${size}` }).waitFor({ timeout: 120_000 });
   const session = await page.context().newCDPSession(page);
   await session.send('Emulation.setCPUThrottlingRate', { rate: 6 });
@@ -165,10 +178,13 @@ signal(true);
 let marks = 0;
 
 {
-  const { browser, page } = await openChrome();
+  const { browser, page } = await openChrome(demo.tables[0].invitations[0]);
   const userAgent = await page.evaluate(() => navigator.userAgent);
-  await page.getByRole('button', { name: 'Preparar mesa' }).click();
-  await page.getByTestId('remaining').filter({ hasText: 'Faltan 350 de 350' }).waitFor({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Empezar' }).click({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Usar este' }).click();
+  await page.getByRole('button', { name: 'Preparar la mesa' }).click();
+  await openRoll(page);
+  await page.getByTestId('remaining').filter({ hasText: 'faltan, de 350' }).waitFor({ timeout: 60_000 });
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
     if (!navigator.serviceWorker.controller) {
@@ -186,24 +202,22 @@ await sleep(3_000);
 
 {
   const { browser, page } = await openChrome();
-  await page.getByTestId('remaining').waitFor({ timeout: 60_000 });
-  const opened = await page.getByTestId('remaining').innerText();
-  record('abre sin señal, desde cero', opened.includes('350 de 350'), { faltan: opened });
+  await openRoll(page);
+  const opened = inOneLine(await page.getByTestId('remaining').innerText());
+  record('abre sin señal, desde cero', opened.includes('350 faltan, de 350'), { faltan: opened });
   await markFirst(page, 20);
   marks += 20;
   await page.getByRole('searchbox').fill('nunez');
-  const found = await page.getByTestId('person').first().locator('.name').innerText();
+  const found = await page.getByTestId('person').first().locator('.nombre').innerText();
   record('la búsqueda sin acentos encuentra', found.includes('Núñez'));
   await page.getByTestId('person').first().click();
   marks += 1;
   screenshot('2-sin-senal');
   const values = await status(page);
-  record('tacha sin señal', values.faltan.includes('329 de 350'), { faltan: values.faltan, envios: values.envios, tachar: values['Respuesta al tachar (mediana / peor)'], guardar: values['Guardado en el teléfono (mediana / peor)'] });
-  await page.getByRole('button', { name: 'Aviso urgente' }).click();
-  await page.getByLabel('Teléfono del jefe de distrito').fill('+5493410000000');
-  await page.getByLabel('Teléfono del jefe de distrito').blur();
+  record('tacha sin señal', values.faltan.includes('329 faltan, de 350'), { faltan: values.faltan, envios: values.envios, tachar: values['Respuesta al tachar (mediana / peor)'], guardar: values['Guardado en el teléfono (mediana / peor)'] });
+  await page.getByRole('button', { name: 'Algo anda mal' }).click();
   await page.getByTestId('report').click();
-  await page.getByRole('link', { name: 'Llamar' }).waitFor({ timeout: 30_000 });
+  await page.getByRole('link', { name: 'Mandar WhatsApp' }).waitFor({ timeout: 30_000 });
   marks += 1;
   record('el aviso urgente ofrece el plan B', true);
   screenshot('3-aviso');
@@ -215,9 +229,9 @@ await sleep(3_000);
   await sleep(5_000);
   await waitForBoot();
   const { browser, page } = await openChrome();
-  await page.getByTestId('remaining').waitFor({ timeout: 90_000 });
+  await openRoll(page);
   const values = await status(page);
-  record('sobrevive al reinicio, sin señal', values.faltan.includes('329 de 350') && values['Datos intactos'] === 'sí', { faltan: values.faltan, intactos: values['Datos intactos'], envios: values.envios });
+  record('sobrevive al reinicio, sin señal', values.faltan.includes('329 faltan, de 350') && values['Datos intactos'] === 'sí', { faltan: values.faltan, intactos: values['Datos intactos'], envios: values.envios });
   await browser.close();
 }
 
@@ -225,9 +239,9 @@ await sleep(3_000);
   setClock(startedAt + 9 * 86_400_000);
   await sleep(2_000);
   const { browser, page } = await openChrome();
-  await page.getByTestId('remaining').waitFor({ timeout: 90_000 });
+  await openRoll(page);
   const values = await status(page);
-  record('sigue todo con el reloj 9 días después', values.faltan.includes('329 de 350'), { faltan: values.faltan, sinAbrir: values['Mayor tiempo sin abrirla'] });
+  record('sigue todo con el reloj 9 días después', values.faltan.includes('329 faltan, de 350'), { faltan: values.faltan, sinAbrir: values['Mayor tiempo sin abrirla'] });
   await browser.close();
 }
 
@@ -235,7 +249,7 @@ await sleep(3_000);
   // On a phone with no room at all, a write breaks the database. The app must see it coming.
   const left = fillDisk(0);
   const { browser, page } = await openChrome();
-  await page.getByTestId('remaining').waitFor({ timeout: 90_000 });
+  await openRoll(page);
   const warned = await page.getByTestId('no-room').waitFor({ timeout: 30_000 }).then(() => true, () => false);
   const blocked = await page.getByTestId('person').first().isDisabled().catch(() => false);
   const offered = await page.getByRole('button', { name: 'Probar de nuevo' }).isVisible().catch(() => false);
@@ -250,7 +264,7 @@ await sleep(3_000);
   await markFirst(page, 2);
   marks += 2;
   const values = await status(page);
-  record('al liberar espacio, sigue todo y vuelve a tachar', values.faltan.includes('327 de 350') && values['Datos intactos'] === 'sí', { faltan: values.faltan, intactos: values['Datos intactos'] });
+  record('al liberar espacio, sigue todo y vuelve a tachar', values.faltan.includes('327 faltan, de 350') && values['Datos intactos'] === 'sí', { faltan: values.faltan, intactos: values['Datos intactos'] });
   await browser.close();
 }
 
@@ -259,6 +273,7 @@ await sleep(3_000);
   signal(true);
   await sleep(3_000);
   const { browser, page } = await openChrome();
+  await openRoll(page);
   await page.getByTestId('sync-status').filter({ hasText: 'Todo enviado' }).waitFor({ timeout: 120_000 });
   const onServer = await pendingOnServer();
   record('al volver la señal, llega todo al servidor', onServer === marks, { enElServidor: onServer, hechas: marks });
@@ -270,7 +285,7 @@ await sleep(3_000);
   // A little room left, more than the check asks for: everything has to keep working.
   const left = fillDisk(800);
   const { browser, page } = await openChrome();
-  await page.getByTestId('remaining').waitFor({ timeout: 90_000 });
+  await openRoll(page);
   await sleep(5_000);
   const warned = await page.getByTestId('no-room').isVisible();
   await markFirst(page, 2);
