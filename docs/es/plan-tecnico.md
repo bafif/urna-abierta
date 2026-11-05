@@ -15,7 +15,8 @@
 | Escáner | CLI en Python, con reconocimiento de texto local |
 
 Elegí una PWA para no depender de tiendas ni de una cuenta central: cada partido la sirve desde su propio dominio y el
-fiscal entra con un link o un QR. Si los teléfonos reales la tratan mal, se empaqueta con Capacitor sin reescribirla.
+fiscal entra con un link o un QR. Si un teléfono la trata mal, se empaqueta con Capacitor sin reescribirla: en Android es
+barato, y en iPhone exige una Mac y una cuenta paga de desarrollador.
 
 ## Servidores
 
@@ -30,13 +31,35 @@ contenedores y disco. La guía de instalación cubre tres opciones, en este orde
 Estos planes cambian seguido. Cada guía lleva la fecha en que se verificó y enlaces a las páginas oficiales.
 
 - **El mínimo es 1 GB de RAM con CPU compartida**, en `amd64` y `arm64`, con imágenes ya compiladas.
-- **El nombre del servidor no puede cambiar.** El teléfono guarda sus datos asociados a la dirección de la app. Un dominio
-  propio permite mudarse de proveedor sin que los teléfonos pierdan nada.
+- **Se entra por la IP, sin dominio.** Caddy saca un certificado de Let's Encrypt para la IP, que dura 6 días, y lo renueva
+  solo. Un dominio propio es opcional.
+- **La IP tiene que ser fija:** IP reservada en Oracle, Elastic IP en AWS, IP estática en Google. El teléfono guarda sus datos
+  asociados a esa dirección: si cambia, cada fiscal vuelve a preparar la mesa con el link nuevo y lo que no había enviado
+  queda inaccesible. Por eso, mudarse de servidor durante la votación no es una opción.
 - **Los backups salen cifrados y fuera de la cuenta**, con una clave que tiene solo el partido, porque una cuenta gratuita
   se puede cerrar.
 - **El servidor es de temporada:** se crea unas semanas antes y se borra después de purgar los datos.
 - **Datos y ley:** los servidores gratuitos suelen estar fuera de Argentina. La guía avisa, y decidir corre por cuenta del
   partido.
+
+## Instalación y landing
+
+Es una propuesta. La landing es una página estática que presenta la app y explica cómo instalarla; no hay nada que bajar a la
+PC ni una versión alojada por el proyecto.
+
+1. El administrador del partido crea su cuenta gratuita en la nube y un servidor, siguiendo la guía de la landing.
+2. Al crear el servidor pega un bloque de texto en su campo de inicio («user data» en AWS y Oracle, «startup script» en
+   Google). Eso instala todo solo.
+3. Unos minutos después entra a `https://<IP>`, y un asistente configura el partido: nombre, tipo de elección, valores de
+   seguridad, su usuario y el aviso de responsabilidad.
+4. Desde ahí crea las cuentas y le manda a cada fiscal su link o QR.
+
+Descarté las otras dos opciones:
+
+- **Instalador de escritorio:** hacen falta versiones firmadas para cada sistema, y tendría que manejar las credenciales de
+  la nube del partido.
+- **App web central con cuenta:** el proyecto alojaría los datos de los partidos, y el autor pasaría a ser encargado del
+  tratamiento. El plan lo descarta desde el principio.
 
 ## Sin señal y sincronización
 
@@ -56,6 +79,10 @@ Ninguna regla depende de la hora del teléfono. Cada mesa numera sus operaciones
 secuencia global un lector puede pasar por alto filas que confirman fuera de orden. Lo que llega tarde o desde un teléfono
 revocado queda en cuarentena para revisarlo, sin descartarse.
 
+Un teléfono sin espacio es el peor caso, porque escribir en la base puede romperla y perderlo todo. La app lo comprueba al
+abrirse, al preparar la mesa y cada 10 minutos, con una escritura aparte. Sin lugar, avisa y no deja tachar hasta que se libere;
+si una escritura falla igual, la persona vuelve a la lista y la app lo dice. Nunca muestra como guardado lo que no se guardó.
+
 El aviso urgente se guarda y se envía. Si no sale, ofrece llamar, WhatsApp y SMS, con la mesa y el tipo de problema, sin
 datos de votantes.
 
@@ -66,6 +93,9 @@ Una elección puede durar varios días, así que la jornada no es una sola fecha
 - El padrón local vence al cierre de la elección, no a una cantidad fija de horas.
 - Los tachados de un día siguen valiendo los días siguientes.
 - Los turnos de los fiscales son por día.
+- La urna queda cerrada de noche. Al cierre de cada día se abre, se cuentan los sobres sin abrirlos y se vuelve a cerrar con
+  todos adentro. La app tiene ese conteo por mesa y por día, y si no coincide con los tachados le avisa al jefe.
+- El escrutinio se hace una sola vez, al final de la elección.
 - El panel no puede dar por terminada una mesa porque se haya hecho de noche.
 
 ## Roles y permisos
@@ -88,6 +118,7 @@ Un archivo `.padron` es un ZIP con `manifest.json`, `units.jsonl` (la jerarquía
 La especificación se publica en el repo del escáner, con licencia CC0.
 
 - Solo `id` y `full_name` son obligatorios, y `table` es opcional: los padrones reales llegan sin mesas asignadas.
+- Lo que el padrón trae pero no cambia quién puede votar va en `extra`, y no se le muestra al fiscal.
 - No hay campo para datos políticos: el semáforo vive solo en la app.
 - Las filas dudosas se importan marcadas para revisar; nunca se descartan en silencio.
 - Los ejemplos del repo llevan solo datos falsos.
@@ -107,13 +138,15 @@ nunca se adivina. El código va en inglés.
 
 ## Etapas
 
-1. **Prueba de riesgos:** teléfonos reales, OCR sobre padrones reales y medición con 1 GB.
+1. **Prueba de riesgos:** emulador de Android, OCR sobre padrones reales y medición con 1 GB.
 2. **Núcleo:** formato y validador, importación, mesas, login, vista del fiscal y permisos básicos.
-3. **Jornada completa:** irregularidades, escrutinio con foto, panel del jefe, cronograma, varios días y modo práctica.
+3. **Jornada completa:** irregularidades, conteo diario de sobres, escrutinio con foto, panel del jefe, cronograma, varios días
+   y modo práctica.
 4. **Cumplimiento:** semáforo, permisos completos, auditoría, perfiles de seguridad, herramientas de la ley, purga,
-   instalador, backups y guías de servidor.
-5. **Simulacro** con personas reales y datos falsos, incluida una mudanza de proveedor en vivo.
-6. **Landing:** un sitio estático, sin analíticas, formularios ni cookies, para quien instala el servidor.
+   instalador, backups y guías de servidor. Es también cuando se prueba un iPhone de verdad, porque ya hay un servidor con
+   HTTPS.
+5. **Simulacro** con personas reales y datos falsos, incluido restaurar un backup en otro servidor.
+6. **Landing:** un sitio estático, sin analíticas, formularios ni cookies, para publicitar la app y guiar a quien la instala.
 
 ## Mediciones de la etapa 1
 

@@ -11,8 +11,32 @@
   urgent alert fallback.
 - The app weighs 72 KB compressed.
 
-WebKit on Linux is not Safari on an iPhone. What a real phone does with the app is tested with
+WebKit on Linux is not Safari on an iPhone. The Android emulator and what is left for the iPhone are in
 [this guide](phone-tests.md).
+
+## Android, on an emulator
+
+With real Chrome 124, inside an Android 15 emulator, and the signal cut with airplane mode:
+
+| Situation | Result |
+|---|---|
+| Opening without signal, from scratch | It opens, with the 350 people |
+| Restarting the phone, without signal | Everything stays crossed out and unsent |
+| Clock moved 9 days ahead, without opening it | Everything stays |
+| Disk full, as a user would leave it | It warns and blocks crossing out; the data stays intact |
+| Freeing space | The warning goes away by itself in 44 s |
+| Signal returns | Everything reaches the server: 24 of 24 |
+| Little space, but enough (813 MB) | Works normally, with no false alarms |
+| Crossing out with 350 people, CPU 6 times slower | 24 ms median, 78 ms at worst |
+| Crossing out with 5000 people, CPU 6 times slower | 28 ms median, 183 ms at worst |
+
+**What this test found:** on a phone with no space, writing to the database breaks it. The screen showed the person crossed out
+without having saved it, and after freeing space the database came back empty: the roll and whatever had not been sent were
+lost. Without writes, however, nothing is lost. That is why the app now checks for space with a separate write, and stops
+crossing out until there is room.
+
+**Limits:** an emulator is not an old phone. Without Google services the app could not be installed, and without installing,
+Chrome did not protect the storage; even so, it deleted nothing in this test. A full day of battery was not tested either.
 
 ## Server with 1 GB of RAM
 

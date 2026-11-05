@@ -15,7 +15,8 @@
 | Scanner | Python CLI, with local text recognition |
 
 I chose a PWA to avoid depending on app stores or a central account: each party serves it from its own domain, and poll
-watchers join with a link or a QR code. If real phones treat it badly, it can be packaged with Capacitor without a rewrite.
+watchers join with a link or a QR code. If a phone treats it badly, it can be packaged with Capacitor without a rewrite: on
+Android that is cheap, and on iPhone it takes a Mac and a paid developer account.
 
 ## Servers
 
@@ -31,12 +32,33 @@ disk. The installation guide covers three options, in this order:
 These plans change often. Each guide carries the date it was checked and links to the official pages.
 
 - **The minimum is 1 GB of RAM with a shared CPU**, on `amd64` and `arm64`, with prebuilt images.
-- **The server name cannot change.** The phone keeps its data tied to the address of the app. A domain of your own allows
-  moving to another provider without phones losing anything.
+- **People connect through the IP, with no domain.** Caddy gets a Let's Encrypt certificate for the IP, which lasts 6 days,
+  and renews it by itself. A domain of your own is optional.
+- **The IP must be fixed:** reserved IP on Oracle, Elastic IP on AWS, static IP on Google. The phone keeps its data tied to that
+  address: if it changes, each poll watcher prepares the table again with the new link, and whatever had not been sent becomes
+  unreachable. That is why moving to another server during the vote is not an option.
 - **Backups leave encrypted and outside the account**, with a key only the party holds, because a free account can close.
 - **The server is seasonal:** it is created a few weeks before and deleted after the data is purged.
 - **Data and the law:** free servers are usually outside Argentina. The guide warns about it, and deciding is up to the
   party.
+
+## Installation and landing page
+
+This is a proposal. The landing page is a static page that presents the app and explains how to install it; there is nothing
+to download to a computer and no version hosted by the project.
+
+1. The party administrator creates a free cloud account and a server, following the guide on the landing page.
+2. When creating the server, they paste a block of text into its startup field (“user data” on AWS and Oracle, “startup
+   script” on Google). That installs everything by itself.
+3. A few minutes later they open `https://<IP>`, and an assistant sets up the party: name, type of election, security values,
+   their user and the liability notice.
+4. From there they create the accounts and send each poll watcher their link or QR code.
+
+I ruled out the other two options:
+
+- **Desktop installer:** it needs signed versions for each system, and it would have to handle the party's cloud credentials.
+- **Central web app with accounts:** the project would host the data of the parties, and the author would become a data
+  processor. The plan rules that out from the start.
 
 ## Without signal, and sync
 
@@ -56,6 +78,11 @@ No rule depends on the clock of a phone. Each table numbers its operations under
 sequence a reader can miss rows that commit out of order. What arrives late, or from a revoked phone, goes to quarantine for
 review instead of being discarded.
 
+A phone with no space is the worst case, because writing to the database can break it and lose everything. The app checks when
+it opens, when preparing the table and every 10 minutes, with a separate write. With no room it warns and blocks crossing out
+until space is freed; if a write fails anyway, the person goes back to the list and the app says so. It never shows as saved
+what was not saved.
+
 The urgent alert is saved and sent. If it does not go out, it offers a call, WhatsApp and SMS, with the table and the type
 of problem, and no voter data.
 
@@ -66,6 +93,10 @@ An election may last several days, so election day is not a single date:
 - The local roll expires when the election closes, not after a fixed number of hours.
 - Crossings out from one day still count on the following days.
 - Poll watcher shifts are per day.
+- The ballot box stays closed at night. At the end of each day it is opened, the envelopes are counted without opening them, and
+  it is closed again with all of them inside. The app holds that count per table and per day, and warns the chief if it does not
+  match the crossings out.
+- The count of votes happens only once, at the end of the election.
 - The panel must not treat a table as finished because night has fallen.
 
 ## Roles and permissions
@@ -89,6 +120,7 @@ A `.padron` file is a ZIP with `manifest.json`, `units.jsonl` (the hierarchy) an
 specification is published in the scanner repository, under CC0.
 
 - Only `id` and `full_name` are required, and `table` is optional: real rolls arrive without tables assigned.
+- What a roll carries but does not change who may vote goes in `extra`, and poll watchers do not see it.
 - There is no field for political data: the traffic light lives only in the app.
 - Doubtful rows are imported flagged for review; they are never silently dropped.
 - Examples in the repository carry invented data only.
@@ -108,13 +140,14 @@ chosen, never guessed. The code is in English.
 
 ## Stages
 
-1. **Risk test:** real phones, OCR on real rolls and measuring at 1 GB.
+1. **Risk test:** Android emulator, OCR on real rolls and measuring at 1 GB.
 2. **Core:** format and validator, import, tables, login, poll watcher view and basic permissions.
-3. **Full election day:** irregularities, count with photo, chief panel, schedule, several days and practice mode.
+3. **Full election day:** irregularities, daily envelope count, count with photo, chief panel, schedule, several days and
+   practice mode.
 4. **Compliance:** traffic light, full permissions, audit, security profiles, legal tools, purge, installer, backups and
-   server guides.
-5. **Dry run** with real people and invented data, including moving to another provider live.
-6. **Landing page:** a static site, with no analytics, forms or cookies, for whoever installs the server.
+   server guides. This is also when a real iPhone gets tested, because there is a server with HTTPS by then.
+5. **Dry run** with real people and invented data, including restoring a backup on another server.
+6. **Landing page:** a static site, with no analytics, forms or cookies, to promote the app and guide whoever installs it.
 
 ## Stage 1 measurements
 

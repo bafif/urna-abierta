@@ -12,8 +12,32 @@
   urgente.
 - La app pesa 72 KB comprimida.
 
-WebKit en Linux no es Safari en un iPhone. Lo que un teléfono real hace con la app se prueba con
+WebKit en Linux no es Safari en un iPhone. El emulador de Android y lo que falta del iPhone están en
 [esta guía](pruebas-en-telefonos.md).
+
+## Android, en un emulador
+
+Con Chrome 124 de verdad, dentro de un emulador de Android 15, y la señal cortada con modo avión:
+
+| Situación | Resultado |
+|---|---|
+| Abrir sin señal, desde cero | Abre, con las 350 personas |
+| Reiniciar el teléfono, sin señal | Sigue todo tachado y sin enviar |
+| Reloj adelantado 9 días, sin abrirla | Sigue todo |
+| Disco lleno, como lo dejaría un usuario | Avisa y no deja tachar; los datos quedan intactos |
+| Liberar espacio | El aviso se va solo en 44 s |
+| Vuelve la señal | Llega todo al servidor: 24 de 24 |
+| Poco espacio, pero suficiente (813 MB) | Anda normal, sin falsas alarmas |
+| Tachar con 350 personas, CPU 6 veces más lenta | 24 ms de mediana, 78 ms en el peor caso |
+| Tachar con 5000 personas, CPU 6 veces más lenta | 28 ms de mediana, 183 ms en el peor caso |
+
+**Lo que encontré gracias a esta prueba:** en un teléfono sin espacio, escribir en la base la rompe. La pantalla mostraba a la
+persona tachada sin haberla guardado, y al liberar espacio la base volvía vacía: se perdía el padrón y lo que no se había
+enviado. Si no se escribe, en cambio, no se pierde nada. Por eso la app ahora comprueba el espacio con una escritura aparte, y
+deja de tachar mientras no haya lugar.
+
+**Límites:** un emulador no es un teléfono viejo. Sin los servicios de Google no se pudo instalar la app, y sin instalar, Chrome
+no protegió el almacenamiento; aun así, no borró nada en esta prueba. Tampoco se probó una jornada entera de batería.
 
 ## Servidor con 1 GB de RAM
 

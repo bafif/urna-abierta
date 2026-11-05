@@ -1,47 +1,63 @@
-# Test on real phones
+# Testing on a phone, from a computer
 
-The one thing a computer cannot test is what a real phone does with the app: whether it keeps it after a restart,
-whether it deletes it after several days, and whether it runs well on an old device. The test app uses invented people
-and never sends a report by itself.
+[Español](../es/pruebas-en-telefonos.md)
 
-## What you need
+Nothing has to be published. The test app uses invented people and never sends a report by itself.
 
-An old Android phone and an iPhone. Both must open the app over HTTPS, except for Android over USB.
+## Seeing it at phone size
 
-- **Android over USB, publishing nothing:**
+```sh
+deploy/serve.sh
+```
 
-  ```sh
-  deploy/serve.sh
-  adb reverse tcp:8090 tcp:8090
-  ```
+Open `http://localhost:8090` in the browser of the computer and turn on device mode with F12. This is good for trying the
+interface, not for learning what a real phone does.
 
-  With the app running on the computer, open `http://localhost:8090` in Chrome. For the phone, `localhost` counts as a
-  secure connection.
+## Android, on an emulator
 
-- **iPhone (or any phone):** publish the `apps/web/build` folder on a site with HTTPS. Without a server the app uses the
-  same invented roll and keeps items pending, which is enough for this test. If the folder sits under a path, build with
-  `BASE_PATH=/path corepack pnpm --filter @urna-abierta/web build`.
+```sh
+deploy/android-emulator.sh
+```
 
-## The steps
+The first time it downloads about 5.5 GB and accepts the licenses of the Android SDK. A window opens with the phone: in its
+Chrome, open `http://localhost:8090`. To cut the signal, turn on airplane mode and run:
 
-Do them on each phone. At the end of each day, under **Status**, tap **Copy report** and keep it.
+```sh
+~/.local/share/urna-abierta/android-sdk/platform-tools/adb reverse --remove-all
+```
+
+This is needed because the emulator reaches the app through a tunnel that airplane mode does not cut.
+
+It can also run entirely without a window. It tests no signal, a restart, the clock moved 9 days ahead, an almost full disk
+and a slow phone:
+
+```sh
+deploy/android-emulator.sh --headless
+ADB=~/.local/share/urna-abierta/android-sdk/platform-tools/adb node apps/web/e2e-android/check.mjs results.json
+```
+
+## iPhone
+
+There is no iPhone emulator for Linux: Apple's only runs on a Mac. The WebKit tests are the closest thing, but they reproduce
+neither the installation nor the Safari rule that deletes a site's data after 7 days of use without visiting it.
+
+That is why the iPhone gets tested in stage 4, when there is a server with HTTPS and opening its address is enough. Meanwhile,
+the risk is limited: a three-day election, with the table prepared the day before, does not reach those 7 days. If it still
+loses data, what was sent remains on the server and the poll watcher prepares the table again.
+
+At that point, these are the steps:
 
 | When | What to do | What must happen |
 |---|---|---|
-| Day 1, with signal | Install the app. On Android with **Install the app**; on iPhone with Share and **Add to Home Screen**. Open it from the icon | **Installed** says “yes” |
-| Day 1 | Choose 350 people and tap **Prepare table** | **350 of 350 left**. Check whether **Protected storage** says “yes” |
-| Day 1 | Turn on airplane mode, close the app and open it | It opens anyway, with the 350 people |
-| Day 1 | Cross out 20 people quickly, search for `nunez` and cross out one more | Each tap responds without delay; the search finds “Núñez” |
-| Day 1 | Restart the phone, without signal, and open the app | They remain crossed out, **Data intact** says “yes” |
-| Day 1 | Under **Urgent alert**, enter a test number and report | Call, WhatsApp and SMS appear, and each button opens what it says |
-| Day 1 | Go back to **Table**, leave it as it is, and turn airplane mode off | With a server: **Everything sent**. Without one: they stay pending |
-| Day 4 | Open the app without signal | Everything is still there. This is the real length of a three-day election |
-| Day 9 | Open the app without signal, not having opened it since day 4 | Everything is still there. This gets past Safari's 7-day rule |
-| After | Repeat with 5000 people on the oldest phone | Crossing out and searching still work well |
+| Day 1, with signal | Open the address, tap Share and **Add to Home Screen**, and open it from the icon | **Installed** says “yes” |
+| Day 1 | Tap **Prepare table** | Check whether **Protected storage** says “yes” |
+| Day 1 | Turn on airplane mode, close the app and open it | It opens anyway |
+| Day 1 | Cross out 20 people and restart the phone | They remain crossed out and **Data intact** says “yes” |
+| Day 9 | Open it, not having opened it before | Everything is still there |
 
 ## How to decide
 
-- If everything is still there on day 9 on both phones, the web app is enough.
-- If the iPhone deletes data while installed, or if **Protected storage** stays at “no” and data is also lost, it has to
-  be packaged with Capacitor before going on.
-- If crossing out takes more than 200 ms on the oldest phone, the interface has to get lighter.
+- If everything is still there on the iPhone on day 9, the web app is enough.
+- If it deletes the data while installed, the choice is between packaging it, which takes a Mac and a paid account, or telling
+  people to prepare the table the day before on an iPhone.
+- If crossing out takes more than 200 ms on a slow phone, the interface has to get lighter.
