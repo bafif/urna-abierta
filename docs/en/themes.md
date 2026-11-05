@@ -2,11 +2,19 @@
 
 [Español](../es/temas.md) · [Back to installation](installation.md)
 
-A theme is data: colors for each mode, fonts, shapes and a few recipes. It has no code, and the app loads nothing from outside.
+A theme is data: colors for each mode, fonts, shapes and a few recipes. It has no code, and the app loads nothing from outside. You import
+**one single file, with everything inside:** colors, logo and fonts.
 
 1. Copy one of the themes in [`apps/web/src/lib/temas.js`](../../apps/web/src/lib/temas.js) to a file of your own, and change its `id`,
-   `nombre` and colors. Fonts have to be among those that come with the app.
-2. If it has a logo, put the path to an SVG, PNG or WebP in `logo`.
+   `nombre` and colors.
+2. If it has a logo, put the path to an SVG, PNG or WebP in `logo`. To use your own fonts, declare them (WOFF2, WOFF, TTF or OTF):
+
+   ```js
+   fuentes: { titulo: "'My Font'", texto: "'My Font'", boton: "'My Font'", numero: "'My Font'" },
+   archivosFuentes: [{ familia: 'My Font', peso: '400', archivo: 'my-font.woff2' }],
+   ```
+
+   For variable weight fonts, give the range: `peso: '200 800'`. Whichever of the app's fonts the theme uses go in by themselves.
 3. Convert it, with the repository installed:
 
    ```sh
@@ -19,6 +27,9 @@ A theme is data: colors for each mode, fonts, shapes and a few recipes. It has n
    - **With the app already installed:** go to **More**, **Settings**, **Add your own theme**, and choose that file.
 
 Own themes do not come with the app or the installer: they only travel from your computer to your server. From then on, anyone in your party can choose it. With the same `id`, it replaces the previous one.
+
+Each phone downloads the fonts once and keeps them, so the theme looks the same with no signal. If you include fonts, make sure their license lets
+you distribute them: they will go to your team's phones.
 
 ## The recipes
 
