@@ -1,4 +1,4 @@
-import { randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { mainRole, SECURITY_PROFILES, themeProblems, type SecurityProfile } from '@urna-abierta/domain';
@@ -27,13 +27,33 @@ const sameText = (a: string, b: string) => {
   return timingSafeEqual(x, y);
 };
 
-/** A theme that passed the reading check. With the same id, it replaces the previous one. */
-export async function addTheme(pool: pg.Pool, theme: { id: string }): Promise<void> {
-  const themes = await getSetting<{ id: string }[]>(pool, 'themes', []);
-  await setSetting(pool, 'themes', [...themes.filter((other) => other.id !== theme.id), theme]);
+interface StoredTheme {
+  id: string;
+  archivosFuentes?: { sha256?: string; datos?: string }[];
 }
 
-const MAX_THEME_BYTES = 1024 * 1024;
+/**
+ * A theme that passed the reading check. With the same id, it replaces the previous one. It comes as
+ * one file, and its fonts are kept apart: each phone asks for them once, and not every time it opens.
+ */
+export async function addTheme(pool: pg.Pool, theme: StoredTheme): Promise<void> {
+  const fonts = [];
+  for (const { datos, ...font } of theme.archivosFuentes ?? []) {
+    const [, mediaType, base64] = /^data:([^;]+);base64,(.*)$/.exec(datos ?? '') ?? [];
+    const bytes = Buffer.from(base64 ?? '', 'base64');
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    await pool.query('INSERT INTO theme_fonts (sha256, media_type, data) VALUES ($1, $2, $3) ON CONFLICT (sha256) DO NOTHING', [sha256, mediaType, bytes]);
+    fonts.push({ ...font, sha256 });
+  }
+  const themes = await getSetting<StoredTheme[]>(pool, 'themes', []);
+  const stored = [...themes.filter((other) => other.id !== theme.id), { ...theme, ...(fonts.length > 0 ? { archivosFuentes: fonts } : {}) }];
+  await setSetting(pool, 'themes', stored);
+  // What the replaced theme had and no other uses goes away.
+  const inUse = stored.flatMap((item) => (item.archivosFuentes ?? []).map((font) => font.sha256));
+  await pool.query('DELETE FROM theme_fonts WHERE NOT (sha256 = ANY($1))', [inUse]);
+}
+
+export const MAX_THEME_BYTES = 24 * 1024 * 1024;
 
 export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   const guesses = attemptLimiter(GUESSES_ALLOWED, GUESS_WINDOW_MS);
@@ -77,9 +97,18 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!expected || typeof code !== 'string' || !sameText(code, expected)) return reply.code(403).send({ error: 'wrong_code' });
     const problems = themeProblems(theme);
     if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
-    await addTheme(pool, theme as { id: string });
-    await audit(pool, null, 'theme.added', (theme as { id: string }).id);
+    await addTheme(pool, theme as StoredTheme);
+    await audit(pool, null, 'theme.added', (theme as StoredTheme).id);
     return { ok: true };
+  });
+
+  /** Not private, because it shows before anyone logs in. Its address is its hash, so it never changes. */
+  app.get<{ Params: { sha: string } }>('/api/theme-fonts/:sha', async (request, reply) => {
+    const { sha } = request.params;
+    if (!/^[0-9a-f]{64}$/.test(sha)) return reply.code(400).send({ error: 'invalid_font' });
+    const found = await pool.query('SELECT media_type, data FROM theme_fonts WHERE sha256 = $1', [sha]);
+    if (!found.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    return reply.type(found.rows[0].media_type).header('cache-control', 'public, max-age=31536000, immutable').send(found.rows[0].data);
   });
 
   /** An invitation works once, and turns into this device's own credential. */
