@@ -6,6 +6,14 @@
 {$URNA_SITE::80} {
 	{$URNA_TLS:}
 
+	# Nothing on the page comes from anywhere else, and no other site can embed it.
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
 	handle /api/* {
 		reverse_proxy {$URNA_API:server:3000}
 	}

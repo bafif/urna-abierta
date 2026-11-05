@@ -383,6 +383,12 @@ class AppState {
     if (this.noRoom) throw new Error('no room');
     const table = this.table;
     if (!table) throw new Error('no table');
+    // What is left from another table goes out first: once replaced, it would no longer belong anywhere.
+    if (this.tableId && this.tableId !== table.id && this.pendingCount + this.pendingPhotos > 0) {
+      await this.sync();
+      if (this.pendingCount + this.pendingPhotos > 0) throw new Error('pending from another table');
+      await this.letGoIfFinished();
+    }
     let electors: RollEntry[];
     if (this.practice) {
       electors = fakeRoll(PRACTICE_PEOPLE, 1);
