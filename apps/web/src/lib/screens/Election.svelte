@@ -77,6 +77,13 @@
       <button class="enlace" onclick={() => nav.go('review', { election: id })}>{t('election.toReview', { count: election.to_review })}</button>
     {/if}
     {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
+    <!-- What comes next stays at the bottom. The rest is here, for whoever goes looking for it. -->
+    <div class="renglon-botones separado">
+      {#if election.people && now !== 'tables'}<button class="enlace" onclick={() => nav.go('tables', { election: id })}>{t('election.seeTables')}</button>{/if}
+      {#if election.tables}<button class="enlace" onclick={() => nav.go('districts', { election: id })}>{t('election.districts')}</button>{/if}
+      {#if election.people}<button class="enlace" onclick={() => nav.go('rollUpload', { election: id })}>{t('election.reupload')}</button>{/if}
+      {#if ['jornada', 'escrutinio', 'cerrada'].includes(election.status)}<button class="enlace" onclick={() => nav.go('numbers', { election: id })}>{t('election.numbers')}</button>{/if}
+    </div>
     {#snippet pie()}
       <div class="pila">
         {#if now === 'roll'}
@@ -97,12 +104,6 @@
         {:else if now === 'closed'}
           <button class="boton peligro" onclick={purge}>{t('election.purge')}</button>
         {/if}
-        <div class="renglon-botones">
-          {#if election?.people && now !== 'tables'}<button class="enlace" onclick={() => nav.go('tables', { election: id })}>{t('election.seeTables')}</button>{/if}
-          {#if election?.tables}<button class="enlace" onclick={() => nav.go('districts', { election: id })}>{t('election.districts')}</button>{/if}
-          {#if election?.people}<button class="enlace" onclick={() => nav.go('rollUpload', { election: id })}>{t('election.reupload')}</button>{/if}
-          {#if ['jornada', 'escrutinio', 'cerrada'].includes(election?.status ?? '')}<button class="enlace" onclick={() => nav.go('numbers', { election: id })}>{t('election.numbers')}</button>{/if}
-        </div>
       </div>
     {/snippet}
   </Pantalla>

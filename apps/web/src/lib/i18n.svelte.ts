@@ -567,6 +567,9 @@ const es = {
   'action.role.edited': 'Cambió los permisos de una tarea',
   'action.semaphore.fiscal_view': 'Cambió si los fiscales ven el semáforo',
   'table.photo.waiting': 'Avisaron que hay una foto del acta, pero todavía no llegó. Aparece sola cuando llegue.',
+  'persons.correct': 'Corregir sus datos',
+  'persons.correct.save': 'Guardar la corrección',
+  'persons.corrected': 'Datos corregidos.',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1140,6 +1143,9 @@ const en: Record<MessageKey, string> = {
   'action.role.edited': 'Changed the permissions of a task',
   'action.semaphore.fiscal_view': 'Changed whether poll watchers see the traffic light',
   'table.photo.waiting': 'A photo of the tally sheet was announced, but it has not arrived yet. It appears by itself when it does.',
+  'persons.correct': 'Correct their data',
+  'persons.correct.save': 'Save the correction',
+  'persons.corrected': 'Data corrected.',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;

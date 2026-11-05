@@ -53,7 +53,16 @@ function emptyDisk() {
 async function waitForBoot() {
   adb('wait-for-device');
   while (shell('getprop sys.boot_completed') !== '1') await sleep(2_000);
-  adb('root');
+  // Right after booting, the phone's side of adb may still refuse this.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      adb('root');
+      break;
+    } catch (error) {
+      if (attempt >= 20) throw error;
+      await sleep(3_000);
+    }
+  }
   await sleep(2_000);
   adb('wait-for-device');
   while (shell('getprop sys.boot_completed') !== '1') await sleep(1_000);
