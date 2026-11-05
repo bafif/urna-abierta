@@ -51,7 +51,7 @@ primera vez que la abre. También podés agregar el tuyo, con los colores de tu 
   ni telemetría.
 - **Anda sin señal.** Muchas aulas no tienen conexión. Todo se guarda primero en el teléfono y se manda solo cuando vuelve.
 - **Pensada para no pagar servidor.** Apunta a los planes gratuitos: la medí con los límites de esas máquinas, 1 GB de memoria y un
-  cuarto de procesador, y sobró para 200 mesas.
+  cuarto de procesador, y anduvo con 200 mesas, en una [prueba de laboratorio](docs/es/resultados-etapa-4.md).
 - **Lee tus padrones.** Lee un PDF escaneado con un modelo que corre en tu computadora, sin mandarle el padrón a nadie.
 - **Con la ley argentina en mente.** Trae permisos, un registro que nadie puede cambiar y herramientas para atender pedidos de personas y borrar los datos al terminar.
 
@@ -85,6 +85,7 @@ La primera prueba real es una elección universitaria, en abril de 2027.
 | [Instalación](docs/es/instalacion.md) | El instalador, y cómo probarla |
 | [Crear un servidor](docs/es/servidores.md) | Oracle, AWS y Google, paso a paso, y cómo mantenerlo |
 | [Simulacro](docs/es/simulacro.md) | Qué probar con personas de verdad antes de una elección |
+| [Tu propio tema](docs/es/temas.md) | Los colores de tu partido, siempre que se puedan leer |
 | [Plan técnico](docs/es/plan-tecnico.md) | Arquitectura, sincronización, permisos y formato de padrón |
 | [Mediciones](docs/es/resultados-etapa-4.md) | Qué se probó y qué dio, con los [riesgos iniciales](docs/es/resultados-etapa-1.md) |
 | [Legal](LEGAL.md) | Licencia, responsabilidades y datos personales |

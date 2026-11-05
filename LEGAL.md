@@ -48,7 +48,7 @@ pero conviene conocerlos:
 
 ## Herramientas para cumplir
 
-La app va a traer herramientas opcionales. Usarlas es decisión de cada partido, y tenerlas no garantiza cumplir la ley:
+La app trae herramientas opcionales. Usarlas es decisión de cada partido, y tenerlas no garantiza cumplir la ley:
 
 - registrar el consentimiento de cada persona, con fecha y medio;
 - marcar categorías del semáforo como sensibles, con un permiso aparte;
@@ -60,7 +60,7 @@ El semáforo arranca vacío: cada partido define sus categorías.
 
 ## Inteligencia artificial externa
 
-El escáner de padrones lee por defecto en tu computadora. Si elegís usar una IA externa, los datos del padrón pasan por esa empresa, con
+El escáner de padrones lee por defecto en tu computadora, y por ahora es la única opción. Si más adelante elegís usar una IA externa, los datos del padrón pasan por esa empresa, con
 tu cuenta y bajo sus términos, y algunos planes gratuitos entrenan con lo que reciben. Ningún padrón pasa por una cuenta o un servidor del
 proyecto.
 
