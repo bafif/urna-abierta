@@ -194,3 +194,45 @@ test('finds a person with no accents in the search, and can undo right after mar
   await page.getByRole('button', { name: 'Deshacer' }).click();
   await expectLeft(page, 350, 350);
 });
+
+test('it never says everything was sent while something is still waiting on the phone', async ({ context, request }) => {
+  const demo = await seed(request);
+  const page = await prepared(context, demo.tables[0]!.invitations[0]!);
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+  // Every answer of the server takes a while, so that what gets saved falls in the middle of a send.
+  await context.route('**/api/sync/**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.continue();
+  });
+  for (let i = 0; i < 12; i += 1) {
+    await page.getByTestId('person').first().click();
+    await page.waitForTimeout(150);
+  }
+  await expectLeft(page, 338, 350);
+  // No more marks from here on: what is pending can only go down, so the screen has no excuse.
+  const wrong = await page.evaluate(async () => {
+    const pending = () =>
+      new Promise<number>((resolve, reject) => {
+        const open = indexedDB.open('urna-abierta');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const all = open.result.transaction('operations').objectStore('operations').getAll();
+          all.onsuccess = () => {
+            resolve((all.result as { queue: number }[]).filter((row) => row.queue === 1).length);
+            open.result.close();
+          };
+        };
+      });
+    let times = 0;
+    for (let i = 0; i < 600; i += 1) {
+      const left = await pending();
+      if (left === 0) break;
+      if (document.querySelector('[data-testid="sync-status"]')?.textContent?.includes('Todo enviado')) times += 1;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return times;
+  });
+  expect(wrong).toBe(0);
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 30_000 });
+  expect(await pendingOperations(page)).toBe(0);
+});

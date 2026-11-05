@@ -128,7 +128,10 @@ class AppState {
   private order = 0;
   private failures = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
-  private syncing = false;
+  private nextSyncAt = 0;
+  private running: Promise<void> | null = null;
+  /** Each reading of what is pending takes a number, and only the latest one counts. */
+  private pendingReading = 0;
   private roomCheck: Promise<boolean> | null = null;
   private roomRetry: ReturnType<typeof setTimeout> | undefined;
 
@@ -450,7 +453,10 @@ class AppState {
     }
     this.saveFailed = false;
     this.writeSamples = [...this.writeSamples.slice(-199), performance.now() - started];
-    if (!this.practice) this.pendingCount += 1;
+    if (!this.practice) {
+      this.pendingReading += 1;
+      this.pendingCount += 1;
+    }
     return operation;
   }
 
@@ -536,22 +542,49 @@ class AppState {
     if (operations.length > 0) this.revision += 1;
   }
 
+  /**
+   * A reading that started before something got saved can end after it. If that old number were
+   * shown, the app would say that everything was sent when it was not.
+   */
   private async refreshPending(): Promise<void> {
-    this.pendingCount = await this.db.operations
+    this.pendingReading += 1;
+    const reading = this.pendingReading;
+    const operations = await this.db.operations
       .where('[queue+order]')
       .between([QueueState.Pending, -Infinity], [QueueState.Pending, Infinity])
       .count();
-    this.pendingPhotos = await this.db.photos.where('sent').equals(0).count();
+    const photos = await this.db.photos.where('sent').equals(0).count();
+    if (reading !== this.pendingReading) return;
+    this.pendingCount = operations;
+    this.pendingPhotos = photos;
   }
 
+  /** The soonest one wins: finishing a send must not push back another that was just asked for. */
   private schedule(delay: number): void {
+    const at = Date.now() + delay;
+    if (this.timer !== undefined && this.nextSyncAt <= at) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.sync(), delay);
+    this.nextSyncAt = at;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      void this.sync();
+    }, delay);
   }
 
+  /** One at a time. Whoever asks during a send gets another one after it, which sees what that one missed. */
   async sync(): Promise<void> {
-    if (this.syncing || this.practice || !this.tableId) return;
-    this.syncing = true;
+    if (this.practice || !this.tableId) return;
+    if (this.running) {
+      await this.running;
+      return this.sync();
+    }
+    this.running = this.runSync().finally(() => {
+      this.running = null;
+    });
+    return this.running;
+  }
+
+  private async runSync(): Promise<void> {
     this.sending = true;
     // Receiving operations writes too, so it waits while the phone has no room.
     const result = this.noRoom ? 'failed' : await syncOnce(this.store, this.tableId, API, session.fetch);
@@ -559,7 +592,6 @@ class AppState {
     await this.refreshPending().catch(() => undefined);
     if (result === 'done') await this.letGoIfFinished().catch(() => undefined);
     this.sending = false;
-    this.syncing = false;
     this.online = navigator.onLine;
     if (result === 'done') {
       this.failures = 0;
