@@ -1,17 +1,16 @@
 import { tick } from 'svelte';
-import { resolve } from '$app/paths';
 import { fakeRoll, MarkState, parseOperation, SCHEMA_VERSION, uuidv7, type Operation, type RollEntry } from '@urna-abierta/domain';
 import { QueueState, storeFor, UrnaDatabase } from './db.ts';
+import { t } from './i18n.svelte.ts';
+import { API, session, type TableInfo } from './session.svelte.ts';
 import { retryDelay, syncOnce } from './sync.ts';
 
-/** Until logins exist, a test can pick its table from the address. */
-function tableFromAddress(): string {
-  const requested = new URLSearchParams(location.search).get('mesa');
-  return requested && /^[\w-]{1,64}$/.test(requested) ? requested : 'mesa-de-prueba';
-}
-
-export const TABLE_ID = tableFromAddress();
-const API = `${resolve('/')}api`;
+const PRACTICE_KEY = 'urna-abierta-practica';
+const PRACTICE_PEOPLE = 40;
+const MAX_PHOTO_SIDE = 1800;
+const SHRINK_LIMIT_MS = 15_000;
+/** A phone that never heard the election closed still lets go of the roll, once everything was sent. */
+const DAYS_KEPT_AFTER_LAST = 7;
 const PERIODIC_SYNC_MS = 30_000;
 const ROOM_CHECK_MS = 10 * 60_000;
 /** Enough to notice a full phone in time: what the app itself writes is far smaller than this. */
@@ -71,6 +70,40 @@ interface Canary {
   preparedPeople: number | null;
 }
 
+/** The day here, not in Greenwich: at nine at night in Argentina it is already tomorrow there. */
+export function localDay(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Keeps a photo of the tally sheet readable and light enough to go out with little signal. */
+async function shrink(file: Blob): Promise<Blob> {
+  const work = (async () => {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', 0.82));
+  })();
+  // The last step of the day cannot depend on a phone managing this: the original photo works too.
+  const limit = new Promise<null>((done) => setTimeout(() => done(null), SHRINK_LIMIT_MS));
+  try {
+    return (await Promise.race([work, limit])) ?? file;
+  } catch {
+    return file;
+  }
+}
+
+async function sha256(bytes: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** What the poll watcher has to do now, worked out on the phone so that it also holds with no signal. */
+export type Step = 'prepare' | 'waiting' | 'mark' | 'rest' | 'tally' | 'photo' | 'done';
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -78,7 +111,11 @@ function median(values: number[]): number | null {
 }
 
 class AppState {
-  private readonly db = new UrnaDatabase();
+  /** Practice has its own database: what happens in it can never get mixed with the real thing. */
+  readonly practice = localStorage.getItem(PRACTICE_KEY) !== null;
+  private readonly db = new UrnaDatabase(this.practice ? 'urna-abierta-practica' : 'urna-abierta');
+  /** The table this phone holds: it may still have things to send after the person moved on. */
+  private tableId = this.practice ? 'practica' : '';
   private marks = new MarkState();
   /** Everything applied to the marks, to rebuild them if a write fails. */
   private applied: Operation[] = [];
@@ -105,12 +142,12 @@ class AppState {
   /** Bumped when marks change, because MarkState is a plain class Svelte cannot observe. */
   revision = $state(0);
   pendingCount = $state(0);
+  pendingPhotos = $state(0);
   sending = $state(false);
   online = $state(true);
   persisted = $state<boolean | null>(null);
   canary = $state<Canary | null>(null);
   intact = $state<boolean | null>(null);
-  contact = $state('');
   tapSamples = $state.raw<number[]>([]);
   writeSamples = $state.raw<number[]>([]);
 
@@ -118,10 +155,90 @@ class AppState {
     return this.marks.hasVoted(id);
   }
 
+  /** The table to work on: the one assigned to this person, or the invented one when practicing. */
+  get table(): TableInfo | null {
+    if (!this.practice) return session.me?.table ?? null;
+    return {
+      id: 'practica',
+      name: t('practice.table'),
+      place: '',
+      election: t('practice.election'),
+      electionId: '',
+      status: 'jornada',
+      days: [localDay()],
+      categories: [{ id: 'practica', name: t('practice.category'), lists: [{ id: 'a', name: t('practice.listA') }, { id: 'b', name: t('practice.listB') }, { id: 'blanco', name: t('practice.blank') }] }],
+      total: PRACTICE_PEOPLE,
+    };
+  }
+
+  private ofType(type: Operation['type']): Operation[] {
+    void this.revision;
+    return this.applied.filter((operation) => operation.type === type);
+  }
+
+  get markedCount(): number {
+    void this.revision;
+    return this.electors.filter((entry) => this.marks.hasVoted(entry.id)).length;
+  }
+
+  get countedDays(): Set<string> {
+    return new Set(this.ofType('envelopes.counted').map((operation) => (operation.payload as { day: string }).day));
+  }
+
+  /** The envelopes counted the last time, which the tally has to add up to. */
+  get lastEnvelopes(): number | null {
+    const last = this.ofType('envelopes.counted').at(-1);
+    return last ? (last.payload as { envelopes: number }).envelopes : null;
+  }
+
+  get talliedCategories(): Set<string> {
+    return new Set(this.ofType('tally.submitted').map((operation) => (operation.payload as { category: string }).category));
+  }
+
+  get hasPhoto(): boolean {
+    return this.ofType('tally.photo').length > 0;
+  }
+
+  get step(): Step {
+    const table = this.table;
+    if (this.electors.length === 0 || !table || table.days.length === 0) return 'prepare';
+    const today = localDay();
+    const last = table.days[table.days.length - 1]!;
+    if (today < table.days[0]!) return 'waiting';
+    if (today <= last && !this.countedDays.has(last)) {
+      if (!table.days.includes(today) || this.countedDays.has(today)) return 'rest';
+      return 'mark';
+    }
+    if (table.categories.some((category) => !this.talliedCategories.has(category.id))) return 'tally';
+    return this.hasPhoto ? 'done' : 'photo';
+  }
+
+  /** Which day of the election today is, counted from one. */
+  get dayNumber(): number {
+    const days = this.table?.days ?? [];
+    const index = days.indexOf(localDay());
+    return index === -1 ? days.length : index + 1;
+  }
+
+  startPractice(): void {
+    localStorage.setItem(PRACTICE_KEY, new Date().toISOString());
+    location.reload();
+  }
+
+  async endPractice(): Promise<void> {
+    localStorage.removeItem(PRACTICE_KEY);
+    await this.db.delete();
+    location.reload();
+  }
+
   tapStats = () => ({ median: median(this.tapSamples), worst: this.tapSamples.length ? Math.max(...this.tapSamples) : null });
   writeStats = () => ({ median: median(this.writeSamples), worst: this.writeSamples.length ? Math.max(...this.writeSamples) : null });
 
+  private started = false;
+
   async start(): Promise<void> {
+    if (this.started) return;
+    this.started = true;
     try {
       await this.load();
     } catch {
@@ -170,7 +287,7 @@ class AppState {
     this.deviceId = (await this.db.getMeta<string>('deviceId')) ?? `d-${uuidv7()}`;
     await this.db.setMeta('deviceId', this.deviceId);
     this.deviceSeq = (await this.db.getMeta<number>('deviceSeq')) ?? 0;
-    this.contact = (await this.db.getMeta<string>('contact')) ?? '';
+    if (!this.practice) this.tableId = (await this.db.getMeta<string>('tableId')) ?? '';
 
     this.electors = await this.db.electors.toArray();
     this.electors.sort((a, b) => a.order - b.order);
@@ -179,10 +296,41 @@ class AppState {
       this.applyLocally(row.operation);
       this.order = Math.max(this.order, row.order);
     }
-    this.dataLost = this.electors.length === 0 && localStorage.getItem(PREPARED_KEY) !== null;
+    this.dataLost = !this.practice && this.electors.length === 0 && localStorage.getItem(PREPARED_KEY) !== null;
     await this.touchCanary();
     await this.refreshPersistence();
     await this.refreshPending();
+    if (!this.practice) await this.letGoIfFinished();
+  }
+
+  /**
+   * The roll does not stay on the phone: once the election closed or the person moved to another
+   * table, and only when nothing is left to send, it goes.
+   */
+  private async letGoIfFinished(): Promise<void> {
+    if (!this.tableId || this.pendingCount + this.pendingPhotos > 0) return;
+    const assigned = session.me?.table?.id;
+    const reached = navigator.onLine && session.me !== null;
+    const lastDay = session.me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
+    const longAgo = lastDay && Date.now() - Date.parse(`${lastDay}T12:00:00`) > DAYS_KEPT_AFTER_LAST * 86_400_000;
+    if ((reached && assigned !== this.tableId) || longAgo) await this.wipe();
+  }
+
+  private async wipe(): Promise<void> {
+    await this.db.transaction('rw', this.db.electors, this.db.operations, this.db.photos, this.db.meta, async () => {
+      await this.db.electors.clear();
+      await this.db.operations.clear();
+      await this.db.photos.clear();
+      await this.db.meta.bulkDelete(['cursor', 'tableId', 'lastDay']);
+    });
+    localStorage.removeItem(PREPARED_KEY);
+    this.electors = [];
+    this.applied = [];
+    this.marks = new MarkState();
+    this.tableId = '';
+    this.dataLost = false;
+    this.intact = null;
+    this.revision += 1;
   }
 
   private applyLocally(operation: Operation): void {
@@ -223,37 +371,35 @@ class AppState {
   }
 
   /** Copies the roll onto the phone. It only counts as ready once it has been written. */
-  async prepare(size: number): Promise<void> {
+  async prepare(): Promise<void> {
     await this.checkRoom();
     if (this.noRoom) throw new Error('no room');
+    const table = this.table;
+    if (!table) throw new Error('no table');
     let electors: RollEntry[];
-    try {
-      const response = await fetch(`${API}/tables/${TABLE_ID}/bundle?size=${size}`, { signal: AbortSignal.timeout(20_000) });
+    if (this.practice) {
+      electors = fakeRoll(PRACTICE_PEOPLE, 1);
+    } else {
+      const response = await session.fetch(`${API}/tables/${table.id}/bundle`, { signal: AbortSignal.timeout(60_000) });
       if (!response.ok) throw new Error('no server');
       electors = ((await response.json()) as { electors: RollEntry[] }).electors;
-    } catch {
-      // Without a server the phone test still works, with the same invented people.
-      electors = fakeRoll(size, 1);
     }
     await this.db.transaction('rw', this.db.electors, this.db.meta, async () => {
       await this.db.electors.clear();
       await this.db.electors.bulkPut(electors);
+      await this.db.setMeta('tableId', table.id);
+      await this.db.setMeta('lastDay', table.days.at(-1));
       const canary = await this.db.getMeta<Canary>('canary');
       if (canary) await this.db.setMeta('canary', { ...canary, preparedPeople: electors.length });
     });
     this.electors = electors;
-    localStorage.setItem(PREPARED_KEY, new Date().toISOString());
+    this.tableId = table.id;
+    if (!this.practice) localStorage.setItem(PREPARED_KEY, new Date().toISOString());
     this.dataLost = false;
     this.canary = await this.db.getMeta<Canary>('canary') ?? null;
     this.intact = true;
     await this.refreshPersistence();
     void this.sync();
-  }
-
-  async reset(): Promise<void> {
-    localStorage.removeItem(PREPARED_KEY);
-    await this.db.delete();
-    location.reload();
   }
 
   /**
@@ -267,7 +413,7 @@ class AppState {
     const operation = parseOperation({
       id: uuidv7(),
       schema: SCHEMA_VERSION,
-      table: TABLE_ID,
+      table: this.tableId,
       device: this.deviceId,
       device_seq: this.deviceSeq,
       device_time: new Date().toISOString(),
@@ -280,7 +426,7 @@ class AppState {
     const started = performance.now();
     try {
       await this.db.transaction('rw', this.db.operations, this.db.meta, async () => {
-        await this.db.operations.put({ id: operation.id, queue: QueueState.Pending, order: this.order, operation });
+        await this.db.operations.put({ id: operation.id, queue: this.practice ? QueueState.Done : QueueState.Pending, order: this.order, operation });
         await this.db.setMeta('deviceSeq', this.deviceSeq);
       });
     } catch {
@@ -291,7 +437,7 @@ class AppState {
     }
     this.saveFailed = false;
     this.writeSamples = [...this.writeSamples.slice(-199), performance.now() - started];
-    this.pendingCount += 1;
+    if (!this.practice) this.pendingCount += 1;
     return operation;
   }
 
@@ -327,9 +473,49 @@ class AppState {
     return row?.queue === QueueState.Done ? 'sent' : 'queued';
   }
 
-  async saveContact(value: string): Promise<void> {
-    this.contact = value;
-    await this.db.setMeta('contact', value);
+  async countEnvelopes(day: string, envelopes: number): Promise<boolean> {
+    const operation = await this.record('envelopes.counted', { day, envelopes, marked: this.markedCount });
+    this.schedule(500);
+    return operation !== null;
+  }
+
+  async submitTally(category: string, results: Record<string, number>): Promise<boolean> {
+    const operation = await this.record('tally.submitted', { category, results });
+    this.schedule(500);
+    return operation !== null;
+  }
+
+  /** The photo stays saved on the phone until it reaches the server. */
+  async addPhoto(file: Blob): Promise<boolean> {
+    if (this.noRoom || this.storageBroken) return false;
+    const blob = await shrink(file);
+    const bytes = await blob.arrayBuffer();
+    const hash = await sha256(bytes);
+    try {
+      await this.db.photos.put({ sha256: hash, bytes, sent: this.practice ? 1 : 0 });
+    } catch {
+      this.saveFailed = true;
+      await this.checkRoom();
+      return false;
+    }
+    const operation = await this.record('tally.photo', { sha256: hash });
+    if (!operation) return false;
+    await this.refreshPending();
+    this.schedule(500);
+    return true;
+  }
+
+  private async sendPhotos(): Promise<void> {
+    const waiting = await this.db.photos.where('sent').equals(0).toArray();
+    for (const photo of waiting) {
+      const response = await session.fetch(`${API}/tables/${this.tableId}/photos/${photo.sha256}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'image/jpeg' },
+        body: photo.bytes,
+      });
+      if (!response.ok) return;
+      await this.db.photos.update(photo.sha256, { sent: 1 });
+    }
   }
 
   private applyRemote(operations: Operation[]): void {
@@ -342,6 +528,7 @@ class AppState {
       .where('[queue+order]')
       .between([QueueState.Pending, -Infinity], [QueueState.Pending, Infinity])
       .count();
+    this.pendingPhotos = await this.db.photos.where('sent').equals(0).count();
   }
 
   private schedule(delay: number): void {
@@ -350,12 +537,14 @@ class AppState {
   }
 
   async sync(): Promise<void> {
-    if (this.syncing) return;
+    if (this.syncing || this.practice || !this.tableId) return;
     this.syncing = true;
     this.sending = true;
     // Receiving operations writes too, so it waits while the phone has no room.
-    const result = this.noRoom ? 'failed' : await syncOnce(this.store, TABLE_ID, API);
+    const result = this.noRoom ? 'failed' : await syncOnce(this.store, this.tableId, API, session.fetch);
+    if (result === 'done') await this.sendPhotos().catch(() => undefined);
     await this.refreshPending().catch(() => undefined);
+    if (result === 'done') await this.letGoIfFinished().catch(() => undefined);
     this.sending = false;
     this.syncing = false;
     this.online = navigator.onLine;

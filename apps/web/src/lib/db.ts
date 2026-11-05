@@ -15,7 +15,15 @@ export interface StoredOperation {
   operation: Operation;
 }
 
+export interface StoredPhoto {
+  sha256: string;
+  /** Plain bytes, not a Blob: WebKit can refuse to store a Blob in the database. */
+  bytes: ArrayBuffer;
+  sent: 0 | 1;
+}
+
 export class UrnaDatabase extends Dexie {
+  photos!: Table<StoredPhoto, string>;
   electors!: Table<RollEntry, string>;
   operations!: Table<StoredOperation, string>;
   meta!: Table<{ key: string; value: unknown }, string>;
@@ -23,6 +31,7 @@ export class UrnaDatabase extends Dexie {
   constructor(name = 'urna-abierta') {
     super(name);
     this.version(1).stores({ electors: 'id', operations: 'id, [queue+order]', meta: 'key' });
+    this.version(2).stores({ photos: 'sha256, sent' });
   }
 
   async getMeta<T>(key: string): Promise<T | undefined> {
