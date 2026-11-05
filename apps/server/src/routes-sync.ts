@@ -41,8 +41,25 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
 }
 
 /** At most one write every half a minute: hearing from a phone is frequent and tells little. */
-const heardFrom = (pool: pg.Pool, table: string) =>
-  pool.query(`UPDATE polling_tables SET last_contact = now() WHERE id = $1 AND (last_contact IS NULL OR last_contact < now() - interval '30 seconds')`, [table]);
+const HEARD_EVERY_MS = 30_000;
+const heard = new Map<string, number>();
+async function heardFrom(pool: pg.Pool, table: string): Promise<void> {
+  if (Date.now() - (heard.get(table) ?? 0) < HEARD_EVERY_MS) return;
+  heard.set(table, Date.now());
+  await pool.query('UPDATE polling_tables SET last_contact = now() WHERE id = $1', [table]);
+}
+
+/** A status only changes through one route of this same process, which clears this at that moment. */
+const statuses = new Map<string, string>();
+export const forgetStatuses = () => statuses.clear();
+async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
+  const known = statuses.get(table);
+  if (known) return known;
+  const found = await pool.query('SELECT e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1', [table]);
+  const status: string | undefined = found.rows[0]?.status;
+  if (status) statuses.set(table, status);
+  return status ?? null;
+}
 
 export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
   const signedIn = authenticated(pool);
@@ -69,8 +86,8 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (typeof table !== 'string' || !TABLE_ID.test(table) || !Array.isArray(operations)) return reply.code(400).send({ error: 'invalid_request' });
     if (operations.length > MAX_BATCH) return reply.code(413).send({ error: 'batch_too_large', max: MAX_BATCH });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
-    const status = await pool.query('SELECT e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1', [table]);
-    if (!status.rows[0]) return reply.code(404).send({ error: 'no_such_table' });
+    const status = await statusOf(pool, table);
+    if (!status) return reply.code(404).send({ error: 'no_such_table' });
     const valid: Operation[] = [];
     const rejected: { id: unknown; reason: string }[] = [];
     for (const raw of operations) {
@@ -80,7 +97,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
       else valid.push(parsed);
     }
     // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
-    const late = ['cerrada', 'purgada'].includes(status.rows[0].status);
+    const late = ['cerrada', 'purgada'].includes(status);
     if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
     await heardFrom(pool, table);
     return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };

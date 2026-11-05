@@ -15,7 +15,8 @@ export async function migrate(pool: pg.Pool): Promise<void> {
 }
 
 /** An election with invented people and one person per role, for tests and for trying the app. */
-export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 'Demo', startsInDays }: { size?: number; tables?: number; label?: string; startsInDays?: number } = {}) {
+export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 'Demo', startsInDays, tablesPerChief, fresh = false }: { size?: number; tables?: number; label?: string; startsInDays?: number; tablesPerChief?: number; fresh?: boolean } = {}) {
+  if (fresh) await pool.query('TRUNCATE settings, users, elections, invitations, devices, role_assignments CASCADE');
   const election = randomUUID();
   // From yesterday, so that today is a voting day whatever the time zone of the phone.
   const offsets = startsInDays === undefined ? [-1, 0, 1, 2] : [startsInDays];
@@ -35,11 +36,19 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
   };
   const chief = await person('Rubén', '+54 9 341 000-0000', 'jefe', { unit });
   const links: Record<string, string> = { jefe: await createInvitation(pool, chief) };
+  const chiefs: { invitation: string; tables: string[] }[] = [];
+  let currentUnit = unit;
   const fiscales: { table: string; invitations: string[] }[] = [];
   const roll = fakeRoll(size, 1);
   for (let t = 0; t < tables; t += 1) {
     const table = randomUUID();
-    await pool.query('INSERT INTO polling_tables (id, election_id, unit_id, name, place, position) VALUES ($1, $2, $3, $4, $5, $6)', [table, election, unit, `Mesa ${t + 12}`, 'Escuela Normal 1', t]);
+    if (tablesPerChief && t % tablesPerChief === 0) {
+      currentUnit = randomUUID();
+      await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [currentUnit, election, `Distrito ${t}`]);
+      chiefs.push({ invitation: await createInvitation(pool, await person(`Jefe ${t}`, '', 'jefe', { unit: currentUnit })), tables: [] });
+    }
+    chiefs.at(-1)?.tables.push(table);
+    await pool.query('INSERT INTO polling_tables (id, election_id, unit_id, name, place, position) VALUES ($1, $2, $3, $4, $5, $6)', [table, election, currentUnit, `Mesa ${t + 12}`, 'Escuela Normal 1', t]);
     await pool.query(
       `INSERT INTO electors (election_id, id, table_id, order_number, full_name, search, document)
        SELECT $1, $2 || '-' || id, $2, ord, name, search || ' 99' || lpad(ord::text, 6, '0'), '99' || lpad(ord::text, 6, '0') FROM unnest($3::text[], $4::int[], $5::text[], $6::text[]) AS t (id, ord, name, search)`,
@@ -57,7 +66,7 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
   links.estadistico = await createInvitation(pool, await person('Ana', '', 'estadistico'));
   links.coordinacion = await createInvitation(pool, await person('Coordinación', '+54 9 341 222-2222', 'coordinacion'));
   await setSetting(pool, 'party', { name: 'Agrupación Ejemplo', theme: 'aula' });
-  return { election, links, tables: fiscales };
+  return { election, links, tables: fiscales, chiefs };
 }
 
 export function buildApp(pool: pg.Pool, { testMode = false }: { testMode?: boolean } = {}): FastifyInstance {
@@ -75,7 +84,7 @@ export function buildApp(pool: pg.Pool, { testMode = false }: { testMode?: boole
   workRoutes(app, pool);
 
   if (testMode) {
-    app.post<{ Body: { size?: number; tables?: number; label?: string; startsInDays?: number } }>('/api/test/seed', async (request) => seedDemo(pool, request.body ?? {}));
+    app.post<{ Body: { size?: number; tables?: number; label?: string; startsInDays?: number; tablesPerChief?: number; fresh?: boolean } }>('/api/test/seed', async (request) => seedDemo(pool, request.body ?? {}));
   }
   return app;
 }

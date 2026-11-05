@@ -2,8 +2,10 @@ import { randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { mainRole, SECURITY_PROFILES, type SecurityProfile } from '@urna-abierta/domain';
-import { attemptLimiter, audit, authenticated, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, setSetting, totpMatches, unseal } from './actor.ts';
+import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, setSetting, totpMatches, unseal } from './actor.ts';
 
+/** The theme chosen when installing is the one everyone sees until the party says otherwise. */
+const defaultParty = () => ({ name: '', theme: process.env.URNA_TEMA ?? 'aula' });
 const INVITATION_DAYS = 14;
 const GUESSES_ALLOWED = 10;
 const GUESS_WINDOW_MS = 15 * 60_000;
@@ -34,7 +36,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
     return {
       setupNeeded: admins.rowCount === 0,
-      party: await getSetting(pool, 'party', { name: '', theme: 'aula' }),
+      party: await getSetting(pool, 'party', defaultParty()),
       themes: await getSetting(pool, 'themes', []),
     };
   });
@@ -111,6 +113,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       await pool.query('DELETE FROM settings WHERE key = $1', [`totp_pending_${actor.userId}`]);
     }
     await pool.query('UPDATE devices SET second_factor_at = now() WHERE id = $1', [actor.deviceId]);
+    forgetActors();
     await audit(pool, actor, 'device.second_factor', actor.userId);
     return { ok: true };
   });
@@ -144,7 +147,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       roles: actor.roles,
       main: mainRole(actor.roles),
       secondFactorNeeded: await needsSecondFactor(pool, actor),
-      party: await getSetting(pool, 'party', { name: '', theme: 'aula' }),
+      party: await getSetting(pool, 'party', defaultParty()),
       security: { profile, chosen: (await pool.query(`SELECT 1 FROM settings WHERE key = 'security_profile'`)).rowCount === 1, ...SECURITY_PROFILES[profile] },
       table: table && {
         id: table.id,
