@@ -97,6 +97,36 @@ test('your own theme comes from a file: it is checked, and one that cannot be re
   await expect(page.locator('.vista-doble .opcion')).toHaveCount(6);
 });
 
+test('the fonts come inside the same file, and the preview already uses them', async ({ page }) => {
+  await toWhere(page);
+  await page.getByRole('radio', { name: /pegar un texto/ }).click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  const send = (content: string) => page.getByTestId('theme-file').setInputFiles({ name: 'tema.json', mimeType: 'application/json', buffer: Buffer.from(content) });
+  const data = await page.evaluate(async () => {
+    const bytes = new Uint8Array(await (await fetch('fuentes/nunito-latin-wght-normal.woff2')).arrayBuffer());
+    return btoa(String.fromCharCode(...bytes));
+  });
+  const base = await page.evaluate(() => (window as any).TEMAS[4]);
+  const own = { ...base, id: 'con-letras', nombre: 'Con Letras', fuentes: { titulo: "'Letra Propia'", texto: "'Letra Propia'", boton: "'Letra Propia'", numero: "'Letra Propia'" } };
+
+  // Without the font inside, it says which one is missing.
+  await send(JSON.stringify(own));
+  await expect(page.getByTestId('theme-problem')).toContainText('la letra Letra Propia no viene con la app ni adentro del archivo');
+  // It looks like a font but cannot be opened.
+  await send(JSON.stringify({ ...own, archivosFuentes: [{ familia: 'Letra Propia', datos: `data:font/woff2;base64,${btoa('wOF2 esto no es una letra')}` }] }));
+  await expect(page.getByTestId('theme-problem')).toContainText('no se puede abrir: Letra Propia');
+  await expect(page.getByRole('radio', { name: 'Con Letras' })).toHaveCount(0);
+
+  await send(JSON.stringify({ ...own, archivosFuentes: [{ familia: 'Letra Propia', peso: '200 1000', datos: `data:font/woff2;base64,${data}` }] }));
+  await expect(page.getByTestId('theme-problem')).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: 'Con Letras' })).toHaveAttribute('aria-checked', 'true');
+  const used = await page.getByTestId('previews').locator('.t1').first().evaluate((title) => getComputedStyle(title).fontFamily);
+  expect(used).toContain('Letra Propia');
+  expect(await page.evaluate(() => document.fonts.check('16px "Letra Propia"'))).toBe(true);
+});
+
 test('pasting a text: it gives the block, with its keys, and waits for the address', async ({ page }) => {
   await toWhere(page);
   await page.getByRole('radio', { name: /pegar un texto/ }).click();

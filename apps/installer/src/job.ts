@@ -61,7 +61,8 @@ export async function uploadTheme(address: string, code: string, theme: object, 
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ code, theme }),
-      signal: AbortSignal.timeout(30_000),
+      // It may carry its fonts, over whatever connection this computer has.
+      signal: AbortSignal.timeout(180_000),
     });
     return response.ok;
   } catch {
