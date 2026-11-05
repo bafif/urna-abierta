@@ -425,6 +425,21 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await put(theme)).statusCode).toBe(200);
       expect((await app.inject({ url: '/api/public' })).json().themes[0].id).toBe('propio');
     });
+
+    it('the theme of the installer gets in with the installation code, and only until the first administrator', async () => {
+      const theme = { id: 'desde-instalador', nombre: 'Desde el instalador', fuentes: { titulo: 'Poppins' }, forma: { radio: '8px' }, recetas: { tachado: 'linea', cabecera: 'simple' } };
+      const colors = Object.fromEntries(['superficie', 'superficie2', 'linea', 'margen', 'sobrePrimario', 'sobrePeligro', 'bienFondo', 'fondo', 'peligroFondo'].map((k) => [k, '#ffffff']).concat([['texto', '#101010'], ['suave', '#555555'], ['primario', '#101010'], ['acento', '#101010'], ['marca', '#101010'], ['peligro', '#a00000'], ['peligroTexto', '#a00000'], ['bien', '#0a5a2a']]));
+      const full = { ...theme, claro: colors, oscuro: colors };
+      process.env.URNA_SETUP_CODE = 'codigo';
+      await pool.query('TRUNCATE users, role_assignments, devices CASCADE');
+      const send = (code: string, body: object) => app.inject({ method: 'PUT', url: '/api/setup/theme', payload: { code, theme: body } });
+      expect((await send('otro', full)).statusCode).toBe(403);
+      expect((await send('codigo', { ...full, claro: { ...colors, texto: '#999999' } })).statusCode).toBe(422);
+      expect((await send('codigo', full)).statusCode).toBe(200);
+      expect((await app.inject({ url: '/api/public' })).json().themes.map((item: { id: string }) => item.id)).toContain('desde-instalador');
+      await app.inject({ method: 'POST', url: '/api/setup', payload: { code: 'codigo', name: 'Ana', accepted: true } });
+      expect((await send('codigo', full)).statusCode).toBe(409);
+    });
   });
 
   describe('traffic light and personal data', () => {

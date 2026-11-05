@@ -7,7 +7,7 @@ import type pg from 'pg';
 import { foldText, isRole, isSecurityProfile, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 import { audit, authenticated, can, forgetActors, getSetting, requires, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
-import { createInvitation } from './routes-auth.ts';
+import { addTheme, createInvitation } from './routes-auth.ts';
 
 const MAX_ROLL_BYTES = 64 * 1024 * 1024;
 const STATS_ROLE_DAYS = 90;
@@ -34,8 +34,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { theme } = request.body ?? {};
     const problems = themeProblems(theme);
     if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
-    const themes = await getSetting<{ id: string }[]>(pool, 'themes', []);
-    await setSetting(pool, 'themes', [...themes.filter((other) => other.id !== (theme as { id: string }).id), theme]);
+    await addTheme(pool, theme as { id: string });
     await audit(pool, request.actor, 'theme.added', (theme as { id: string }).id);
     return { ok: true };
   });

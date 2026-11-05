@@ -1,7 +1,7 @@
 import { randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { mainRole, SECURITY_PROFILES, type SecurityProfile } from '@urna-abierta/domain';
+import { mainRole, SECURITY_PROFILES, themeProblems, type SecurityProfile } from '@urna-abierta/domain';
 import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, setSetting, totpMatches, unseal } from './actor.ts';
 
 /** The theme chosen when installing is the one everyone sees until the party says otherwise. */
@@ -26,6 +26,14 @@ const sameText = (a: string, b: string) => {
   const [x, y] = [Buffer.from(hashToken(a)), Buffer.from(hashToken(b))];
   return timingSafeEqual(x, y);
 };
+
+/** A theme that passed the reading check. With the same id, it replaces the previous one. */
+export async function addTheme(pool: pg.Pool, theme: { id: string }): Promise<void> {
+  const themes = await getSetting<{ id: string }[]>(pool, 'themes', []);
+  await setSetting(pool, 'themes', [...themes.filter((other) => other.id !== theme.id), theme]);
+}
+
+const MAX_THEME_BYTES = 1024 * 1024;
 
 export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   const guesses = attemptLimiter(GUESSES_ALLOWED, GUESS_WINDOW_MS);
@@ -58,6 +66,20 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     await setSetting(pool, 'responsibility_accepted', { at: new Date().toISOString(), by: userId });
     await audit(pool, { userId } as never, 'setup', userId);
     return { token: await newDevice(pool, userId) };
+  });
+
+  /** The theme chosen in the installer, which arrives right after the server starts and before anyone gets in. */
+  app.put<{ Body: { code?: unknown; theme?: unknown } }>('/api/setup/theme', { bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
+    const { code, theme } = request.body ?? {};
+    const expected = process.env.URNA_SETUP_CODE;
+    const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
+    if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
+    if (!expected || typeof code !== 'string' || !sameText(code, expected)) return reply.code(403).send({ error: 'wrong_code' });
+    const problems = themeProblems(theme);
+    if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
+    await addTheme(pool, theme as { id: string });
+    await audit(pool, null, 'theme.added', (theme as { id: string }).id);
+    return { ok: true };
   });
 
   /** An invitation works once, and turns into this device's own credential. */
