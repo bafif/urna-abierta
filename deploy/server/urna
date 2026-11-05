@@ -1,0 +1,196 @@
+#!/bin/sh
+# Runs Urna Abierta on a server: everything in one pod of rootless Podman, for the user `urna`.
+#
+#   urna estado              says whether everything is fine, and what to do if it is not
+#   urna arrancar            starts it
+#   urna frenar              stops it, without deleting anything
+#   urna copia               makes an encrypted backup now
+#   urna restaurar <archivo> <llave>   replaces the data with a backup
+#   urna actualizar          brings the latest images
+#   urna direccion <ip o dominio>      changes the address of the site
+set -eu
+
+home=${URNA_HOME:-/opt/urna-abierta}
+# Whoever calls this may be in a folder that this user cannot enter.
+cd /
+
+# As root, it runs as the user that owns the containers.
+if [ "$(id -u)" = 0 ] && [ "${URNA_RUN_AS_ROOT:-}" != si ]; then
+  uid=$(id -u urna)
+  exec runuser -u urna -- env XDG_RUNTIME_DIR="/run/user/$uid" HOME="$home" "$0" "$@"
+fi
+
+set -a
+# shellcheck disable=SC1091
+. "$home/.env"
+set +a
+pod=${URNA_POD:-urna}
+ports=${URNA_PORTS--p 80:80 -p 443:443 -p 443:443/udp}
+health=${URNA_HEALTH_URL:-https://localhost/api/health}
+keep=${URNA_BACKUPS_KEPT:-28}
+
+# ip: a Let's Encrypt certificate for the bare address, which lasts days and renews by itself.
+# auto: the usual one for a domain. internal: only for trying it out.
+tls_block() {
+  case "${URNA_CERT:-ip}" in
+    ip) printf 'tls {\n\tissuer acme {\n\t\tdir https://acme-v02.api.letsencrypt.org/directory\n\t\tprofile shortlived\n\t}\n}' ;;
+    internal) printf 'tls internal' ;;
+    *) printf '' ;;
+  esac
+}
+
+network() {
+  # Both keep the real address of each phone, which the limit on guessing codes needs.
+  if [ -n "${URNA_NETWORK:-}" ]; then
+    echo "$URNA_NETWORK"
+  elif command -v pasta >/dev/null 2>&1; then
+    echo pasta
+  else
+    echo slirp4netns:port_handler=slirp4netns
+  fi
+}
+
+start() {
+  mkdir -p "$home/fotos" "$home/copias"
+  if ! podman pod exists "$pod"; then
+    # shellcheck disable=SC2086
+    podman pod create --name "$pod" --network "$(network)" $ports >/dev/null
+  fi
+  if ! podman container exists "$pod-db"; then
+    podman run -d --pod "$pod" --name "$pod-db" --restart=always \
+      -e POSTGRES_USER=urna -e POSTGRES_DB=urna -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+      -v "$pod-database:/var/lib/postgresql" "$URNA_IMAGE_DB" \
+      postgres -c shared_buffers=128MB -c max_connections=20 -c work_mem=4MB -c effective_cache_size=384MB >/dev/null
+  fi
+  if ! podman container exists "$pod-server"; then
+    podman run -d --pod "$pod" --name "$pod-server" --restart=always \
+      -e URNA_ACEPTO_RESPONSABILIDAD=si -e PG_POOL_MAX=8 -e URNA_PHOTOS_DIR=/fotos -e URNA_BACKUPS_DIR=/copias \
+      -e URNA_SETUP_CODE="$URNA_SETUP_CODE" -e URNA_FIELD_KEY="$URNA_FIELD_KEY" -e URNA_TEMA="${URNA_TEMA:-aula}" \
+      -e DATABASE_URL="postgres://urna:$POSTGRES_PASSWORD@localhost:5432/urna" \
+      -v "$home/fotos:/fotos:U" -v "$home/copias:/copias:ro" "$URNA_IMAGE_SERVER" >/dev/null
+  fi
+  if ! podman container exists "$pod-web"; then
+    podman run -d --pod "$pod" --name "$pod-web" --restart=always \
+      -e URNA_SITE="$URNA_SITE" -e URNA_TLS="$(tls_block)" -e URNA_API=localhost:3000 \
+      -v "$pod-caddy-data:/data" -v "$pod-caddy-config:/config" "$URNA_IMAGE_WEB" >/dev/null
+  fi
+  podman pod start "$pod" >/dev/null
+}
+
+stop_all() {
+  podman pod stop -t 20 "$pod" >/dev/null 2>&1 || true
+}
+
+# Containers go, data stays: it lives in volumes and folders.
+replace_containers() {
+  podman pod rm -f "$pod" >/dev/null 2>&1 || true
+  start
+}
+
+wait_healthy() {
+  for _ in $(seq 1 "${1:-120}"); do
+    curl -fsk --max-time 5 "$health" >/dev/null 2>&1 && return 0
+    sleep 2
+  done
+  return 1
+}
+
+backup() {
+  stamp=$(date -u +%Y%m%d-%H%M%S)
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  podman exec "$pod-db" pg_dump -U urna -Fc urna >"$work/base.dump"
+  # The photos belong to the user inside the container, so it takes its namespace to read them.
+  podman unshare tar -C "$home" -cf "$work/fotos.tar" fotos
+  # The key of the sealed fields goes along: without it, a restored server cannot read them.
+  printf '%s' "$URNA_FIELD_KEY" >"$work/clave-campos"
+  printf '%s' "$URNA_BACKUP_KEY" >"$work/llave"
+  chmod 600 "$work/llave"
+  mkdir -p "$home/copias"
+  tar -C "$work" -cf - base.dump fotos.tar clave-campos |
+    gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --symmetric --cipher-algo AES256 \
+      -o "$home/copias/urna-$stamp.tar.gpg"
+  chmod 644 "$home/copias/urna-$stamp.tar.gpg"
+  # shellcheck disable=SC2012
+  ls -1t "$home"/copias/urna-*.tar.gpg | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
+  echo "$home/copias/urna-$stamp.tar.gpg"
+}
+
+restore() {
+  file=$1
+  key=$2
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  printf '%s' "$key" >"$work/llave"
+  chmod 600 "$work/llave"
+  if ! gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --decrypt "$file" 2>/dev/null | tar -C "$work" -xf -; then
+    echo "No se pudo abrir esa copia. Fijate que la llave sea la de esa instalación." >&2
+    exit 1
+  fi
+  sed -i "s|^URNA_FIELD_KEY=.*|URNA_FIELD_KEY=$(cat "$work/clave-campos")|" "$home/.env"
+  URNA_FIELD_KEY=$(cat "$work/clave-campos")
+  podman rm -f "$pod-server" >/dev/null 2>&1 || true
+  podman exec "$pod-db" psql -q -U urna -d urna -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null 2>&1
+  podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner <"$work/base.dump"
+  podman unshare rm -rf "$home/fotos"
+  podman unshare tar -C "$home" -xf "$work/fotos.tar"
+  start
+  wait_healthy 60
+  echo "Copia restaurada."
+}
+
+status() {
+  problems=0
+  check() {
+    if [ "$2" = ok ]; then
+      printf 'bien   %s\n' "$1"
+    else
+      printf 'FALLA  %s: %s\n' "$1" "$3"
+      problems=$((problems + 1))
+    fi
+  }
+  for name in db server web; do
+    state=$(podman inspect --format '{{.State.Status}}' "$pod-$name" 2>/dev/null || echo ausente)
+    [ "$state" = running ] && check "$name" ok || check "$name" mal "está $state. Probá «urna arrancar»"
+  done
+  if curl -fsk --max-time 10 "$health" >/dev/null 2>&1; then check 'el servidor responde' ok; else check 'el servidor responde' mal 'no contesta. Mirá «podman logs urna-server»'; fi
+  free=$(df -Pm "$home" | awk 'NR == 2 {print $4}')
+  [ "$free" -gt 500 ] && check "disco: quedan $free MB" ok || check 'disco' mal "quedan $free MB. Borrá copias viejas"
+  newest=$(find "$home/copias" -name 'urna-*.tar.gpg' -mmin -420 2>/dev/null | head -n 1)
+  [ -n "$newest" ] && check 'hay una copia de las últimas 7 horas' ok || check 'copias' mal 'no hay una reciente. Probá «urna copia»'
+  if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then check 'la hora está sincronizada' ok; else check 'hora' mal 'este servidor no sincroniza la hora'; fi
+  address=${URNA_SITE#https://}
+  ends=$(echo | timeout 10 openssl s_client -connect "${URNA_TLS_CHECK:-localhost:443}" -servername "$address" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
+  if [ -n "$ends" ]; then check "certificado hasta: $ends" ok; else check 'certificado' mal 'todavía no hay. Hacen falta los puertos 80 y 443 abiertos'; fi
+  [ "$problems" = 0 ] && echo 'Todo en orden.'
+  return "$problems"
+}
+
+case "${1:-estado}" in
+  arrancar) start; wait_healthy || { echo 'Arrancó, pero el servidor no responde todavía.' >&2; exit 1; }; echo 'Andando.' ;;
+  frenar) stop_all ;;
+  copia) backup ;;
+  restaurar)
+    [ $# -eq 3 ] || { echo 'Uso: urna restaurar <archivo> <llave>' >&2; exit 2; }
+    restore "$2" "$3"
+    ;;
+  actualizar)
+    podman pull -q "$URNA_IMAGE_DB" "$URNA_IMAGE_SERVER" "$URNA_IMAGE_WEB" >/dev/null
+    replace_containers
+    wait_healthy
+    echo 'Actualizado.'
+    ;;
+  direccion)
+    [ $# -eq 2 ] || { echo 'Uso: urna direccion <ip o dominio>' >&2; exit 2; }
+    case "$2" in
+      *[!0-9.]*) site=$2; cert=auto ;;
+      *) site=https://$2; cert=ip ;;
+    esac
+    sed -i "s|^URNA_SITE=.*|URNA_SITE=$site|; s|^URNA_CERT=.*|URNA_CERT=$cert|" "$home/.env"
+    podman rm -f "$pod-web" >/dev/null 2>&1 || true
+    URNA_SITE=$site URNA_CERT=$cert start
+    echo "Ahora está en $site. Cada fiscal va a tener que volver a preparar la mesa."
+    ;;
+  estado) status ;;
+  *) sed -n '2,10p' "$0" | cut -c3-; exit 2 ;;
+esac

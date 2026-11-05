@@ -1,0 +1,113 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const button = (page: Page, name: string | RegExp) => page.getByRole('button', { name, exact: typeof name === 'string' });
+
+async function toWhere(page: Page) {
+  await page.goto('');
+  await button(page, 'Empezar').click();
+  await expect(page.getByRole('heading')).toHaveText('¿Dónde va a vivir tu Urna Abierta?');
+}
+
+test('it says what is going to happen, in both languages', async ({ page }) => {
+  await page.goto('');
+  await expect(page.getByRole('heading')).toHaveText('Vamos a instalar Urna Abierta');
+  await button(page, 'Read this in English').click();
+  await expect(page.getByRole('heading')).toHaveText('Let’s install Urna Abierta');
+  await button(page, 'Leer en castellano').click();
+  await expect(page.getByRole('heading')).toHaveText('Vamos a instalar Urna Abierta');
+});
+
+test('it opens only with its own address', async ({ request, baseURL }) => {
+  const url = new URL(baseURL!);
+  expect((await request.get(`${url.origin}/`)).status()).toBe(403);
+  expect((await request.get(`${url.origin}/otro/api/job`)).status()).toBe(403);
+  expect((await request.get(`${baseURL}urna`)).status()).toBe(404);
+});
+
+test('a cloud without its data does not move on, and each one asks for its own', async ({ page }) => {
+  await toWhere(page);
+  await button(page, 'Seguir').click();
+  await expect(page.getByRole('heading')).toHaveText('¿En qué nube?');
+  await expect(page.getByText('OCID del tenancy')).toBeVisible();
+  await button(page, 'Seguir').click();
+  await expect(page.getByRole('alert')).toContainText('Faltan datos');
+  await page.getByRole('radio', { name: /AWS/ }).click();
+  await expect(page.getByText('Clave secreta')).toBeVisible();
+  await page.getByRole('radio', { name: /Google Cloud/ }).click();
+  await page.locator('textarea').fill('esto no es un json');
+  await button(page, 'Seguir').click();
+  await expect(page.getByRole('alert')).toContainText('Faltan datos');
+  await page.locator('textarea').fill('{"client_email":"a@b","private_key":"k","project_id":"p"}');
+  await button(page, 'Seguir').click();
+  await expect(page.getByRole('heading')).toHaveText('¿Cómo leemos los padrones escaneados?');
+});
+
+test('a server it cannot reach is said right there, not at the end', async ({ page }) => {
+  await toWhere(page);
+  await page.getByRole('radio', { name: /Ya tengo un servidor/ }).click();
+  await button(page, 'Seguir').click();
+  await page.locator('[data-field="address"]').fill('esto no es una dirección');
+  await button(page, 'Seguir').click();
+  await expect(page.getByRole('alert')).toContainText('no parece válida');
+  await page.locator('[data-field="address"]').fill('127.0.0.1');
+  await page.locator('[data-field="privateKey"]').fill('tampoco es una llave');
+  await button(page, 'Seguir').click();
+  await expect(page.getByRole('alert')).toContainText('No pudimos entrar');
+});
+
+test('every theme can be seen in light and dark before choosing', async ({ page }) => {
+  await toWhere(page);
+  await page.getByRole('radio', { name: /pegar un texto/ }).click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  await expect(page.getByRole('radio', { name: /Con mi propia IA/ })).toBeDisabled();
+  await button(page, 'Seguir').click();
+  await expect(page.getByTestId('previews').locator('.pantalla')).toHaveCount(2);
+  const names = ['Aula', 'Vidrio', 'Feria', 'Tablero', 'Mate'];
+  await expect(page.locator('.vista-doble .opcion')).toHaveText(names);
+  await expect(page.getByTestId('previews').locator('.pantalla').first()).toHaveAttribute('data-tachado', 'lapicera');
+  await page.getByRole('radio', { name: 'Feria' }).click();
+  await expect(page.getByTestId('previews').locator('.pantalla').first()).toHaveAttribute('data-tachado', 'sello');
+  await page.screenshot({ path: '/salida/instalador-temas.png' }).catch(() => undefined);
+});
+
+test('pasting a text: it gives the block, with its keys, and waits for the address', async ({ page }) => {
+  await toWhere(page);
+  await page.getByRole('radio', { name: /pegar un texto/ }).click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Instalar').click();
+  await expect(page.getByRole('heading')).toHaveText('Pegá este bloque al crear el servidor', { timeout: 20_000 });
+  const block = await page.getByTestId('paste-block').inputValue();
+  expect(block.startsWith('#!/bin/sh\n')).toBe(true);
+  expect(block).toContain('URNA_SITE=auto');
+  expect(Buffer.byteLength(block)).toBeLessThan(16 * 1024);
+  await page.locator('[data-field="pasteAddress"]').fill('no');
+  await button(page, 'Comprobar').click();
+  await expect(page.getByRole('alert')).toContainText('no parece válida');
+});
+
+test('on this computer: from the first screen to the first administrator, with the theme chosen', async ({ page, browser }) => {
+  await toWhere(page);
+  await page.getByRole('radio', { name: /Probar en esta computadora/ }).click();
+  await button(page, 'Seguir').click();
+  await expect(page.getByText(/Vamos a usar (podman|docker)/)).toBeVisible();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  await page.getByRole('radio', { name: 'Mate' }).click();
+  await button(page, 'Instalar').click();
+  await expect(page.getByRole('heading')).toHaveText('Tu Urna Abierta ya está andando', { timeout: 150_000 });
+  const key = await page.getByTestId('recovery-key').innerText();
+  expect(key).toMatch(/^[A-Z2-9]{5}(-[A-Z2-9]{5}){4}$/);
+  await expect(page.getByTestId('address')).toHaveText(/^http:\/\/localhost:\d+$/);
+
+  const { result } = await (await page.request.get('api/job')).json();
+  const app = await (await browser.newContext()).newPage();
+  await app.goto(result.setupLink);
+  await app.getByTestId('setup-name').fill('Laura Paz');
+  await app.getByTestId('setup-accept').check();
+  await app.getByRole('button', { name: 'Empezar' }).click();
+  await expect(app.locator('.nombre-tema')).toContainText('Mate');
+  await expect(app.locator('.pantalla')).toHaveAttribute('data-material', 'almohada');
+});

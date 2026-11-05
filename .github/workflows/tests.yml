@@ -1,0 +1,34 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: urna
+          POSTGRES_PASSWORD: prueba
+          POSTGRES_DB: urna
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U urna" --health-interval 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://urna:prueba@localhost:5432/urna
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @urna-abierta/domain exec vitest run
+      - run: pnpm --filter @urna-abierta/server exec vitest run
+      - run: pnpm --filter @urna-abierta/web run check
+      - run: pnpm --filter @urna-abierta/web exec vitest run
+      - run: pnpm --filter @urna-abierta/installer exec vitest run
+      - run: node design/verificar-contraste.mjs
