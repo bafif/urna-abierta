@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { asset } from './assets.ts';
-import { install, waitForHealth, type InstallRequest, type InstallResult } from './job.ts';
+import { themeProblems } from '../../../packages/domain/src/theme-check.ts';
+import { install, uploadTheme, waitForHealth, type InstallRequest, type InstallResult } from './job.ts';
 import { findEngine } from './local.ts';
 import { siteFor, VERSION } from './settings.ts';
 import { checkSsh } from './ssh.ts';
@@ -21,6 +22,8 @@ interface Job {
   finished: boolean;
 }
 let job: Job | null = null;
+/** For the option of pasting a text: the theme waits here until the server answers. */
+let themeToSend: object | null = null;
 
 const TYPES: Record<string, string> = { html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', woff2: 'font/woff2' };
 
@@ -59,6 +62,8 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
   if (request.method !== 'POST') return send(response, 405, { error: 'post_only' });
   const body = await bodyOf(request);
 
+  if (path === 'check-theme') return send(response, 200, { problems: themeProblems(body.theme) });
+
   if (path === 'check-ssh') {
     try {
       siteFor(body.address);
@@ -75,6 +80,7 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
     if (job && !job.finished) return send(response, 409, { error: 'already_running' });
     const current: Job = { lines: [], result: null, problem: null, finished: false };
     job = current;
+    themeToSend = body.where?.kind === 'text' ? (body.customTheme ?? null) : null;
     install(body as InstallRequest, (line) => current.lines.push(line))
       .then((result) => {
         current.result = result;
@@ -96,7 +102,10 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
       return send(response, 200, { result: 'bad_address' });
     }
     const alive = await waitForHealth(place.url, () => undefined, 8_000);
-    return send(response, 200, { result: alive ? 'ok' : 'not_yet', url: place.url });
+    if (!alive) return send(response, 200, { result: 'not_yet', url: place.url });
+    const sent = !themeToSend || (await uploadTheme(place.url, job?.result?.setupCode ?? '', themeToSend));
+    themeToSend = null;
+    return send(response, 200, { result: 'ok', url: place.url, themeFailed: !sent });
   }
   if (path === 'open') {
     if (typeof body.url !== 'string' || !/^https?:\/\//.test(body.url)) return send(response, 400, { error: 'bad_url' });

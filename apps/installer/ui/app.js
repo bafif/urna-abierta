@@ -78,6 +78,11 @@
       'theme.sample.title': 'Ya votaron',
       'theme.sample.count': '69 personas',
       'theme.install': 'Instalar',
+      'theme.custom': 'Usar un tema propio',
+      'theme.custom.text': 'Arrastrá el archivo acá, o tocá para elegirlo.',
+      'theme.custom.notTheme': 'Ese archivo no es un tema.',
+      'theme.custom.taken': 'Ya hay un tema con ese id. Cambialo en tu archivo.',
+      'theme.custom.refused': 'Ese tema no se puede usar:',
       'progress.title': 'Instalando',
       'progress.text': 'Podés dejar esta ventana abierta y hacer otra cosa.',
       'log.address': 'Reservando una dirección fija',
@@ -88,6 +93,7 @@
       'log.waiting': 'Esperando que arranque. Puede tardar varios minutos',
       'log.slow': 'Está tardando más de lo normal',
       'log.start': 'Arrancando',
+      'log.theme': 'Cargando tu tema',
       'failed.title': 'Algo no salió',
       'failed.text': 'No se llegó a terminar. Esto dijo:',
       'failed.retry': 'Volver a intentar',
@@ -106,6 +112,7 @@
       'done.key': 'Llave de recuperación',
       'done.open': 'Abrir Urna Abierta',
       'done.saved': 'Ya guardé la llave',
+      'done.themeFailed': 'No se pudo cargar tu tema propio. Cargalo desde la app, en Ajustes.',
     },
     en: {
       'hello.title': 'Let’s install Urna Abierta',
@@ -184,6 +191,11 @@
       'theme.sample.title': 'Already voted',
       'theme.sample.count': '69 people',
       'theme.install': 'Install',
+      'theme.custom': 'Use your own theme',
+      'theme.custom.text': 'Drag the file here, or tap to choose it.',
+      'theme.custom.notTheme': 'That file is not a theme.',
+      'theme.custom.taken': 'There is already a theme with that id. Change it in your file.',
+      'theme.custom.refused': 'That theme cannot be used:',
       'progress.title': 'Installing',
       'progress.text': 'You can leave this window open and do something else.',
       'log.address': 'Reserving a fixed address',
@@ -194,6 +206,7 @@
       'log.waiting': 'Waiting for it to start. It can take several minutes',
       'log.slow': 'It is taking longer than usual',
       'log.start': 'Starting',
+      'log.theme': 'Loading your theme',
       'failed.title': 'Something went wrong',
       'failed.text': 'It did not finish. This is what it said:',
       'failed.retry': 'Try again',
@@ -212,6 +225,7 @@
       'done.key': 'Recovery key',
       'done.open': 'Open Urna Abierta',
       'done.saved': 'I saved the key',
+      'done.themeFailed': 'Your own theme could not be loaded. Load it from the app, in Settings.',
     },
   };
 
@@ -236,7 +250,10 @@
     job: null,
     result: null,
     copied: false,
+    custom: null,
+    customProblems: [],
   };
+  const BUILT_IN = window.TEMAS.map((item) => item.id);
 
   const t = (key, values = {}) => (STRINGS[state.language][key] ?? key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? '');
   const escape = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -270,7 +287,7 @@
     const recipes = Object.entries(window.URNA_TEMA.recetas(theme)).map(([k, v]) => `${k}="${v}"`).join(' ');
     return `<div class="marco"><div class="pantalla" ${recipes} style="${window.URNA_TEMA.variables(theme, mode, 'tachar').replaceAll('"', '&quot;')}">
       <div class="pantalla-in" data-accion="tachar">
-        <header class="cabeza"><h1 class="t1">${t('theme.sample.title')}</h1><p class="bajada">${t('theme.sample.count')}</p></header>
+        <header class="cabeza">${theme.logo ? `<div class="logo-tema"><img src="${escape(theme.logo)}" alt=""></div>` : ''}<h1 class="t1">${t('theme.sample.title')}</h1><p class="bajada">${t('theme.sample.count')}</p></header>
         <main class="cuerpo"><div class="lista">${SAMPLE.map(([n, name, doc]) => `<div class="fila tachada"><span class="num">${n}</span><span class="nombre"><span class="nombre-t">${name}</span></span><span class="doc">…${doc}</span></div>`).join('')}</div></main>
       </div></div></div>`;
   };
@@ -319,7 +336,14 @@
     }),
     theme: () => ({
       eyebrow: t('step3'), title: t('theme.title'), text: t('theme.text'),
-      body: `<div class="vista-doble"><div class="opciones" role="radiogroup">${window.TEMAS.map((item) => option(item.id, item.nombre, '', state.theme, 'theme')).join('')}</div>
+      body: `<div class="vista-doble"><div class="columna-temas">
+          <div class="opciones" role="radiogroup">${window.TEMAS.map((item) => option(item.id, escape(item.nombre), '', state.theme, 'theme')).join('')}</div>
+          <label class="soltar" data-testid="theme-dropzone">
+            <input class="oculto" type="file" accept=".json,application/json" data-testid="theme-file">
+            <strong>${t('theme.custom')}</strong>${t('theme.custom.text')}
+          </label>
+          ${state.customProblems.length ? `<p class="problema" role="alert" data-testid="theme-problem">${state.customProblems.map(escape).join('<br>')}</p>` : ''}
+        </div>
         <div class="vistas-previas" data-testid="previews">${preview('claro')}${preview('oscuro')}</div></div>`,
       next: ['theme.install', 'install'], back: 'vision',
     }),
@@ -347,7 +371,8 @@
     }),
     done: () => ({
       title: t('done.title'), text: t('done.text'),
-      body: `<div class="tarjeta llave"><span>${t('done.address')}</span><strong data-testid="address">${escape(state.result?.address)}</strong><span>${t('done.key')}</span><strong class="mono" data-testid="recovery-key">${escape(state.result?.recoveryKey)}</strong></div>`,
+      body: `<div class="tarjeta llave"><span>${t('done.address')}</span><strong data-testid="address">${escape(state.result?.address)}</strong><span>${t('done.key')}</span><strong class="mono" data-testid="recovery-key">${escape(state.result?.recoveryKey)}</strong></div>
+        ${state.result?.themeFailed ? `<p class="problema" role="alert" data-testid="theme-failed">${t('done.themeFailed')}</p>` : ''}`,
       next: ['done.open', 'openApp'],
     }),
   };
@@ -409,7 +434,7 @@
       text: () => ({ kind: 'text' }),
       local: () => ({ kind: 'local' }),
     }[state.where]();
-    return { where, theme: state.theme, vision: state.vision };
+    return { where, theme: state.theme, vision: state.vision, ...(state.custom ? { customTheme: state.custom } : {}) };
   }
 
   async function follow() {
@@ -471,10 +496,10 @@
       state.busy = true;
       state.problem = '';
       render();
-      const { result, url } = await post('wait-address', { address: state.form.pasteAddress ?? '' });
+      const { result, url, themeFailed } = await post('wait-address', { address: state.form.pasteAddress ?? '' });
       state.busy = false;
       if (result === 'ok') {
-        state.result = { ...state.result, address: url, setupLink: `${url}/#setup=${state.result.setupCode}`, text: undefined };
+        state.result = { ...state.result, address: url, setupLink: `${url}/#setup=${state.result.setupCode}`, text: undefined, themeFailed };
         go('done');
         return;
       }
@@ -483,6 +508,52 @@
     },
     openApp: () => post('open', { url: state.result.setupLink }),
   };
+
+  /** A theme from a file: it is checked here and also by the server that receives it. */
+  async function loadTheme(file) {
+    state.customProblems = [];
+    let theme;
+    try {
+      if (file.size > 1024 * 1024) throw new Error('too large');
+      theme = JSON.parse(await file.text());
+    } catch {
+      state.customProblems = [t('theme.custom.notTheme')];
+      return render();
+    }
+    if (BUILT_IN.includes(theme?.id)) {
+      state.customProblems = [t('theme.custom.taken')];
+      return render();
+    }
+    const { problems } = await post('check-theme', { theme });
+    if (problems.length > 0) {
+      state.customProblems = [t('theme.custom.refused'), ...problems.slice(0, 3)];
+      return render();
+    }
+    window.TEMAS.splice(0, window.TEMAS.length, ...window.TEMAS.filter((item) => BUILT_IN.includes(item.id)), theme);
+    state.custom = theme;
+    state.theme = theme.id;
+    render();
+  }
+
+  // Dropping a file anywhere in the window counts, and elsewhere the browser must not open it instead of the installer.
+  const dropzone = () => document.querySelector('[data-testid="theme-dropzone"]');
+  document.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropzone()?.classList.add('encima');
+  });
+  document.addEventListener('dragleave', (event) => {
+    if (!event.relatedTarget) dropzone()?.classList.remove('encima');
+  });
+  document.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dropzone()?.classList.remove('encima');
+    const file = event.dataTransfer?.files?.[0];
+    if (file && state.screen === 'theme') loadTheme(file);
+  });
+  document.addEventListener('change', (event) => {
+    const file = event.target.dataset?.testid === 'theme-file' ? event.target.files?.[0] : null;
+    if (file) loadTheme(file);
+  });
 
   document.addEventListener('input', (event) => {
     const name = event.target.dataset?.field;

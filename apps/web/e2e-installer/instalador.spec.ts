@@ -71,6 +71,32 @@ test('every theme can be seen in light and dark before choosing', async ({ page 
   await page.screenshot({ path: '/salida/instalador-temas.png' }).catch(() => undefined);
 });
 
+test('your own theme comes from a file: it is checked, and one that cannot be read does not get in', async ({ page }) => {
+  await toWhere(page);
+  await page.getByRole('radio', { name: /pegar un texto/ }).click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  await button(page, 'Seguir').click();
+  const file = page.getByTestId('theme-file');
+  const send = (content: string) => file.setInputFiles({ name: 'tema.json', mimeType: 'application/json', buffer: Buffer.from(content) });
+  await send('esto no es un tema');
+  await expect(page.getByTestId('theme-problem')).toContainText('no es un tema');
+  const good = await page.evaluate(() => (window as any).TEMAS[4]);
+  await send(JSON.stringify(good));
+  await expect(page.getByTestId('theme-problem')).toContainText('Ya hay un tema con ese id');
+  await send(JSON.stringify({ ...good, id: 'propio', nombre: 'Ilegible', claro: { ...good.claro, texto: '#999999' } }));
+  await expect(page.getByTestId('theme-problem')).toContainText('texto sobre fondo');
+  await expect(page.locator('.vista-doble .opcion')).toHaveCount(5);
+  await send(JSON.stringify({ ...good, id: 'propio', nombre: 'Tema de Prueba' }));
+  await expect(page.getByTestId('theme-problem')).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: 'Tema de Prueba' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('previews').locator('.pantalla').first()).toHaveAttribute('data-material', 'almohada');
+  // Back and forward, it stays there, and only once.
+  await page.getByRole('radio', { name: 'Aula' }).click();
+  await send(JSON.stringify({ ...good, id: 'otro', nombre: 'Otro Tema' }));
+  await expect(page.locator('.vista-doble .opcion')).toHaveCount(6);
+});
+
 test('pasting a text: it gives the block, with its keys, and waits for the address', async ({ page }) => {
   await toWhere(page);
   await page.getByRole('radio', { name: /pegar un texto/ }).click();
@@ -88,16 +114,25 @@ test('pasting a text: it gives the block, with its keys, and waits for the addre
   await expect(page.getByRole('alert')).toContainText('no parece válida');
 });
 
-test('on this computer: from the first screen to the first administrator, with the theme chosen', async ({ page, browser }) => {
+test('on this computer: from the first screen to the first administrator, with their own theme', async ({ page, browser }) => {
   await toWhere(page);
   await page.getByRole('radio', { name: /Probar en esta computadora/ }).click();
   await button(page, 'Seguir').click();
   await expect(page.getByText(/Vamos a usar (podman|docker)/)).toBeVisible();
   await button(page, 'Seguir').click();
   await button(page, 'Seguir').click();
-  await page.getByRole('radio', { name: 'Mate' }).click();
+  // Dragged onto the window, like someone who has the file on their desktop.
+  const theme = await page.evaluate(() => JSON.stringify({ ...(window as any).TEMAS[4], id: 'propio', nombre: 'Tema de Prueba' }));
+  const dragged = await page.evaluateHandle((content) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([content], 'tema.json', { type: 'application/json' }));
+    return transfer;
+  }, theme);
+  await page.dispatchEvent('[data-testid="theme-dropzone"]', 'drop', { dataTransfer: dragged });
+  await expect(page.getByRole('radio', { name: 'Tema de Prueba' })).toHaveAttribute('aria-checked', 'true');
   await button(page, 'Instalar').click();
   await expect(page.getByRole('heading')).toHaveText('Tu Urna Abierta ya está andando', { timeout: 150_000 });
+  await expect(page.getByTestId('theme-failed')).toHaveCount(0);
   const key = await page.getByTestId('recovery-key').innerText();
   expect(key).toMatch(/^[A-Z2-9]{5}(-[A-Z2-9]{5}){4}$/);
   await expect(page.getByTestId('address')).toHaveText(/^http:\/\/localhost:\d+$/);
@@ -108,6 +143,7 @@ test('on this computer: from the first screen to the first administrator, with t
   await app.getByTestId('setup-name').fill('Laura Paz');
   await app.getByTestId('setup-accept').check();
   await app.getByRole('button', { name: 'Empezar' }).click();
-  await expect(app.locator('.nombre-tema')).toContainText('Mate');
+  // The whole party starts with it, and it can be chosen like any other.
+  await expect(app.locator('.nombre-tema')).toContainText('Tema de Prueba');
   await expect(app.locator('.pantalla')).toHaveAttribute('data-material', 'almohada');
 });
