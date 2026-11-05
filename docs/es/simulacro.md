@@ -11,8 +11,7 @@ visto nunca la app. Reservá dos horas.
 ## Preparar
 
 - [ ] Instalá en un servidor nuevo, con el instalador. Anotá cuánto tardó.
-- [ ] Armá el padrón inventado: `deploy/serve.sh` no sirve para esto, porque usa una base de prueba. Generá un CSV con nombres inventados
-      y documentos que empiecen con 99.
+- [ ] Armá el padrón inventado: `node deploy/padron-inventado.mjs 350 > padron.csv`. No uses `deploy/serve.sh`, que es una base de prueba.
 - [ ] Creá la elección completa desde la app: partido, equipo, días, listas, padrón, mesas.
 - [ ] Mandá las invitaciones por el medio que uses de verdad.
 

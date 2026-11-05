@@ -41,7 +41,7 @@ later. Using your own AI is not available yet. Today the [roll reader](https://g
 and builds the `.padron` file that gets uploaded to the app. The app also takes a CSV sheet.
 
 **3. How do you want it to look?** You choose one of the themes, seeing them first in light and dark. Each person can change it later on
-their phone.
+their phone. You can also [make your own](themes.md).
 
 At the end it gives you your server's address and a recovery key for the backups, and opens the app. An assistant then continues with
 the party, the team and the first election.
