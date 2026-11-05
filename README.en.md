@@ -42,7 +42,8 @@ sees only their work.
   <img src="docs/assets/temas.png" alt="The same screen in five themes: Aula, Vidrio, Feria, Tablero and Mate" width="100%">
 </p>
 
-With themes for every taste, in light and dark mode, and the option to create your own with your party's colors. You can go through
+With themes for every taste, in light and dark mode: you choose with a preview when installing, and each person can change it the first
+time they open it. You will also be able to create your own, with your party's colors. You can go through
 [the design proposal](design/index.html) by opening it in your browser.
 
 ## What makes it different

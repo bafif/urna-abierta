@@ -23,7 +23,7 @@ To see the design proposal, just open `design/index.html` in a browser.
 
 ## What it will be like
 
-You will download an installer from the GitHub releases page, for Windows, macOS or Linux. It asks two questions and does the rest.
+You will download an installer from the GitHub releases page, for Windows, macOS or Linux. It asks three questions and does the rest.
 
 **1. Where will your Urna Abierta live?** Any of these options works:
 
@@ -36,6 +36,9 @@ You will download an installer from the GitHub releases page, for Windows, macOS
 
 **2. How do we read scanned rolls?** On your computer, which is recommended because a roll holds personal data; with your own AI,
 pasting your key; or you decide later.
+
+**3. How do you want it to look?** You choose one of the themes, seeing them first in light and dark. Each person can change it later on
+their phone.
 
 At the end it gives you your server's address and a recovery key for the backups, and opens the app. An assistant then continues with
 the party, the team and the first election.
