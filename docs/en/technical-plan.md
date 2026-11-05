@@ -60,17 +60,23 @@ That leaves one path for the three providers, and the installer never handles th
 
 ### Signing
 
-No signature may show my legal name, so I rule out certificates in my own name and Apple notarization.
+My name may appear in a signature. What must not get out is my address or anything about my machines.
+
+- **Everything is built and signed on GitHub Actions**, on its machines and never on mine. That way the installer carries no
+  paths or computer names, and the timestamp service never sees my IP.
+- **A signature sends nothing:** it is a seal inside the file. All it can reveal is what the certificate says.
 
 | System | What is published | What the person installing sees |
 |---|---|---|
-| Windows | Unsigned. Once there is a release, I apply for the free signature of SignPath Foundation, whose certificate is in the foundation's name | SmartScreen warns: “More info” and “Run anyway” |
-| macOS | Ad-hoc signature, which identifies nobody | macOS blocks it the first time: Settings, Privacy & Security, “Open Anyway” |
+| Windows | Unsigned. Once there is a release, I apply for the free signature of SignPath Foundation, whose certificate is in the foundation's name and carries none of my data | SmartScreen warns until it is signed: “More info” and “Run anyway” |
+| macOS | Ad-hoc signature, which identifies nobody. If the warning has to go: Developer ID and notarization, for USD 99 a year | macOS blocks it the first time: Settings, Privacy & Security, “Open Anyway” |
 | Linux | AppImage | No warning |
 
+I rule out the Certum open source certificate, because it publishes the city and province, and Microsoft Artifact Signing, which
+for individuals is only available in the United States and Canada.
+
 Since an unsigned installer is easy to fake, each release publishes its SHA-256 and a GitHub attestation, which ties it to the
-repository and the build process, not to a person. The guide explains each warning, with screenshots, so that nobody skips them
-blindly.
+repository and the build process. The guide explains each warning, with screenshots, so that nobody skips them blindly.
 
 ## Without signal, and sync
 
