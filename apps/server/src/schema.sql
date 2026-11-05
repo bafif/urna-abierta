@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS role_assignments (
   election_id uuid REFERENCES elections (id) ON DELETE CASCADE,
   unit_id text REFERENCES units (id) ON DELETE CASCADE,
   table_id text REFERENCES polling_tables (id) ON DELETE CASCADE,
+  -- The voting days of a shift. Without days, it covers all of them.
+  days date[],
   expires_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );

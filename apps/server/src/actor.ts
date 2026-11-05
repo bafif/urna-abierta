@@ -1,13 +1,14 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { isRole, rolesCan, SECURITY_PROFILES, type Permission, type Role, type SecurityProfile } from '@urna-abierta/domain';
+import { isRole, permissionsOf, SECURITY_PROFILES, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 
 export interface Assignment {
   role: Role;
   election_id: string | null;
   unit_id: string | null;
   table_id: string | null;
+  days: Date[] | null;
 }
 
 export interface Actor {
@@ -15,6 +16,7 @@ export interface Actor {
   deviceId: string;
   name: string;
   roles: Role[];
+  permissions: Permission[];
   assignments: Assignment[];
   /** This device already proved the second step. */
   verified: boolean;
@@ -45,12 +47,14 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
   const row = found.rows[0];
   if (!row) return null;
   const roles = await pool.query(
-    `SELECT role, election_id, unit_id, table_id FROM role_assignments
+    `SELECT role, election_id, unit_id, table_id, days FROM role_assignments
      WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())`,
     [row.user_id],
   );
   const assignments = roles.rows.filter((r) => isRole(r.role)) as Assignment[];
-  const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, assignments, roles: [...new Set(assignments.map((a) => a.role))] };
+  const unique = [...new Set(assignments.map((a) => a.role))];
+  const permissions = permissionsOf(unique, await getSetting<RoleOverrides>(pool, 'role_permissions', {}));
+  const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, assignments, roles: unique, permissions };
   if (actors.size > 5_000) actors.clear();
   actors.set(key, { until: Date.now() + ACTOR_MEMORY_MS, actor });
   return actor;
@@ -85,11 +89,11 @@ export function requires(pool: pg.Pool, permission: Permission) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     await check(request, reply);
     if (reply.sent) return;
-    if (!rolesCan(request.actor.roles, permission)) return reply.code(403).send({ error: 'forbidden' });
+    if (!request.actor.permissions.includes(permission)) return reply.code(403).send({ error: 'forbidden' });
   };
 }
 
-export const can = (actor: Actor, permission: Permission) => rolesCan(actor.roles, permission);
+export const can = (actor: Actor, permission: Permission) => actor.permissions.includes(permission);
 
 /** Whether this person may work on a table: their own, one in their district, or all if they run the election. */
 export async function canReachTable(pool: pg.Pool, actor: Actor, tableId: string): Promise<boolean> {

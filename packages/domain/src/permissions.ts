@@ -61,3 +61,13 @@ export const SECURITY_PROFILES = {
 export type SecurityProfile = keyof typeof SECURITY_PROFILES;
 
 export const isSecurityProfile = (value: unknown): value is SecurityProfile => typeof value === 'string' && value in SECURITY_PROFILES;
+
+/** The roles a party edited. A role that is not here has the recommended permissions. */
+export type RoleOverrides = Partial<Record<Role, readonly Permission[]>>;
+
+export const permissionsOf = (roles: readonly Role[], overrides: RoleOverrides = {}): Permission[] => [
+  ...new Set(roles.flatMap((role): readonly Permission[] => overrides[role] ?? ROLES[role])),
+];
+
+/** Without these, nobody could give back what was taken away. */
+export const PERMISSIONS_KEPT: Partial<Record<Role, readonly Permission[]>> = { sistema: ['users.manage', 'security.manage'] };

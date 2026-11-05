@@ -131,7 +131,15 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
        ORDER BY e.created_at DESC`,
       [tableIds],
     );
-    const table = tables.rows[0] ?? null;
+    const iso = (day: Date) => day.toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const shiftOf = (id: string) => actor.assignments.find((a) => a.role === 'fiscal' && a.table_id === id)?.days?.map(iso) ?? null;
+    // Someone may have a different table each day: the one of today, or else the next one.
+    const rank = (row: { id: string; days: Date[] }) => {
+      const days = shiftOf(row.id) ?? row.days.map(iso);
+      return days.includes(today) ? 0 : days.some((day) => day > today) ? 1 : 2;
+    };
+    const table = [...tables.rows].sort((a, b) => rank(a) - rank(b))[0] ?? null;
     let contact = null;
     if (table) {
       const chief = await pool.query(
@@ -148,7 +156,12 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       main: mainRole(actor.roles),
       secondFactorNeeded: await needsSecondFactor(pool, actor),
       party: await getSetting(pool, 'party', defaultParty()),
-      security: { profile, chosen: (await pool.query(`SELECT 1 FROM settings WHERE key = 'security_profile'`)).rowCount === 1, ...SECURITY_PROFILES[profile] },
+      security: {
+        profile,
+        chosen: (await pool.query(`SELECT 1 FROM settings WHERE key = 'security_profile'`)).rowCount === 1,
+        fiscalView: await getSetting(pool, 'fiscal_semaphore', false),
+        ...SECURITY_PROFILES[profile],
+      },
       table: table && {
         id: table.id,
         name: table.name,
@@ -156,7 +169,8 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
         election: table.election,
         electionId: table.election_id,
         status: table.status,
-        days: table.days.map((d: Date) => d.toISOString().slice(0, 10)),
+        days: table.days.map(iso),
+        shift: shiftOf(table.id),
         categories: table.categories,
         total: table.total,
       },

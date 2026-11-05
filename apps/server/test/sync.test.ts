@@ -328,6 +328,79 @@ describe.skipIf(!url)('against a real Postgres', () => {
     });
   });
 
+  describe('what a party can adjust', () => {
+    it('a role can be edited, without leaving the system unmanageable, and it can go back to what is recommended', async () => {
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
+      tokens.sistema = await redeem(invitation);
+      expect((await call('jefe', 'GET', `/api/elections/${demo.election}/stats`)).statusCode).toBe(403);
+      const { recommended } = (await call('sistema', 'GET', '/api/roles')).json();
+      const edit = (role: string, permissions: unknown) => call('sistema', 'PUT', `/api/roles/${role}`, { permissions });
+      expect((await edit('jefe', [...recommended.jefe, 'stats.read'])).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', `/api/elections/${demo.election}/stats`)).statusCode).toBe(200);
+      expect((await edit('jefe', ['inventado'])).statusCode).toBe(400);
+      expect((await edit('sistema', ['audit.read'])).statusCode).toBe(409);
+      expect((await call('jefe', 'PUT', '/api/roles/jefe', { permissions: [] })).statusCode).toBe(403);
+      expect((await edit('jefe', null)).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', `/api/elections/${demo.election}/stats`)).statusCode).toBe(403);
+    });
+
+    it('the role that only sees numbers expires by itself', async () => {
+      await call('coordinacion', 'POST', '/api/users', { name: 'Numeritos', role: 'estadistico' });
+      const row = await pool.query(`SELECT a.expires_at FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE u.name = 'Numeritos'`);
+      expect(new Date(row.rows[0].expires_at).getTime()).toBeGreaterThan(Date.now() + 80 * 86_400_000);
+    });
+
+    it('shifts: each poll watcher works their days, and a table is covered only if every day is', async () => {
+      const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Tres días', kind: 'estudiantil', days: [day(0), day(1), day(2)] })).json().id;
+      const file = writePadron({ electors: Array.from({ length: 12 }, (_, i) => ({ id: `t-${i}`, full_name: `Turno${i}, Ana` })) as never });
+      await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      await call('coordinacion', 'POST', `/api/elections/${id}/tables/propose`, { size: 20 });
+      const uncovered = async () => (await call('coordinacion', 'GET', '/api/elections')).json().elections.find((e: { id: string }) => e.id === id).tables_without_fiscal;
+      const mesa = (await call('coordinacion', 'GET', `/api/elections/${id}/tables`)).json().tables[0].id;
+      expect(await uncovered()).toBe(1);
+      const first = (await call('coordinacion', 'POST', '/api/users', { name: 'Día Uno', role: 'fiscal', table: mesa, days: [day(0)] })).json();
+      expect(await uncovered()).toBe(1);
+      const second = (await call('coordinacion', 'POST', '/api/users', { name: 'Días Dos', role: 'fiscal', table: mesa, days: [day(1), day(2)] })).json();
+      expect(await uncovered()).toBe(0);
+      tokens.uno = await redeem(first.invitation);
+      tokens.dos = await redeem(second.invitation);
+      expect((await call('uno', 'GET', '/api/me')).json().table.shift).toEqual([day(0)]);
+      expect((await call('dos', 'GET', '/api/me')).json().table.shift).toEqual([day(1), day(2)]);
+      const { tables } = (await call('coordinacion', 'GET', `/api/elections/${id}/tables`)).json();
+      expect(tables[0].fiscales.map((f: { name: string }) => f.name).sort()).toEqual(['Día Uno', 'Días Dos']);
+    });
+
+    it('poll watchers see the traffic light of their table only if the party allows it, and never a sensitive category', async () => {
+      const color = '#E8A317';
+      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color })).json().id;
+      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color, sensitive: true })).json().id;
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
+      const { electors } = (await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json();
+      const mark = (elector: string, category: string) => call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${elector}/semaphore`, { category });
+      expect((await mark(electors[0].id, open)).statusCode).toBe(200);
+      expect((await mark(electors[1].id, closed)).statusCode).toBe(200);
+      const roll = async () => (await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json().electors;
+      expect((await roll())[0].light).toBeUndefined();
+      expect((await call('coordinacion', 'PUT', '/api/semaphore/fiscal-view', { enabled: true })).statusCode).toBe(200);
+      expect((await roll())[0].light).toEqual({ name: 'Puede ser', color });
+      expect((await roll())[1].light).toBeUndefined();
+      await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"nacional"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
+      expect((await roll())[0].light).toBeUndefined();
+    });
+
+    it('the chief does not get alarmed at night: a table that closed its day is not silent', async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const count = { ...operation(table, 1), type: 'envelopes.counted', payload: { day: today, envelopes: 0, marked: 0 } };
+      await push('fiscal', table, [count]);
+      const { tables } = (await call('jefe', 'GET', `/api/district/${demo.election}`)).json();
+      expect(tables.find((t: { id: string }) => t.id === table).countedDays).toEqual([today]);
+      const { elections } = (await call('jefe', 'GET', '/api/district/elections')).json();
+      expect(elections[0].days).toContain(today);
+    });
+  });
+
   describe('themes a party adds', () => {
     it('only takes a theme that can be read, and anyone can see it before logging in', async () => {
       const color = '#101010';

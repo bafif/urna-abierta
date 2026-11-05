@@ -37,8 +37,8 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   }
 
   app.get('/api/district/elections', { preHandler: watch }, async () => {
-    const rows = await pool.query(`SELECT id, name, status FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
-    return { elections: rows.rows };
+    const rows = await pool.query(`SELECT id, name, status, days FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
+    return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((day: Date) => day.toISOString().slice(0, 10)) })) };
   });
 
   /** Not a dashboard: what needs someone now comes first, and the rest fits in one line. */
@@ -52,7 +52,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         `SELECT t.id, t.name, t.place, t.last_seq,
                 t.last_contact AS last_sync,
                 (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id
-                 WHERE a.table_id = t.id AND a.role = 'fiscal' LIMIT 1) AS fiscal
+                 WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR current_date = ANY(a.days)) DESC LIMIT 1) AS fiscal
          FROM polling_tables t WHERE t.id = ANY($1) ORDER BY t.position`,
         [scope],
       ),
@@ -78,6 +78,8 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         versions.set(payload.category, (versions.get(payload.category) ?? new Set()).add(JSON.stringify(payload.results)));
       }
       return {
+        // A table that counted its envelopes has closed for the day: its silence says nothing.
+        countedDays: own.filter((row) => row.type === 'envelopes.counted').map((row) => row.payload.day),
         envelopesDiffer: Boolean(envelopes && envelopes.envelopes !== envelopes.marked),
         talliesDiffer: [...versions].some(([category, distinct]) => distinct.size > 1 && !settled.has(`${table}:${category}`)),
       };
@@ -99,7 +101,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     const info = await pool.query(
       `SELECT t.id, t.name, t.place, e.categories, (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total,
-              (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' LIMIT 1) AS fiscal
+              (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR current_date = ANY(a.days)) DESC LIMIT 1) AS fiscal
        FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1`,
       [table],
     );
