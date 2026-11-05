@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const files = [new URL('./temas.js', import.meta.url).pathname, ...process.argv.slice(2)];
+const files = [new URL('../apps/web/src/lib/temas.js', import.meta.url).pathname, ...process.argv.slice(2)];
 const context = { window: {} };
 for (const file of files) vm.runInNewContext(readFileSync(file, 'utf8'), context);
 
