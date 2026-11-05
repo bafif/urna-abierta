@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { awsCloud, signAws } from '../src/clouds/aws.ts';
 import { googleCloud, signGoogleAssertion } from '../src/clouds/google.ts';
 import { oracleCloud, signOracle } from '../src/clouds/oracle.ts';
-import { waitForHealth } from '../src/job.ts';
+import { uploadTheme, waitForHealth } from '../src/job.ts';
 import { newSecrets, renderScript, siteFor } from '../src/settings.ts';
 
 const noWait = async () => undefined;
@@ -167,6 +167,22 @@ describe('creating a server, against a fake of each cloud', () => {
     expect(instance.networkInterfaces[0].accessConfigs[0].natIP).toBe('203.0.113.5');
     expect(instance.metadata.items[0].value).toContain('echo hola');
     expect(posts[1]!.headers.get('authorization')).toBe('Bearer token-1');
+  });
+});
+
+describe('sending the theme of a file', () => {
+  it('goes with the installation code, and says when it could not', async () => {
+    const { request, calls } = fakeCloud(() => ({ ok: true }));
+    expect(await uploadTheme('https://203.0.113.9', 'codigo', { id: 'propio' }, request)).toBe(true);
+    expect(calls[0]!.url.pathname).toBe('/api/setup/theme');
+    expect(calls[0]!.method).toBe('PUT');
+    expect(JSON.parse(calls[0]!.body)).toEqual({ code: 'codigo', theme: { id: 'propio' } });
+    const refused = (async () => new Response('{}', { status: 409 })) as typeof fetch;
+    expect(await uploadTheme('https://x', 'codigo', {}, refused)).toBe(false);
+    const down = (async () => {
+      throw new Error('no');
+    }) as typeof fetch;
+    expect(await uploadTheme('https://x', 'codigo', {}, down)).toBe(false);
   });
 });
 

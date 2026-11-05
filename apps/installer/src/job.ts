@@ -20,6 +20,8 @@ export interface InstallRequest {
   theme: string;
   /** How rolls get read. It stays on this computer, for the roll reader. */
   vision: 'local' | 'later';
+  /** A theme from a file of the person's. It travels on its own: it may not fit in the block that installs. */
+  customTheme?: object;
 }
 
 export interface InstallResult {
@@ -30,6 +32,8 @@ export interface InstallResult {
   /** The block to paste, for that option. */
   text?: string;
   setupCode: string;
+  /** Their own theme could not be sent. It can still be added from the app. */
+  themeFailed?: boolean;
 }
 
 const HEALTH_LIMIT_MS = 20 * 60_000;
@@ -50,6 +54,21 @@ export async function waitForHealth(address: string, log: (line: string) => void
   return false;
 }
 
+/** Sends the person's theme to their server, with the installation code, as soon as it answers. */
+export async function uploadTheme(address: string, code: string, theme: object, request: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const response = await request(`${address}/api/setup/theme`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code, theme }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 function cloudFor(where: Extract<Where, { kind: 'cloud' }>): Cloud {
   if (where.provider === 'aws') return awsCloud(where.credentials);
   if (where.provider === 'oracle') return oracleCloud(where.credentials);
@@ -66,14 +85,20 @@ function rememberPreferences(request: InstallRequest): void {
   }
 }
 
+async function sendCustomTheme(request: InstallRequest, url: string, code: string, alive: boolean, log: (line: string) => void): Promise<{ themeFailed?: boolean }> {
+  if (!request.customTheme) return {};
+  log('theme');
+  return alive && (await uploadTheme(url, code, request.customTheme)) ? {} : { themeFailed: true };
+}
+
 export async function install(request: InstallRequest, log: (line: string) => void): Promise<InstallResult> {
   rememberPreferences(request);
   const { where, theme } = request;
 
   if (where.kind === 'local') {
     const { secrets, url } = await startLocal(theme, log);
-    await waitForHealth(url, log, 3 * 60_000);
-    return { address: url, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${url}/#setup=${secrets.setupCode}` };
+    const alive = await waitForHealth(url, log, 3 * 60_000);
+    return { address: url, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${url}/#setup=${secrets.setupCode}`, ...(await sendCustomTheme(request, url, secrets.setupCode, alive, log)) };
   }
 
   const secrets = newSecrets();
@@ -100,5 +125,5 @@ export async function install(request: InstallRequest, log: (line: string) => vo
   }
   const healthy = await waitForHealth(url, log);
   if (!healthy) log('slow');
-  return { address: url, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${url}/#setup=${secrets.setupCode}` };
+  return { address: url, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${url}/#setup=${secrets.setupCode}`, ...(await sendCustomTheme(request, url, secrets.setupCode, healthy, log)) };
 }
