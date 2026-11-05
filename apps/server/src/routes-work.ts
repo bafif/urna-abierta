@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, can, canReachTable, requires, seal, unseal } from './actor.ts';
+import { audit, can, canReachTable, requires, seal, unseal, type Actor } from './actor.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
@@ -26,9 +26,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   const watch = requires(pool, 'district.watch');
   const cache = new Map<string, { at: number; value: unknown }>();
 
-  async function tablesInScope(request: { actor: { roles: string[]; assignments: { role: string; unit_id: string | null }[] } }, election: string): Promise<string[]> {
+  async function tablesInScope(request: { actor: Actor }, election: string): Promise<string[]> {
     const { actor } = request;
-    if (actor.roles.includes('coordinacion')) {
+    if (can(actor, 'election.manage')) {
       return (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [election])).rows.map((r) => r.id);
     }
     const units = actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);

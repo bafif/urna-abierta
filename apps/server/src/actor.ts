@@ -97,9 +97,9 @@ export const can = (actor: Actor, permission: Permission) => actor.permissions.i
 
 /** Whether this person may work on a table: their own, one in their district, or all if they run the election. */
 export async function canReachTable(pool: pg.Pool, actor: Actor, tableId: string): Promise<boolean> {
-  if (actor.roles.includes('coordinacion')) return true;
-  if (actor.assignments.some((a) => a.role === 'fiscal' && a.table_id === tableId)) return true;
-  const units = actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);
+  if (can(actor, 'election.manage')) return true;
+  if (can(actor, 'table.work') && actor.assignments.some((a) => a.role === 'fiscal' && a.table_id === tableId)) return true;
+  const units = can(actor, 'district.watch') ? actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id) : [];
   if (units.length === 0) return false;
   const table = await pool.query('SELECT unit_id FROM polling_tables WHERE id = $1', [tableId]);
   return units.includes(table.rows[0]?.unit_id) || units.includes(null);

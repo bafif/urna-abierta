@@ -344,6 +344,15 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('jefe', 'GET', `/api/elections/${demo.election}/stats`)).statusCode).toBe(403);
     });
 
+    it('taking away the work of a table really takes it away', async () => {
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
+      tokens.sistema = await redeem(invitation);
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      await call('sistema', 'PUT', '/api/roles/fiscal', { permissions: [] });
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(403);
+      expect((await push('fiscal', table, [operation(table, 1)])).statusCode).toBe(403);
+    });
+
     it('the role that only sees numbers expires by itself', async () => {
       await call('coordinacion', 'POST', '/api/users', { name: 'Numeritos', role: 'estadistico' });
       const row = await pool.query(`SELECT a.expires_at FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE u.name = 'Numeritos'`);
