@@ -7,6 +7,10 @@ async function prepared(context: BrowserContext, table = newTable()): Promise<Pa
   const page = await context.newPage();
   await page.goto(`/?mesa=${table}`);
   await page.getByRole('button', { name: 'Preparar mesa' }).click();
+  // Waits for either outcome, so that being slow and being wrongly refused look different.
+  await expect(page.getByTestId('remaining').or(page.getByText('No se pudo preparar'))).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('No se pudo preparar')).toHaveCount(0);
+  await expect(page.getByTestId('no-room')).toHaveCount(0);
   await expect(page.getByTestId('remaining')).toContainText('Faltan 350 de 350');
   // The service worker has to control the page before the connection goes away.
   await page.evaluate(async () => {
@@ -100,6 +104,98 @@ test('the urgent alert offers a call, WhatsApp and SMS when it cannot go out', a
   await context.setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+});
+
+test('a mark that could not be saved goes back to the list, and says so', async ({ context }) => {
+  const page = await prepared(context);
+  await page.evaluate(() => {
+    (window as unknown as { realPut: unknown }).realPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = () => {
+      throw new DOMException('no room', 'QuotaExceededError');
+    };
+  });
+  await page.getByTestId('person').first().click();
+  await expect(page.getByTestId('save-failed')).toBeVisible();
+  await expect(page.getByTestId('remaining')).toContainText('Faltan 350 de 350');
+  await expect(page.getByText('Tachaste a')).toHaveCount(0);
+  expect(await pendingOperations(page)).toBe(0);
+
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.put = (window as unknown as { realPut: typeof IDBObjectStore.prototype.put }).realPut;
+  });
+  await page.getByTestId('person').first().click();
+  await expect(page.getByTestId('remaining')).toContainText('Faltan 349 de 350');
+  await expect(page.getByTestId('save-failed')).toHaveCount(0);
+});
+
+test('with no room left crossing out is blocked, and it works again once there is room', async ({ context }) => {
+  await context.addInitScript(() => {
+    const real = Cache.prototype.put;
+    Cache.prototype.put = function (this: Cache, ...args: Parameters<Cache['put']>) {
+      if (localStorage.getItem('test-disk-full')) return Promise.reject(new DOMException('no room', 'QuotaExceededError'));
+      return real.apply(this, args);
+    };
+  });
+  const page = await prepared(context);
+  await page.evaluate(() => localStorage.setItem('test-disk-full', '1'));
+  await page.reload();
+  await expect(page.getByTestId('no-room')).toBeVisible();
+  await expect(page.getByTestId('person').first()).toBeDisabled();
+  expect(await pendingOperations(page)).toBe(0);
+
+  await page.evaluate(() => localStorage.removeItem('test-disk-full'));
+  // Without touching anything: the check repeats by itself while there is no room.
+  await expect(page.getByTestId('no-room')).toHaveCount(0, { timeout: 30_000 });
+  await page.getByTestId('person').first().click();
+  await expect(page.getByTestId('remaining')).toContainText('Faltan 349 de 350');
+});
+
+test('the first install does not reload the page or announce an update', async ({ context }) => {
+  await context.addInitScript(() => {
+    sessionStorage.setItem('loads', String(Number(sessionStorage.getItem('loads') ?? 0) + 1));
+  });
+  const page = await prepared(context);
+  await page.waitForTimeout(1_000);
+  expect(await page.evaluate(() => sessionStorage.getItem('loads'))).toBe('1');
+  await expect(page.getByRole('button', { name: 'Actualizar' })).toHaveCount(0);
+});
+
+test('a room check that never answers does not hold the app back', async ({ context }) => {
+  await context.addInitScript(() => {
+    Cache.prototype.put = () => new Promise(() => undefined);
+  });
+  const page = await prepared(context);
+  await expect(page.getByTestId('no-room')).toHaveCount(0);
+  await page.getByTestId('person').first().click();
+  await expect(page.getByTestId('remaining')).toContainText('Faltan 349 de 350');
+});
+
+test('a phone that lost its data says so, and does not claim everything was sent', async ({ context }) => {
+  const page = await prepared(context);
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const request = indexedDB.deleteDatabase('urna-abierta');
+        request.onsuccess = request.onerror = request.onblocked = resolve;
+      }),
+  );
+  await page.reload();
+  await expect(page.getByTestId('data-lost')).toBeVisible();
+  await expect(page.getByTestId('sync-status')).not.toContainText('Todo enviado');
+  await expect(page.getByRole('button', { name: 'Preparar mesa' })).toBeVisible();
+});
+
+test('if saved data cannot be opened it says what to do, instead of hanging', async ({ context }) => {
+  await context.addInitScript(() => {
+    IDBFactory.prototype.open = () => {
+      throw new DOMException('broken', 'UnknownError');
+    };
+  });
+  const page = await context.newPage();
+  await page.goto(`/?mesa=${newTable()}`);
+  await expect(page.getByTestId('storage-broken')).toBeVisible();
+  await expect(page.getByTestId('sync-status')).not.toContainText('Todo enviado');
 });
 
 test('Spanish is the default language and the choice is remembered', async ({ context }) => {

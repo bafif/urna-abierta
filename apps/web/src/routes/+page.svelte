@@ -17,10 +17,11 @@
   let showVoted = $state(false);
   let lastMarked = $state<RollEntry | null>(null);
   let undoTimer: ReturnType<typeof setTimeout> | undefined;
-  let incident = $state<'idle' | 'sending' | 'sent' | 'queued'>('idle');
+  let incident = $state<'idle' | 'sending' | 'sent' | 'queued' | 'unsaved'>('idle');
   let copied = $state(false);
   let installEvent = $state<(Event & { prompt: () => Promise<void> }) | null>(null);
   let waitingWorker = $state<ServiceWorker | null>(null);
+  let updateAccepted = false;
   let standalone = $state(false);
 
   const list = $derived.by(() => {
@@ -45,22 +46,23 @@
       installEvent = event as Event & { prompt: () => Promise<void> };
     });
     if ('serviceWorker' in navigator) {
+      // Read before registering. On a first install the worker takes control within moments,
+      // and that must not be mistaken for a new version waiting.
+      const isUpdate = Boolean(navigator.serviceWorker.controller);
       void navigator.serviceWorker.register(`${resolve('/')}service-worker.js`).then((registration) => {
+        if (!isUpdate) return;
         const watch = (worker: ServiceWorker | null) => {
           worker?.addEventListener('statechange', () => {
-            if (worker.state === 'installed' && navigator.serviceWorker.controller) waitingWorker = worker;
+            if (worker.state === 'installed') waitingWorker = worker;
           });
         };
-        if (registration.waiting && navigator.serviceWorker.controller) waitingWorker = registration.waiting;
+        if (registration.waiting) waitingWorker = registration.waiting;
         watch(registration.installing);
         registration.addEventListener('updatefound', () => watch(registration.installing));
       });
-      let reloading = false;
+      // The app only ever reloads because the person accepted the update, in this very tab.
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (waitingWorker && !reloading) {
-          reloading = true;
-          location.reload();
-        }
+        if (updateAccepted) location.reload();
       });
     }
   });
@@ -76,12 +78,13 @@
     preparing = false;
   }
 
-  function mark(entry: RollEntry) {
+  async function mark(entry: RollEntry) {
+    if (app.noRoom) return;
     lastMarked = entry;
     clearTimeout(undoTimer);
     undoTimer = setTimeout(() => (lastMarked = null), 8_000);
     query = '';
-    void app.mark(entry.id);
+    if (!(await app.mark(entry.id))) lastMarked = null;
   }
 
   function undoLast() {
@@ -91,7 +94,7 @@
 
   async function report() {
     incident = 'sending';
-    incident = (await app.reportIncident()) ? 'sent' : 'queued';
+    incident = await app.reportIncident();
   }
 
   async function copyReport() {
@@ -123,7 +126,9 @@
       </label>
     </div>
     <div class="status" class:ok={app.pendingCount === 0} data-testid="sync-status">
-      {#if app.pendingCount === 0}
+      {#if !app.ready || app.storageBroken || app.electors.length === 0}
+        &nbsp;
+      {:else if app.pendingCount === 0}
         {t('sync.done')}
       {:else if app.sending && app.online}
         {t('sync.sending')}
@@ -138,16 +143,38 @@
     <div class="update">
       {#if app.pendingCount === 0}
         {t('update.available')}
-        <button onclick={() => waitingWorker?.postMessage('update-now')}>{t('update.apply')}</button>
+        <button
+          onclick={() => {
+            updateAccepted = true;
+            waitingWorker?.postMessage('update-now');
+          }}>{t('update.apply')}</button>
       {:else}
         {t('update.waiting')}
       {/if}
     </div>
   {/if}
 
+  {#if app.noRoom}
+    <div class="warning" role="alert" data-testid="no-room">
+      {t('space.low')}
+      <button disabled={app.checkingRoom} onclick={() => app.checkRoom()}>
+        {app.checkingRoom ? t('space.checking') : t('space.retry')}
+      </button>
+    </div>
+  {:else if app.saveFailed}
+    <div class="warning" role="alert" data-testid="save-failed">{t('save.failed')}</div>
+  {/if}
+  {#if app.dataLost}
+    <div class="warning" role="alert" data-testid="data-lost">{t('storage.lost')}</div>
+  {/if}
+
   <main>
     {#if !app.ready}
       <p class="center">…</p>
+    {:else if app.storageBroken}
+      <section class="panel">
+        <p class="warning" role="alert" data-testid="storage-broken">{t('storage.broken')}</p>
+      </section>
     {:else if view === 'table'}
       {#if app.electors.length === 0}
         <section class="panel">
@@ -182,7 +209,7 @@
                   <span class="action">{t('table.undo')}</span>
                 </button>
               {:else}
-                <button class="person" data-testid="person" onclick={() => mark(entry)}>
+                <button class="person" data-testid="person" disabled={app.noRoom} onclick={() => mark(entry)}>
                   <span class="order">{entry.order}</span>
                   <span class="name">{entry.name}</span>
                   <span class="suffix">…{entry.documentSuffix}</span>
@@ -205,8 +232,8 @@
         <button class="danger" onclick={report} disabled={incident === 'sending'} data-testid="report">{t('urgent.button')}</button>
         {#if incident === 'sent'}
           <p class="success" role="status">{t('urgent.sent')}</p>
-        {:else if incident === 'queued'}
-          <p role="alert">{t('urgent.notSent')}</p>
+        {:else if incident === 'queued' || incident === 'unsaved'}
+          <p role="alert">{incident === 'queued' ? t('urgent.notSent') : t('urgent.notSaved')}</p>
           <a class="action-link" href="tel:{app.contact}">{t('urgent.call')}</a>
           <a class="action-link" href="https://wa.me/{digits}?text={alertText}">{t('urgent.whatsapp')}</a>
           <a class="action-link" href="sms:{app.contact}?&body={alertText}">{t('urgent.sms')}</a>
@@ -272,6 +299,9 @@
   .status { padding: 4px 0; font-weight: 600; color: #ffd98a; }
   .status.ok { color: #b9f3c4; }
   .banner { margin: 0 -12px; padding: 2px 12px; background: #fff3cd; color: #5c4400; font-size: 14px; }
+  .warning { margin: 0; padding: 10px 12px; background: #fde7e5; color: #7a1610; font-weight: 600; display: flex; flex-direction: column; gap: 8px; }
+  .warning button { align-self: flex-start; min-height: 48px; padding: 0 16px; border: 0; border-radius: 8px; background: #7a1610; color: #fff; font-weight: 700; }
+  .person:disabled { opacity: 0.45; }
   .update { padding: 8px 12px; background: #e7f1fb; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
   main { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
   .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
