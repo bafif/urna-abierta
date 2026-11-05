@@ -29,7 +29,13 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || !request.url.startsWith(self.registration.scope)) return;
-  if (request.url.startsWith(API)) return;
+  if (request.url.startsWith(API)) {
+    // The fonts of a party's theme: their address never changes, and they have to be there with no signal.
+    if (request.url.startsWith(`${API}theme-fonts/`)) {
+      event.respondWith(caches.match(request).then((cached) => cached ?? fetch(request)));
+    }
+    return;
+  }
   if (request.mode === 'navigate') {
     event.respondWith(caches.match(SHELL).then((cached) => cached ?? fetch(request)));
     return;

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { backOnline, enter, expectLeft, onIphone, openRoll, PHOTO, prepare, prepared, seed, totp, typeNumber } from './helpers.ts';
 
@@ -341,6 +342,45 @@ test('whoever coordinates sees what each task can do, and can change it', async 
   await expect(page.getByText('Ya vale para todos')).toBeVisible();
   await button(page, 'Volver a lo recomendado').click();
   await expect(stats).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('a theme with its own fonts, in one file, stays on the phone with no signal', async ({ browser, page, request }, info) => {
+  const demo = await seed(request, { size: 5 });
+  await page.goto(`/#invitacion=${demo.links.coordinacion}`);
+  await useThis(page);
+  await expect(page.getByRole('heading')).toHaveText('Tus elecciones');
+  const font = readFileSync(new URL('../src/lib/fuentes/nunito-latin-wght-normal.woff2', import.meta.url)).toString('base64');
+  const added = await page.evaluate(async (data) => {
+    const theme = { ...(window as any).TEMAS[4], id: `con-letras-${Date.now()}`, nombre: 'Tema con Letras', fuentes: { titulo: "'Letra Propia'", texto: "'Letra Propia'", boton: "'Letra Propia'", numero: "'Letra Propia'" }, archivosFuentes: [{ familia: 'Letra Propia', peso: '200 1000', datos: `data:font/woff2;base64,${data}` }] };
+    const response = await fetch('/api/themes', { method: 'PUT', headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('urna-abierta-token')}` }, body: JSON.stringify({ theme }) });
+    return { status: response.status, id: theme.id };
+  }, font);
+  expect(added.status).toBe(200);
+
+  const device = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });
+  const phone = await device.newPage();
+  await phone.goto(`/#invitacion=${demo.tables[0]!.invitations[0]}`);
+  await phone.getByRole('button', { name: 'Empezar' }).click();
+  while (!(await phone.locator('.nombre-tema').innerText()).includes('Tema con Letras')) await phone.getByRole('button', { name: 'Ver otro' }).click();
+  await useThis(phone);
+  await expect(phone.getByRole('button', { name: 'Preparar la mesa' })).toBeVisible();
+  // The service worker has to be in charge, and the font saved, before the signal goes.
+  await phone.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise((resolve) => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+  });
+  await expect.poll(() => phone.evaluate(async () => (await (await caches.open('temas-propios')).keys()).length)).toBeGreaterThan(0);
+
+  await device.setOffline(true);
+  await phone.reload();
+  await expect(phone.getByRole('button', { name: 'Preparar la mesa' })).toBeVisible();
+  const look = await phone.evaluate(async () => {
+    const loaded = await document.fonts.load('16px "Letra Propia"');
+    return { fonts: loaded.length, family: getComputedStyle(document.querySelector('.pantalla')!).getPropertyValue('--f-titulo') };
+  });
+  expect(look.fonts).toBeGreaterThan(0);
+  expect(look.family).toContain('Letra Propia');
+  await device.close();
 });
 
 test('someone asks for their data and to be erased', async ({ page, request }) => {
