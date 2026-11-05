@@ -11,6 +11,14 @@
   let name = $state('');
   let color = $state(COLORS[0]!);
   let sensitive = $state(false);
+  let fiscalView = $state(session.me?.security.fiscalView ?? false);
+  const allowed = $derived(session.me?.security.fiscalSeesSemaphore ?? false);
+
+  async function setFiscalView(enabled: boolean) {
+    await session.api('/semaphore/fiscal-view', { method: 'PUT', body: { enabled } });
+    fiscalView = enabled;
+    await session.refresh();
+  }
 
   const load = async () => {
     categories = (await session.api<{ categories: typeof categories }>('/semaphore/categories')).categories;
@@ -41,4 +49,7 @@
   </div>
   <label class="casilla"><input type="checkbox" bind:checked={sensitive} /><span>{t('categories.sensitive.check')}</span></label>
   <button class="boton secundario" disabled={!name.trim()} onclick={add}><Ic name="mas" /><span>{t('categories.add')}</span></button>
+  {#if allowed}
+    <label class="casilla separado"><input type="checkbox" checked={fiscalView} data-testid="fiscal-view" onchange={(event) => setFiscalView(event.currentTarget.checked)} /><span>{t('categories.fiscalView')}</span></label>
+  {/if}
 </Pantalla>

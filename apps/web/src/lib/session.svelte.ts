@@ -24,6 +24,8 @@ export interface TableInfo {
   electionId: string;
   status: string;
   days: string[];
+  /** The days this person works. Without it, all of them. */
+  shift: string[] | null;
   categories: { id: string; name: string; lists: { id: string; name: string }[] }[];
   total: number;
 }
@@ -34,7 +36,7 @@ export interface Me {
   main: string | null;
   secondFactorNeeded: boolean;
   party: { name: string; theme: string };
-  security: { profile: string; chosen: boolean; fiscalSeesSemaphore: boolean };
+  security: { profile: string; chosen: boolean; fiscalSeesSemaphore: boolean; fiscalView: boolean };
   table: TableInfo | null;
   contact: { name: string; phone: string | null } | null;
 }

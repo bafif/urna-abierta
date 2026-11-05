@@ -3,6 +3,7 @@
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import { t, timeAgo } from '../i18n.svelte.ts';
+  import { localDay } from '../app.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
 
@@ -10,6 +11,7 @@
     id: string;
     name: string;
     status: string;
+    days: string[];
   }
   interface Table {
     id: string;
@@ -20,6 +22,7 @@
     lastSync: string | null;
     fiscal: { name: string; phone: string | null } | null;
     incidents: { id: string; at: string; kind: string }[];
+    countedDays: string[];
     envelopesDiffer: boolean;
     talliesDiffer: boolean;
   }
@@ -59,7 +62,9 @@
   });
   onDestroy(() => clearInterval(timer));
 
-  const silent = (table: Table) => election?.status === 'jornada' && (!table.lastSync || Date.now() - Date.parse(table.lastSync) > SILENT_MS);
+  /** Only while it is being voted: at night, or once its day was closed, silence says nothing. */
+  const silent = (table: Table) =>
+    election?.status === 'jornada' && election.days.includes(localDay()) && !table.countedDays.includes(localDay()) && (!table.lastSync || Date.now() - Date.parse(table.lastSync) > SILENT_MS);
   const needsSomeone = (table: Table) => table.incidents.length > 0 || table.envelopesDiffer || table.talliesDiffer || silent(table);
   const needing = $derived(tables.filter(needsSomeone));
   const fine = $derived(tables.filter((table) => !needsSomeone(table)));

@@ -14,7 +14,6 @@
     people: number;
     from: string;
     to: string;
-    fiscal: { id: string; name: string } | null;
   }
 
   let { election }: { election: string } = $props();

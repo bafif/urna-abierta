@@ -327,6 +327,22 @@ test('the traffic light starts empty, and the numbers never show a name', async 
   await third.close();
 });
 
+test('whoever coordinates sees what each task can do, and can change it', async ({ page, request }) => {
+  const demo = await seed(request, { size: 5 });
+  await page.goto(`/#invitacion=${demo.links.coordinacion}`);
+  await useThis(page);
+  await button(page, 'Más cosas').click();
+  await page.getByRole('button', { name: /^Permisos/ }).click();
+  await page.getByTestId('role').filter({ hasText: 'Ayudar a varios fiscales' }).click();
+  const stats = page.getByTestId('permission').filter({ hasText: 'Ver los números' });
+  await expect(stats).toHaveAttribute('aria-pressed', 'false');
+  await stats.click();
+  await button(page, 'Guardar').click();
+  await expect(page.getByText('Ya vale para todos')).toBeVisible();
+  await button(page, 'Volver a lo recomendado').click();
+  await expect(stats).toHaveAttribute('aria-pressed', 'false');
+});
+
 test('someone asks for their data and to be erased', async ({ page, request }) => {
   const demo = await seed(request, { size: 10 });
   await page.goto(`/#invitacion=${demo.links.coordinacion}`);

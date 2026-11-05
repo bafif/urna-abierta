@@ -169,6 +169,7 @@ class AppState {
       electionId: '',
       status: 'jornada',
       days: [localDay()],
+      shift: null,
       categories: [{ id: 'practica', name: t('practice.category'), lists: [{ id: 'a', name: t('practice.listA') }, { id: 'b', name: t('practice.listB') }, { id: 'blanco', name: t('practice.blank') }] }],
       total: PRACTICE_PEOPLE,
     };
@@ -206,12 +207,15 @@ class AppState {
     const table = this.table;
     if (this.electors.length === 0 || !table || table.days.length === 0) return 'prepare';
     const today = localDay();
-    const last = table.days[table.days.length - 1]!;
-    if (today < table.days[0]!) return 'waiting';
+    const own = table.shift ?? table.days;
+    const last = own[own.length - 1]!;
+    if (today < own[0]!) return 'waiting';
     if (today <= last && !this.countedDays.has(last)) {
-      if (!table.days.includes(today) || this.countedDays.has(today)) return 'rest';
+      if (!own.includes(today) || this.countedDays.has(today)) return 'rest';
       return 'mark';
     }
+    // Whoever does not work the last day ends with their shift: the count is someone else's.
+    if (last !== table.days[table.days.length - 1]) return 'done';
     if (table.categories.some((category) => !this.talliedCategories.has(category.id))) return 'tally';
     return this.hasPhoto ? 'done' : 'photo';
   }
