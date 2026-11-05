@@ -1,0 +1,41 @@
+# Hacer un tema propio
+
+[English](../en/themes.md) · [Volver a la instalación](instalacion.md)
+
+Un tema son datos: colores para cada modo, letras, formas y unas pocas recetas. No lleva código, y la app no carga nada de afuera.
+
+1. Copiá uno de los temas de [`apps/web/src/lib/temas.js`](../../apps/web/src/lib/temas.js) a un archivo tuyo, y cambiale `id`, `nombre` y
+   los colores. Las letras tienen que ser de las que ya vienen con la app.
+2. Si tiene logo, poné en `logo` la ruta a un SVG, PNG o WebP.
+3. Convertilo, con el repo instalado:
+
+   ```sh
+   node design/tema-a-archivo.mjs mi-tema.js mi-tema.json
+   ```
+
+4. En la app, entrá a **Más cosas**, **Ajustes**, **Agregar un tema propio**, y elegí ese archivo.
+
+A partir de ahí, cualquiera de tu partido lo puede elegir. Si usás el mismo `id`, reemplaza al anterior.
+
+## Las recetas
+
+| Receta | Valores | Qué cambia |
+|---|---|---|
+| `tachado` | `lapicera`, `barra`, `sello`, `linea`, `suave` | Cómo se ve un nombre tachado |
+| `fondo` | `cuaderno`, `liso`, `aurora` | El fondo de la pantalla |
+| `material` | `plano`, `vidrio`, `almohada`, `filete` | De qué están hechos los paneles |
+| `cabecera` | `simple`, `banda` | Si el título va sobre una banda de color |
+
+## Se tiene que poder leer
+
+Es lo único que la app exige, porque la van a usar personas mayores, al sol y en un aula oscura. Lo comprueba al convertirlo, y otra vez el
+servidor al cargarlo:
+
+| Qué | Contraste mínimo |
+|---|---|
+| Texto sobre el fondo y los paneles | 7:1 |
+| Texto secundario, y texto sobre los botones | 4,5:1 |
+| Botones, acentos y marcas sobre el fondo | 3:1 |
+
+Si algo no alcanza, te dice qué par de colores es. También podés revisar todos juntos con `node design/verificar-contraste.mjs mi-tema.js`, y
+verlos en `design/index.html`.

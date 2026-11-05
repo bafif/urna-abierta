@@ -2,10 +2,9 @@
 
 [English](../en/installation.md) · [Volver al README](../../README.md)
 
-**Todavía no se puede usar en una elección real.** La versión de hoy no tiene login y usa personas inventadas. Esta página explica
-cómo probarla, y cómo va a ser la instalación cuando esté lista.
+**Todavía no hay una versión publicada, y no se usó en una elección real.** Antes de usarla, hacé un [simulacro](simulacro.md).
 
-## Probarla hoy
+## Probarla con personas inventadas
 
 Hace falta Node 24 y Podman.
 
@@ -16,26 +15,31 @@ corepack pnpm install
 deploy/serve.sh
 ```
 
-Abrí `http://localhost:8090`. Para verla como en un teléfono, activá el modo de dispositivo con F12, o seguí la
-[prueba en un emulador de Android](pruebas-en-telefonos.md).
+Te da un link para cada rol: fiscal, jefe de distrito, coordinación, semáforo y estadísticas. Cada link sirve una vez. Para verla como
+en un teléfono, activá el modo de dispositivo con F12, o seguí la [prueba en un emulador de Android](pruebas-en-telefonos.md).
 
 Para ver la propuesta de diseño alcanza con abrir `design/index.html` en el navegador.
 
-## Cómo va a ser
+## El instalador
 
-Vas a bajar un instalador desde la página de releases de GitHub, para Windows, macOS o Linux. Te hace tres preguntas y hace el resto.
+Se baja de la página de releases de GitHub, para Windows, macOS o Linux. Se abre en tu navegador y solo se ve desde tu computadora. Mientras
+no haya una versión publicada, se corre desde el código con `node apps/installer/src/main.ts`, y hay que tener las imágenes de los
+contenedores armadas.
+
+Te hace tres preguntas y hace el resto.
 
 **1. ¿Dónde va a vivir tu Urna Abierta?** Cualquiera de estas opciones funciona:
 
 | Opción | Qué necesitás |
 |---|---|
-| Crear un servidor nuevo | Una cuenta en Oracle Cloud, AWS o Google Cloud. Te guiamos para crearla |
-| Ya tengo un servidor | Su dirección y una llave SSH |
+| Crear un servidor nuevo | Una cuenta en Oracle Cloud, AWS o Google Cloud. [Acá está cómo crearla](servidores.md) |
+| Ya tengo un servidor | Ubuntu o Debian, su dirección y una llave SSH de un usuario con `sudo` sin contraseña |
 | Pegar un texto | Pegar un bloque al crear el servidor, sin darle ninguna credencial al instalador |
-| Probar en esta computadora | Nada. Solo se ve desde ahí |
+| Probar en esta computadora | Podman o Docker abierto. Solo se ve desde ahí |
 
-**2. ¿Cómo leemos los padrones escaneados?** En tu computadora, que es lo recomendado porque un padrón trae datos de personas; con
-tu propia IA, pegando tu clave; o lo decidís después.
+**2. ¿Cómo leemos los padrones escaneados?** En tu computadora, que es lo recomendado porque un padrón trae datos de personas, o lo
+decidís después. Usar tu propia IA todavía no está disponible. Hoy el [lector de padrones](https://github.com/bafif/urna-abierta-padrones)
+se usa desde una terminal y arma el archivo `.padron` que se sube a la app. La app también acepta una planilla CSV.
 
 **3. ¿Cómo querés que se vea?** Elegís uno de los temas, viéndolos antes en claro y en oscuro. Cada persona lo puede cambiar después en
 su teléfono.
@@ -43,9 +47,12 @@ su teléfono.
 Al terminar te da la dirección de tu servidor y una llave de recuperación para las copias de seguridad, y abre la app. Ahí sigue un
 asistente para el partido, el equipo y la primera elección.
 
+**Guardá esa llave.** Es lo único que abre tus copias de seguridad, y no se puede volver a generar.
+
 ## Qué servidor elegir
 
-Lo verifiqué el 4/11/2026. Estos planes cambian seguido, así que confirmalo en su página antes de decidir.
+Lo verifiqué el 4/11/2026. Estos planes cambian seguido, así que confirmalo en su página antes de decidir. La
+[guía de servidores](servidores.md) explica cada uno, paso a paso.
 
 | Proveedor | Costo | A tener en cuenta |
 |---|---|---|

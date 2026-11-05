@@ -11,8 +11,8 @@
 | Servidor | TypeScript en Node, con Fastify |
 | Base de datos | Postgres, con esquema SQL versionado |
 | Fotos de actas | Disco del servidor; S3 compatible como opción |
-| Instalación | `compose` con app, Postgres y Caddy (TLS automático) |
-| Instalador | App de escritorio para Windows, macOS y Linux, publicada en GitHub Releases |
+| Instalación | Un pod de Podman sin root con app, Postgres y Caddy (TLS automático), que un script deja andando en un Ubuntu o Debian |
+| Instalador | Un solo ejecutable para Windows, macOS y Linux, publicado en GitHub Releases. Es Node con sus archivos adentro: abre sus pantallas en el navegador, comparte los temas con la app, y se pudo probar de punta a punta |
 | Escáner | CLI en Python, con reconocimiento de texto local |
 
 Elegí una PWA para no depender de tiendas ni de una cuenta central: cada partido la sirve desde su propio dominio y el
@@ -76,7 +76,7 @@ Mi nombre puede figurar en una firma. Lo que no puede salir es mi dirección ni 
 |---|---|---|
 | Windows | Sin firmar. Cuando haya un release, se pide la firma gratuita de SignPath Foundation, cuyo certificado va a nombre de la fundación y no lleva datos míos | SmartScreen avisa hasta que haya firma: «Más información» y «Ejecutar de todas formas» |
 | macOS | Firma ad-hoc, que no identifica a nadie. Si hace falta evitar el aviso: Developer ID y notarización, por USD 99 al año | macOS lo bloquea la primera vez: Ajustes, Privacidad y seguridad, «Abrir igual» |
-| Linux | AppImage | Sin aviso |
+| Linux | Un ejecutable | Sin aviso |
 
 Descarto el certificado de código abierto de Certum, porque publica la ciudad y la provincia, y Microsoft Artifact Signing, que
 para personas solo está disponible en Estados Unidos y Canadá.
@@ -130,8 +130,8 @@ duplica nada.
 | Padrón, cronograma, permisos, semáforo | Se editan solo con señal |
 
 Ninguna regla depende de la hora del teléfono. Cada mesa numera sus operaciones bajo un bloqueo de su fila, porque con una
-secuencia global un lector puede pasar por alto filas que confirman fuera de orden. Lo que llega tarde o desde un teléfono
-revocado queda en cuarentena para revisarlo, sin descartarse.
+secuencia global un lector puede pasar por alto filas que confirman fuera de orden. Lo que llega después del cierre queda en
+cuarentena para revisarlo, sin descartarse. Un teléfono revocado deja de enviar, y lo suyo sigue guardado en él.
 
 Un teléfono sin espacio es el peor caso, porque escribir en la base puede romperla y perderlo todo. La app lo comprueba al
 abrirse, al preparar la mesa y cada 10 minutos, con una escritura aparte. Sin lugar, avisa y no deja tachar hasta que se libere;
@@ -164,7 +164,9 @@ puede ver.
 - Las categorías sensibles del semáforo llevan un permiso aparte y se cifran por campo. Eso protege copias de disco y
   backups, aunque no a un servidor en marcha, donde está la clave.
 - El registro de auditoría no se puede editar.
-- El fiscal entra con una invitación de un solo uso y un PIN; los demás roles, con passkey o contraseña y TOTP.
+- Cada persona entra con una invitación de un solo uso, que se convierte en una credencial de ese dispositivo. Los perfiles municipal
+  y nacional piden además un código TOTP en cada dispositivo, salvo al fiscal, que solo ve su mesa.
+- En iPhone, la app instalada arranca con su propio almacenamiento vacío: entra con un número de 8 cifras, de un solo uso y 15 minutos.
 
 ## Formato de padrón
 

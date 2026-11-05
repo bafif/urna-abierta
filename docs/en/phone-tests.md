@@ -10,8 +10,8 @@ Nothing has to be published. The test app uses invented people and never sends a
 deploy/serve.sh
 ```
 
-Open `http://localhost:8090` in the browser of the computer and turn on device mode with F12. This is good for trying the
-interface, not for learning what a real phone does.
+It gives you a link per role. Open the poll watcher's in the browser of the computer and turn on device mode with F12. This is good
+for trying the interface, not for learning what a real phone does.
 
 ## Android, on an emulator
 
@@ -20,7 +20,7 @@ deploy/android-emulator.sh
 ```
 
 The first time it downloads about 5.5 GB and accepts the licenses of the Android SDK. A window opens with the phone: in its
-Chrome, open `http://localhost:8090`. To cut the signal, turn on airplane mode and run:
+Chrome, open the link `deploy/serve.sh` gave you. To cut the signal, turn on airplane mode and run:
 
 ```sh
 ~/.local/share/urna-abierta/android-sdk/platform-tools/adb reverse --remove-all
@@ -41,16 +41,16 @@ ADB=~/.local/share/urna-abierta/android-sdk/platform-tools/adb node apps/web/e2e
 There is no iPhone emulator for Linux: Apple's only runs on a Mac. The WebKit tests are the closest thing, but they reproduce
 neither the installation nor the Safari rule that deletes a site's data after 7 days of use without visiting it.
 
-That is why the iPhone gets tested in stage 4, when there is a server with HTTPS and opening its address is enough. Meanwhile,
-the risk is limited: a three-day election, with the table prepared the day before, does not reach those 7 days. If it still
+That is why the iPhone gets tested with a server with HTTPS, where opening the link is enough. **That test is pending.** Meanwhile, the
+risk is limited: a three-day election, with the table prepared the day before, does not reach those 7 days. If it still
 loses data, what was sent remains on the server and the poll watcher prepares the table again.
 
 At that point, these are the steps:
 
 | When | What to do | What must happen |
 |---|---|---|
-| Day 1, with signal | Open the address, tap Share and **Add to Home Screen**, and open it from the icon | **Installed** says “yes” |
-| Day 1 | Tap **Prepare table** | Check whether **Protected storage** says “yes” |
+| Day 1, with signal | Open the link, tap **Prepare the table**, follow the steps to add it to the home screen and open it from the icon | It gets in with the number it showed. In **Settings**, **Installed** says “yes” |
+| Day 1 | Tap **Prepare the table** | In **Settings**, check whether **Protected storage** says “yes” |
 | Day 1 | Turn on airplane mode, close the app and open it | It opens anyway |
 | Day 1 | Cross out 20 people and restart the phone | They remain crossed out and **Data intact** says “yes” |
 | Day 9 | Open it, not having opened it before | Everything is still there |
