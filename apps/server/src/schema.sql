@@ -152,6 +152,13 @@ CREATE TABLE IF NOT EXISTS semaphore_marks (
   FOREIGN KEY (election_id, elector_id) REFERENCES electors (election_id, id) ON DELETE CASCADE
 );
 
+-- The fonts of a party's themes. Apart, because the themes go to every phone each time it opens.
+CREATE TABLE IF NOT EXISTS theme_fonts (
+  sha256 text PRIMARY KEY,
+  media_type text NOT NULL,
+  data bytea NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id bigserial PRIMARY KEY,
   at timestamptz NOT NULL DEFAULT now(),

@@ -7,7 +7,7 @@ import type pg from 'pg';
 import { foldText, isRole, isSecurityProfile, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 import { audit, authenticated, can, forgetActors, getSetting, requires, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
-import { addTheme, createInvitation } from './routes-auth.ts';
+import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
 const MAX_ROLL_BYTES = 64 * 1024 * 1024;
 const STATS_ROLE_DAYS = 90;
@@ -30,7 +30,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** Themes a party adds. Each has to pass the same reading check as the ones that come with the app. */
-  app.put<{ Body: { theme?: unknown } }>('/api/themes', { preHandler: manageElection, bodyLimit: 1024 * 1024 }, async (request, reply) => {
+  app.put<{ Body: { theme?: unknown } }>('/api/themes', { preHandler: manageElection, bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
     const { theme } = request.body ?? {};
     const problems = themeProblems(theme);
     if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });

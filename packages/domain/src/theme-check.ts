@@ -49,6 +49,40 @@ export function contrastReport(theme: any, mode: ThemeMode): ContrastReport {
   return report;
 }
 
+/** The fonts that come with the app. Any other has to come inside the theme. */
+export const BUILT_IN_FONTS = ['Atkinson Hyperlegible Next', 'Anton', 'Barlow Condensed', 'Poppins', 'Onest Variable', 'Gabarito Variable', 'Archivo Variable', 'Nunito Variable'];
+const SYSTEM_FONTS = ['system-ui', 'sans-serif', 'serif', 'monospace', 'ui-monospace', 'ui-sans-serif', 'ui-serif', 'cursive'];
+export const MAX_THEME_FONTS = 24;
+export const MAX_THEME_FONT_BYTES = 16 * 1024 * 1024;
+
+const FONT_NAME = /^[\p{L}\p{N} _-]{1,60}$/u;
+const FONT_WEIGHT = /^\d{1,4}( \d{1,4})?$/;
+const FONT_STRETCH = /^\d{1,3}%( \d{1,3}%)?$/;
+const FONT_DATA = /^data:font\/(woff2|woff|ttf|otf);base64,([A-Za-z0-9+/]+={0,2})$/;
+/** The first bytes of each format: a file renamed as a font does not get in. */
+const FONT_SIGNATURES = ['wOF2', 'wOFF', '\u0000\u0001\u0000\u0000', 'OTTO', 'true'];
+
+function fontProblems(fonts: unknown): string[] {
+  if (fonts === undefined) return [];
+  if (!Array.isArray(fonts) || fonts.length > MAX_THEME_FONTS) return [`se pueden incluir hasta ${MAX_THEME_FONTS} archivos de letras`];
+  let bytes = 0;
+  for (const font of fonts) {
+    if (!font || typeof font.familia !== 'string' || !FONT_NAME.test(font.familia)) return ['una letra tiene un nombre que no se puede usar'];
+    const name = font.familia;
+    if (font.peso !== undefined && !FONT_WEIGHT.test(String(font.peso))) return [`la letra ${name} tiene un peso que no se puede usar`];
+    if (font.estilo !== undefined && !['normal', 'italic'].includes(font.estilo)) return [`la letra ${name} tiene un estilo que no se puede usar`];
+    if (font.ancho !== undefined && !FONT_STRETCH.test(String(font.ancho))) return [`la letra ${name} tiene un ancho que no se puede usar`];
+    const data = typeof font.datos === 'string' ? FONT_DATA.exec(font.datos) : null;
+    if (!data) return [`la letra ${name} no viene adentro del archivo`];
+    if (!FONT_SIGNATURES.includes(atob(data[2]!.slice(0, 8)).slice(0, 4))) return [`el archivo de la letra ${name} no es una letra`];
+    bytes += (data[2]!.length * 3) / 4;
+  }
+  return bytes > MAX_THEME_FONT_BYTES ? [`las letras pesan demasiado: el máximo es ${MAX_THEME_FONT_BYTES / 1024 / 1024} MB`] : [];
+}
+
+/** The first font of what a theme asks for: if that one is missing, the theme does not look like itself. */
+const firstFamily = (value: unknown) => (typeof value === 'string' ? (value.split(',')[0] ?? '').trim().replace(/^["']|["']$/g, '') : '');
+
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 const COLOR_KEYS = ['fondo', 'superficie', 'superficie2', 'texto', 'suave', 'linea', 'margen', 'primario', 'sobrePrimario', 'acento', 'marca', 'peligro', 'sobrePeligro', 'peligroFondo', 'peligroTexto', 'bien', 'bienFondo'];
 /** What a theme writes ends up in a style attribute, so it can only be plain values. */
@@ -74,10 +108,17 @@ export function themeProblems(theme: any): string[] {
       if (typeof theme[mode][key] !== 'string' || !COLOR.test(theme[mode][key])) problems.push(`${mode}: ${key} no es un color`);
     }
   }
-  const { idea: _idea, nombre: _nombre, logo: _logo, ...styled } = theme;
+  const { idea: _idea, nombre: _nombre, logo: _logo, archivosFuentes: _fonts, ...styled } = theme;
   walk(styled, (text) => {
     if (!PLAIN_VALUE.test(text)) problems.push('tiene un valor que no se puede usar');
   });
+  problems.push(...fontProblems(theme.archivosFuentes));
+  if (problems.length > 0) return [...new Set(problems)];
+  const included = (theme.archivosFuentes ?? []).map((font: { familia: string }) => font.familia);
+  for (const value of Object.values(theme.fuentes)) {
+    const family = firstFamily(value);
+    if (family && !BUILT_IN_FONTS.includes(family) && !SYSTEM_FONTS.includes(family) && !included.includes(family)) problems.push(`la letra ${family} no viene con la app ni adentro del archivo`);
+  }
   if (problems.length > 0) return [...new Set(problems)];
   for (const mode of ['claro', 'oscuro'] as const) {
     problems.push(...contrastReport(theme, mode).problems.map((problem) => `${mode}: ${problem}`));

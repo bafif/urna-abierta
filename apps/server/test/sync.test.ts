@@ -426,6 +426,32 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await app.inject({ url: '/api/public' })).json().themes[0].id).toBe('propio');
     });
 
+    it('the fonts come in the same file, and each phone asks for them apart, once', async () => {
+      const colors = Object.fromEntries(['superficie', 'superficie2', 'linea', 'margen', 'sobrePrimario', 'sobrePeligro', 'bienFondo', 'fondo', 'peligroFondo'].map((k) => [k, '#ffffff']).concat([['texto', '#101010'], ['suave', '#555555'], ['primario', '#101010'], ['acento', '#101010'], ['marca', '#101010'], ['peligro', '#a00000'], ['peligroTexto', '#a00000'], ['bien', '#0a5a2a']]));
+      const bytes = Buffer.from(`wOF2${'x'.repeat(300_000)}`);
+      const base = { nombre: 'Con letras', fuentes: { titulo: "'Mi Letra'" }, forma: { radio: '8px' }, recetas: { tachado: 'linea', cabecera: 'simple' }, claro: colors, oscuro: colors };
+      const theme = { ...base, id: 'con-letras', archivosFuentes: [{ familia: 'Mi Letra', peso: '400', datos: `data:font/woff2;base64,${bytes.toString('base64')}` }] };
+      expect((await call('coordinacion', 'PUT', '/api/themes', { theme })).statusCode).toBe(200);
+
+      const open = await app.inject({ url: '/api/public' });
+      expect(open.body.length).toBeLessThan(5_000);
+      const font = open.json().themes.find((item: { id: string }) => item.id === 'con-letras').archivosFuentes[0];
+      expect(font).toMatchObject({ familia: 'Mi Letra', peso: '400' });
+      expect(font.datos).toBeUndefined();
+
+      const got = await app.inject({ url: `/api/theme-fonts/${font.sha256}` });
+      expect(got.statusCode).toBe(200);
+      expect(got.rawPayload.equals(bytes)).toBe(true);
+      expect(got.headers['content-type']).toContain('font/woff2');
+      expect(got.headers['cache-control']).toContain('immutable');
+      expect((await app.inject({ url: '/api/theme-fonts/nada' })).statusCode).toBe(400);
+
+      // Replacing the theme takes away the font that nothing uses anymore.
+      const other = Buffer.from(`wOF2${'y'.repeat(1000)}`);
+      await call('coordinacion', 'PUT', '/api/themes', { theme: { ...theme, archivosFuentes: [{ familia: 'Mi Letra', datos: `data:font/woff2;base64,${other.toString('base64')}` }] } });
+      expect((await app.inject({ url: `/api/theme-fonts/${font.sha256}` })).statusCode).toBe(404);
+    });
+
     it('the theme of the installer gets in with the installation code, and only until the first administrator', async () => {
       const theme = { id: 'desde-instalador', nombre: 'Desde el instalador', fuentes: { titulo: 'Poppins' }, forma: { radio: '8px' }, recetas: { tachado: 'linea', cabecera: 'simple' } };
       const colors = Object.fromEntries(['superficie', 'superficie2', 'linea', 'margen', 'sobrePrimario', 'sobrePeligro', 'bienFondo', 'fondo', 'peligroFondo'].map((k) => [k, '#ffffff']).concat([['texto', '#101010'], ['suave', '#555555'], ['primario', '#101010'], ['acento', '#101010'], ['marca', '#101010'], ['peligro', '#a00000'], ['peligroTexto', '#a00000'], ['bien', '#0a5a2a']]));
