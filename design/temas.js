@@ -7,7 +7,7 @@ window.TEMAS.push(
   {
     id: 'aula',
     nombre: 'Aula',
-    idea: 'Se vota en escuelas. De día es un cuaderno rayado, con el número en el margen y una lapicera que tacha de verdad. De noche es un pizarrón. Es el tema por defecto: la letra está hecha para quien ve poco.',
+    idea: 'Se vota en escuelas. De día es un cuaderno rayado, con el número en el margen y una línea de lapicera para tachar. De noche es un pizarrón. Es el tema por defecto: la letra está hecha para quien ve poco.',
     fuentes: {
       titulo: "'Atkinson Hyperlegible Next'",
       texto: "'Atkinson Hyperlegible Next'",
