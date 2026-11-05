@@ -4,7 +4,7 @@
   import Pantalla from '../components/Pantalla.svelte';
   import SyncLine from '../components/SyncLine.svelte';
   import VirtualList from '../components/VirtualList.svelte';
-  import { app } from '../app.svelte.ts';
+  import { app, shownDocument } from '../app.svelte.ts';
   import { t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
 
@@ -82,7 +82,7 @@
           <button class="fila" class:tachada={done} data-testid={done ? 'person-done' : 'person'} disabled={app.noRoom || done} onclick={() => mark(entry)}>
             <span class="num">{entry.order}</span>
             <span class="nombre"><span class="nombre-t">{entry.name}</span></span>
-            <span class="doc">…{entry.documentSuffix}</span>
+            <span class="doc">{shownDocument(entry.documentSuffix)}</span>
           </button>
         {/snippet}
       </VirtualList>

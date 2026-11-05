@@ -50,7 +50,7 @@ label.boton { text-align: center; }
 .mes-nav button { min-width: 54px; min-height: 48px; background: none; border: 0; font-size: 26px !important; cursor: pointer; }
 
 .qr { padding: 12px; background: #fff; border-radius: var(--radio); align-self: center; width: min(220px, 62vw); line-height: 0; }
-.qr :global(svg), .qr svg { width: 100%; height: auto; display: block; }
+.qr svg { width: 100%; height: auto; display: block; }
 .codigo { font-family: var(--f-numero); font-size: 34px; font-weight: 700; letter-spacing: 0.04em; text-align: center; margin: 0; font-variant-numeric: tabular-nums; color: var(--acento); overflow-wrap: anywhere; }
 .codigo.chico { font-size: 20px; letter-spacing: 0; }
 .foto-acta { flex: 1; min-height: 0; width: 100%; object-fit: contain; border-radius: var(--radio); background: var(--superficie2); }

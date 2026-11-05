@@ -76,6 +76,9 @@ export function localDay(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** The ellipsis says that digits are missing, so it only goes when some are. */
+export const shownDocument = (suffix: string) => (suffix.length <= 4 && suffix ? `…${suffix}` : suffix);
+
 /** Keeps a photo of the tally sheet readable and light enough to go out with little signal. */
 async function shrink(file: Blob): Promise<Blob> {
   const work = (async () => {

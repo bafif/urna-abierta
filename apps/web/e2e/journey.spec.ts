@@ -165,7 +165,7 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   // Whoever coordinates sees it, and what needs someone comes first.
   await button(page, 'Ver cómo va').click();
   await expect(page.getByRole('heading')).toHaveText('2 mesas te necesitan');
-  await expect(page.getByText('Las otras 1 andan bien.')).toBeVisible();
+  await expect(page.getByText('La otra anda bien.')).toBeVisible();
   await button(page, 'Ver esas mesas').click();
   await page.locator('.fila-mesa').first().click();
   await expect(page.getByTestId('voted')).toHaveText('3');
