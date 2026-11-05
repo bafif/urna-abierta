@@ -12,6 +12,7 @@
 | Database | Postgres, with a versioned SQL schema |
 | Tally sheet photos | Server disk; S3 compatible as an option |
 | Installation | `compose` with app, Postgres and Caddy (automatic TLS) |
+| Installer | Desktop app for Windows, macOS and Linux, published on GitHub Releases |
 | Scanner | Python CLI, with local text recognition |
 
 I chose a PWA to avoid depending on app stores or a central account: each party serves it from its own domain, and poll
@@ -44,21 +45,32 @@ These plans change often. Each guide carries the date it was checked and links t
 
 ## Installation and landing page
 
-This is a proposal. The landing page is a static page that presents the app and explains how to install it; there is nothing
-to download to a computer and no version hosted by the project.
+The landing page is a static page that presents the app and links to a GitHub release, with a desktop installer for Windows,
+macOS and Linux. There is no version hosted by the project: it would hold the data of the parties, and I would become a data
+processor.
 
-1. The party administrator creates a free cloud account and a server, following the guide on the landing page.
-2. When creating the server, they paste a block of text into its startup field (“user data” on AWS and Oracle, “startup
-   script” on Google). That installs everything by itself.
-3. A few minutes later they open `https://<IP>`, and an assistant sets up the party: name, type of election, security values,
-   their user and the liability notice.
+1. The party administrator downloads the installer and creates a free cloud account, following the guide.
+2. The installer generates an SSH key. The administrator pastes it when creating the server, and copies its IP into the
+   installer.
+3. The installer connects over SSH, installs and configures everything, and opens `https://<IP>`, where the party gets set up:
+   name, type of election, security values, their user and the liability notice.
 4. From there they create the accounts and send each poll watcher their link or QR code.
 
-I ruled out the other two options:
+That leaves one path for the three providers, and the installer never handles the party's cloud credentials.
 
-- **Desktop installer:** it needs signed versions for each system, and it would have to handle the party's cloud credentials.
-- **Central web app with accounts:** the project would host the data of the parties, and the author would become a data
-  processor. The plan rules that out from the start.
+### Signing
+
+No signature may show my legal name, so I rule out certificates in my own name and Apple notarization.
+
+| System | What is published | What the person installing sees |
+|---|---|---|
+| Windows | Unsigned. Once there is a release, I apply for the free signature of SignPath Foundation, whose certificate is in the foundation's name | SmartScreen warns: “More info” and “Run anyway” |
+| macOS | Ad-hoc signature, which identifies nobody | macOS blocks it the first time: Settings, Privacy & Security, “Open Anyway” |
+| Linux | AppImage | No warning |
+
+Since an unsigned installer is easy to fake, each release publishes its SHA-256 and a GitHub attestation, which ties it to the
+repository and the build process, not to a person. The guide explains each warning, with screenshots, so that nobody skips them
+blindly.
 
 ## Without signal, and sync
 
@@ -141,13 +153,14 @@ chosen, never guessed. The code is in English.
 ## Stages
 
 1. **Risk test:** Android emulator, OCR on real rolls and measuring at 1 GB.
-2. **Core:** format and validator, import, tables, login, poll watcher view and basic permissions.
+2. **Core:** visual design, approved before building the screens; format and validator, import, tables, login, poll watcher
+   view and basic permissions.
 3. **Full election day:** irregularities, daily envelope count, count with photo, chief panel, schedule, several days and
    practice mode.
 4. **Compliance:** traffic light, full permissions, audit, security profiles, legal tools, purge, installer, backups and
    server guides. This is also when a real iPhone gets tested, because there is a server with HTTPS by then.
 5. **Dry run** with real people and invented data, including restoring a backup on another server.
-6. **Landing page:** a static site, with no analytics, forms or cookies, to promote the app and guide whoever installs it.
+6. **Landing page:** a static site, with no analytics, forms or cookies, to promote the app and link to the installer.
 
 ## Stage 1 measurements
 

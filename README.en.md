@@ -8,6 +8,8 @@ or a small party can watch an election easily, without depending on a huge organ
 Each party installs it on its own server. The project never touches any data: there is no central server, no hosting
 and no telemetry.
 
+This is a personal project of mine: it does not belong to any party or group.
+
 ## Status
 
 It is in its first stage, where I test the riskiest parts before building the rest. What exists today is a test version

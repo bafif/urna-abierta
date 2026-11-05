@@ -8,6 +8,8 @@ una agrupación estudiantil o a un partido chico le resulte fácil fiscalizar, s
 Cada partido la instala en su propio servidor. El proyecto nunca toca datos: no hay servidor central, hosting ni
 telemetría.
 
+Es un proyecto personal mío: no pertenece a ningún partido ni agrupación.
+
 ## Estado
 
 Está en su primera etapa, en la que pruebo lo más riesgoso antes de construir el resto. Lo que hay hoy es una versión de

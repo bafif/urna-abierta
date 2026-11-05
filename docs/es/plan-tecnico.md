@@ -12,6 +12,7 @@
 | Base de datos | Postgres, con esquema SQL versionado |
 | Fotos de actas | Disco del servidor; S3 compatible como opción |
 | Instalación | `compose` con app, Postgres y Caddy (TLS automático) |
+| Instalador | App de escritorio para Windows, macOS y Linux, publicada en GitHub Releases |
 | Escáner | CLI en Python, con reconocimiento de texto local |
 
 Elegí una PWA para no depender de tiendas ni de una cuenta central: cada partido la sirve desde su propio dominio y el
@@ -44,22 +45,30 @@ Estos planes cambian seguido. Cada guía lleva la fecha en que se verificó y en
 
 ## Instalación y landing
 
-Es una propuesta. La landing es una página estática que presenta la app y explica cómo instalarla; no hay nada que bajar a la
-PC ni una versión alojada por el proyecto.
+La landing es una página estática que presenta la app y enlaza a un release de GitHub, con un instalador de escritorio para
+Windows, macOS y Linux. No hay una versión alojada por el proyecto: alojaría los datos de los partidos, y yo pasaría a ser
+encargado del tratamiento.
 
-1. El administrador del partido crea su cuenta gratuita en la nube y un servidor, siguiendo la guía de la landing.
-2. Al crear el servidor pega un bloque de texto en su campo de inicio («user data» en AWS y Oracle, «startup script» en
-   Google). Eso instala todo solo.
-3. Unos minutos después entra a `https://<IP>`, y un asistente configura el partido: nombre, tipo de elección, valores de
-   seguridad, su usuario y el aviso de responsabilidad.
+1. El administrador del partido baja el instalador y crea su cuenta gratuita en la nube, siguiendo la guía.
+2. El instalador genera una llave SSH. El administrador la pega al crear el servidor, y copia su IP en el instalador.
+3. El instalador entra por SSH, instala y configura todo, y abre `https://<IP>`, donde se completa el partido: nombre, tipo de
+   elección, valores de seguridad, su usuario y el aviso de responsabilidad.
 4. Desde ahí crea las cuentas y le manda a cada fiscal su link o QR.
 
-Descarté las otras dos opciones:
+Así hay un solo camino para los tres proveedores, y el instalador nunca maneja las credenciales de la nube del partido.
 
-- **Instalador de escritorio:** hacen falta versiones firmadas para cada sistema, y tendría que manejar las credenciales de
-  la nube del partido.
-- **App web central con cuenta:** el proyecto alojaría los datos de los partidos, y el autor pasaría a ser encargado del
-  tratamiento. El plan lo descarta desde el principio.
+### Firma
+
+Ninguna firma puede mostrar mi nombre legal, así que descarto los certificados a nombre propio y la notarización de Apple.
+
+| Sistema | Qué se publica | Qué ve quien instala |
+|---|---|---|
+| Windows | Sin firmar. Cuando haya un release, se pide la firma gratuita de SignPath Foundation, cuyo certificado va a nombre de la fundación | SmartScreen avisa: «Más información» y «Ejecutar de todas formas» |
+| macOS | Firma ad-hoc, que no identifica a nadie | macOS lo bloquea la primera vez: Ajustes, Privacidad y seguridad, «Abrir igual» |
+| Linux | AppImage | Sin aviso |
+
+Como un instalador sin firmar es fácil de falsificar, cada release publica su SHA-256 y una atestación de GitHub, que lo ata al
+repo y al proceso de compilación, no a una persona. La guía explica cada aviso, con capturas, para que nadie los salte a ciegas.
 
 ## Sin señal y sincronización
 
@@ -139,14 +148,15 @@ nunca se adivina. El código va en inglés.
 ## Etapas
 
 1. **Prueba de riesgos:** emulador de Android, OCR sobre padrones reales y medición con 1 GB.
-2. **Núcleo:** formato y validador, importación, mesas, login, vista del fiscal y permisos básicos.
+2. **Núcleo:** diseño visual, que se aprueba antes de construir las pantallas; formato y validador, importación, mesas, login,
+   vista del fiscal y permisos básicos.
 3. **Jornada completa:** irregularidades, conteo diario de sobres, escrutinio con foto, panel del jefe, cronograma, varios días
    y modo práctica.
 4. **Cumplimiento:** semáforo, permisos completos, auditoría, perfiles de seguridad, herramientas de la ley, purga,
    instalador, backups y guías de servidor. Es también cuando se prueba un iPhone de verdad, porque ya hay un servidor con
    HTTPS.
 5. **Simulacro** con personas reales y datos falsos, incluido restaurar un backup en otro servidor.
-6. **Landing:** un sitio estático, sin analíticas, formularios ni cookies, para publicitar la app y guiar a quien la instala.
+6. **Landing:** un sitio estático, sin analíticas, formularios ni cookies, para publicitar la app y enlazar al instalador.
 
 ## Mediciones de la etapa 1
 
