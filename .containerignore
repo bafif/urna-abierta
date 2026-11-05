@@ -2,8 +2,17 @@
 **/build
 **/.svelte-kit
 **/test-results
+**/dist
 .git
-privado
+# Work folders of editors and tools can live inside the repo, with files of other users.
+.claude
+# Nothing private goes to a build, wherever it is.
+**/privado
 *.pdf
 *.padron
 *.jsonl
+# The images only need the app, the server and the domain.
+apps/installer
+design
+docs
+landing
