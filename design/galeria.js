@@ -72,8 +72,8 @@
 
   /** In the installer: every theme, seen in both modes before choosing. */
   const selectorInstalador = (tema) => `<div class="vista-doble">
-      <div class="opciones" data-grupo>${TEMAS.map((t) => `<button class="opcion ${t.id === tema.id ? 'elegida' : ''}" data-opcion data-previa="${t.id}"><span class="radio"></span><span><strong>${t.nombre}</strong></span></button>`).join('')}
-        <button class="enlace">Crear uno propio</button>
+      <div class="opciones" data-grupo>${TEMAS.filter((t) => !t.privado).map((t) => `<button class="opcion ${t.id === tema.id ? 'elegida' : ''}" data-opcion data-previa="${t.id}"><span class="radio"></span><span><strong>${t.nombre}</strong></span></button>`).join('')}
+        <button class="enlace">Usar un tema propio</button>
       </div>
       <div class="vistas-previas" data-vistas>${vistasPrevias(tema)}</div>
     </div>`;

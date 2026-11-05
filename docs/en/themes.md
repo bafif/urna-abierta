@@ -13,9 +13,12 @@ A theme is data: colors for each mode, fonts, shapes and a few recipes. It has n
    node design/tema-a-archivo.mjs my-theme.js my-theme.json
    ```
 
-4. In the app, go to **More**, **Settings**, **Add your own theme**, and choose that file.
+4. Load it:
+   - **When installing:** in the step about how it looks, drag the file onto the window or tap **Use your own theme**. You see it in light and dark
+     before moving on, and it is what your whole party sees when they get in.
+   - **With the app already installed:** go to **More**, **Settings**, **Add your own theme**, and choose that file.
 
-From then on, anyone in your party can choose it. With the same `id`, it replaces the previous one.
+Own themes do not come with the app or the installer: they only travel from your computer to your server. From then on, anyone in your party can choose it. With the same `id`, it replaces the previous one.
 
 ## The recipes
 
