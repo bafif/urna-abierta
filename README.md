@@ -89,7 +89,7 @@ La primera prueba real es una elección universitaria, en abril de 2027.
 
 Lo hago yo, **Bautista D. Fiori**. Si querés usarla en tu elección o sumarte, escribime.
 
-[GitHub](https://github.com/bafif)
+[LinkedIn](https://www.linkedin.com/in/b-d-fiori/) · [GitHub](https://github.com/bafif)
 
 ## Licencia
 

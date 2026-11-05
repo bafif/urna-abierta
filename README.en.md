@@ -91,7 +91,7 @@ The first real test is a university election, in April 2027.
 
 Made by me, **Bautista D. Fiori**. If you want to use it in your election or join in, write to me.
 
-[GitHub](https://github.com/bafif)
+[LinkedIn](https://www.linkedin.com/in/b-d-fiori/) · [GitHub](https://github.com/bafif)
 
 ## License
 

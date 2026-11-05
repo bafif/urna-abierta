@@ -110,7 +110,7 @@ thinking of older eyes.
 | Tablero | No ornaments: the number rules, like a results board |
 | Mate | The calmest: round shapes, and whoever voted moves aside with a tick |
 
-All the themes are included. They are chosen with a preview at two moments: in the installer, the one the whole party sees when
+All the themes are included, with Aula preselected. They are chosen with a preview at two moments: in the installer, the one the whole party sees when
 joining; and the first time someone opens the app, on a phone or a computer, where they can change it for themselves with one tap.
 
 Fonts travel with the app, because it has to work without signal, and all of them are under the OFL.
