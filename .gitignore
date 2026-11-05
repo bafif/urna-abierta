@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.svelte-kit/
+.env
+test-results/
+playwright-report/
+
+# Los padrones reales nunca entran al repo.
+*.pdf
+*.padron
+*.jsonl
+/privado/
