@@ -13,9 +13,12 @@ Un tema son datos: colores para cada modo, letras, formas y unas pocas recetas. 
    node design/tema-a-archivo.mjs mi-tema.js mi-tema.json
    ```
 
-4. En la app, entrá a **Más cosas**, **Ajustes**, **Agregar un tema propio**, y elegí ese archivo.
+4. Cargalo:
+   - **Al instalar:** en el paso de cómo se ve, arrastrá el archivo a la ventana o tocá **Usar un tema propio**. Lo ves en claro y en oscuro antes
+     de seguir, y es el que va a ver todo tu partido al entrar.
+   - **Con la app ya instalada:** entrá a **Más cosas**, **Ajustes**, **Agregar un tema propio**, y elegí ese archivo.
 
-A partir de ahí, cualquiera de tu partido lo puede elegir. Si usás el mismo `id`, reemplaza al anterior.
+Los temas propios no vienen con la app ni con el instalador: viajan solo de tu computadora a tu servidor. A partir de ahí, cualquiera de tu partido lo puede elegir. Si usás el mismo `id`, reemplaza al anterior.
 
 ## Las recetas
 
