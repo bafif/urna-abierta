@@ -11,8 +11,7 @@ Set aside two hours.
 ## Prepare
 
 - [ ] Install on a new server, with the installer. Note how long it took.
-- [ ] Build the invented roll: `deploy/serve.sh` does not work for this, because it uses a test database. Generate a CSV with invented
-      names and documents starting with 99.
+- [ ] Build the invented roll: `node deploy/padron-inventado.mjs 350 > roll.csv`. Do not use `deploy/serve.sh`, which is a test database.
 - [ ] Create the whole election from the app: party, team, days, lists, roll, tables.
 - [ ] Send the invitations through the channel you actually use.
 

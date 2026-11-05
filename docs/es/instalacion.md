@@ -42,7 +42,7 @@ decidís después. Usar tu propia IA todavía no está disponible. Hoy el [lecto
 se usa desde una terminal y arma el archivo `.padron` que se sube a la app. La app también acepta una planilla CSV.
 
 **3. ¿Cómo querés que se vea?** Elegís uno de los temas, viéndolos antes en claro y en oscuro. Cada persona lo puede cambiar después en
-su teléfono.
+su teléfono. También podés [hacer el tuyo](temas.md).
 
 Al terminar te da la dirección de tu servidor y una llave de recuperación para las copias de seguridad, y abre la app. Ahí sigue un
 asistente para el partido, el equipo y la primera elección.
