@@ -124,11 +124,13 @@ CREATE TABLE IF NOT EXISTS tally_decisions (
   PRIMARY KEY (table_id, category)
 );
 
+-- By table too: two tables can send the same picture, and each one has to find its own.
 CREATE TABLE IF NOT EXISTS photos (
-  sha256 text PRIMARY KEY,
+  sha256 text NOT NULL,
   table_id text NOT NULL REFERENCES polling_tables (id) ON DELETE CASCADE,
   bytes integer NOT NULL,
-  received_at timestamptz NOT NULL DEFAULT now()
+  received_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (sha256, table_id)
 );
 
 CREATE TABLE IF NOT EXISTS semaphore_categories (

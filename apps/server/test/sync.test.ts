@@ -258,12 +258,15 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = (await import('node:crypto')).createHash('sha256').update(bytes).digest('hex');
       process.env.URNA_PHOTOS_DIR = '/tmp/urna-fotos-prueba';
-      const put = (who: string, hash: string) => app.inject({ method: 'PUT', url: `/api/tables/${table}/photos/${hash}`, payload: bytes, headers: { authorization: `Bearer ${tokens[who]}`, 'content-type': 'image/jpeg' } });
+      const put = (who: string, hash: string, where = table) => app.inject({ method: 'PUT', url: `/api/tables/${where}/photos/${hash}`, payload: bytes, headers: { authorization: `Bearer ${tokens[who]}`, 'content-type': 'image/jpeg' } });
       expect((await put('fiscal', 'a'.repeat(64))).statusCode).toBe(400);
       expect((await put('otra', sha)).statusCode).toBe(403);
       expect((await put('fiscal', sha)).statusCode).toBe(200);
       expect((await call('otra', 'GET', `/api/tables/${table}/photos/${sha}`)).statusCode).toBe(403);
       expect((await call('jefe', 'GET', `/api/tables/${table}/photos/${sha}`)).body).toBe('foto de prueba');
+      // The same picture sent from another table belongs to that one as well.
+      expect((await put('otra', sha, demo.tables[1]!.table)).statusCode).toBe(200);
+      expect((await call('otra', 'GET', `/api/tables/${demo.tables[1]!.table}/photos/${sha}`)).body).toBe('foto de prueba');
     });
   });
 
