@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { uuidv7, writePadron, type Operation } from '@urna-abierta/domain';
-import { totpCode } from '../src/actor.ts';
+import { forgetActors, totpCode } from '../src/actor.ts';
 import { buildApp, migrate, seedDemo } from '../src/app.ts';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -302,8 +302,29 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await call('coordinacion', 'POST', `/api/users`, { name: 'x', role: 'sistema' });
       await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"nacional"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
       await pool.query('UPDATE devices SET second_factor_at = now()');
+      forgetActors();
       const res = await upload(id, writePadron({ electors: people(2) as never, externalAi: true }));
       expect(res.json().error).toBe('external_ai_forbidden');
+    });
+  });
+
+  describe('backups', () => {
+    it('only whoever looks after the system can list and download them, by exact name', async () => {
+      const { mkdtemp, writeFile } = await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const folder = await mkdtemp(join(tmpdir(), 'urna-copias-'));
+      await writeFile(join(folder, 'urna-20270406-120000.tar.gpg'), 'cifrado');
+      await writeFile(join(folder, 'otra-cosa.txt'), 'no');
+      process.env.URNA_BACKUPS_DIR = folder;
+      expect((await call('coordinacion', 'GET', '/api/backups')).statusCode).toBe(403);
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
+      tokens.sistema = await redeem(invitation);
+      const { backups } = (await call('sistema', 'GET', '/api/backups')).json();
+      expect(backups.map((item: { name: string }) => item.name)).toEqual(['urna-20270406-120000.tar.gpg']);
+      expect((await call('sistema', 'GET', '/api/backups/urna-20270406-120000.tar.gpg')).body).toBe('cifrado');
+      expect((await call('sistema', 'GET', '/api/backups/otra-cosa.txt')).statusCode).toBe(400);
+      expect((await call('sistema', 'GET', '/api/backups/..%2F..%2Fetc%2Fpasswd')).statusCode).toBe(400);
     });
   });
 

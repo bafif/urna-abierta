@@ -4,7 +4,7 @@ import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
 import { audit, can, canReachTable, requires, seal, unseal } from './actor.ts';
 
-const SUMMARY_CACHE_MS = 5_000;
+const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
 
 /** Who voted, counted in one query: a mark stands unless an undo names it. */
@@ -47,16 +47,16 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const key = `${request.actor.userId}:${request.params.id}`;
     const cached = cache.get(key);
     if (cached && Date.now() - cached.at < SUMMARY_CACHE_MS) return cached.value;
-    const [tables, votes, incidents, counts] = await Promise.all([
+    const [tables, sizes, votes, incidents, counts] = await Promise.all([
       pool.query(
         `SELECT t.id, t.name, t.place, t.last_seq,
-                (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total,
                 t.last_contact AS last_sync,
                 (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id
                  WHERE a.table_id = t.id AND a.role = 'fiscal' LIMIT 1) AS fiscal
          FROM polling_tables t WHERE t.id = ANY($1) ORDER BY t.position`,
         [scope],
       ),
+      pool.query('SELECT table_id, count(*)::int AS total FROM electors WHERE table_id = ANY($1) GROUP BY table_id', [scope]),
       votesPerTable(pool, scope),
       pool.query(
         `SELECT o.id, o.table_id, o.device_time, o.payload FROM operations o
@@ -82,9 +82,10 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         talliesDiffer: [...versions].some(([category, distinct]) => distinct.size > 1 && !settled.has(`${table}:${category}`)),
       };
     };
+    const sizeOf = new Map(sizes.rows.map((row) => [row.table_id, row.total]));
     const value = {
       tables: tables.rows.map((t) => ({
-        id: t.id, name: t.name, place: t.place, total: t.total, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal, ...needsReview(t.id),
+        id: t.id, name: t.name, place: t.place, total: sizeOf.get(t.id) ?? 0, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal, ...needsReview(t.id),
         incidents: incidents.rows.filter((i) => i.table_id === t.id).map((i) => ({ id: i.id, at: i.device_time, kind: i.payload.kind })),
       })),
     };

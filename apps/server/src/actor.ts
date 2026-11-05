@@ -23,7 +23,19 @@ export interface Actor {
 export const newToken = () => randomBytes(32).toString('base64url');
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
+/**
+ * Who each credential belongs to, remembered for a moment: phones ask all day, and a small server
+ * should not read the same rows each time. There is one process, so whatever changes people, roles
+ * or devices clears it right away. The limit only covers roles that expire by themselves.
+ */
+const ACTOR_MEMORY_MS = 30_000;
+const actors = new Map<string, { until: number; actor: Actor }>();
+export const forgetActors = () => actors.clear();
+
 export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | null> {
+  const key = hashToken(token);
+  const known = actors.get(key);
+  if (known && known.until > Date.now()) return known.actor;
   const found = await pool.query(
     `SELECT d.id AS device_id, d.second_factor_at, u.id AS user_id, u.name
      FROM devices d JOIN users u ON u.id = d.user_id
@@ -38,7 +50,10 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
     [row.user_id],
   );
   const assignments = roles.rows.filter((r) => isRole(r.role)) as Assignment[];
-  return { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, assignments, roles: [...new Set(assignments.map((a) => a.role))] };
+  const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, assignments, roles: [...new Set(assignments.map((a) => a.role))] };
+  if (actors.size > 5_000) actors.clear();
+  actors.set(key, { until: Date.now() + ACTOR_MEMORY_MS, actor });
+  return actor;
 }
 
 declare module 'fastify' {

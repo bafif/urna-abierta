@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { readdir, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, isRole, isSecurityProfile, readCsvRoll, readPadron, SECURITY_PROFILES, themeProblems, type PadronRead } from '@urna-abierta/domain';
-import { audit, authenticated, can, getSetting, requires, setSetting } from './actor.ts';
+import { audit, authenticated, can, forgetActors, getSetting, requires, setSetting } from './actor.ts';
+import { forgetStatuses } from './routes-sync.ts';
 import { createInvitation } from './routes-auth.ts';
 
 const MAX_ROLL_BYTES = 64 * 1024 * 1024;
@@ -43,6 +47,31 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { profile, ...SECURITY_PROFILES[profile] };
   });
 
+  // ---------- Backups ----------
+  /** They are made on the server and already encrypted. From here they can be taken somewhere else. */
+  const backupsDir = () => process.env.URNA_BACKUPS_DIR ?? '/copias';
+  const BACKUP_NAME = /^urna-\d{8}-\d{6}\.tar\.gpg$/;
+
+  app.get('/api/backups', { preHandler: requires(pool, 'security.manage') }, async () => {
+    const names = await readdir(backupsDir()).catch(() => [] as string[]);
+    const backups = await Promise.all(
+      names.filter((name) => BACKUP_NAME.test(name)).map(async (name) => {
+        const info = await stat(join(backupsDir(), name));
+        return { name, bytes: info.size, at: info.mtime.toISOString() };
+      }),
+    );
+    return { backups: backups.sort((a, b) => b.name.localeCompare(a.name)) };
+  });
+
+  app.get<{ Params: { name: string } }>('/api/backups/:name', { preHandler: requires(pool, 'security.manage') }, async (request, reply) => {
+    const { name } = request.params;
+    if (!BACKUP_NAME.test(name)) return reply.code(400).send({ error: 'invalid_name' });
+    const info = await stat(join(backupsDir(), name)).catch(() => null);
+    if (!info) return reply.code(404).send({ error: 'not_found' });
+    await audit(pool, request.actor, 'backup.downloaded', name);
+    return reply.type('application/octet-stream').header('content-disposition', `attachment; filename="${name}"`).send(createReadStream(join(backupsDir(), name)));
+  });
+
   // ---------- People ----------
   app.get('/api/users', { preHandler: manageUsers }, async () => {
     const users = await pool.query(
@@ -71,6 +100,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { role, table, unit } = request.body ?? {};
     if (!isRole(role)) return reply.code(400).send({ error: 'invalid_role' });
     await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id) VALUES ($1, $2, $3, $4, $5)', [randomUUID(), request.params.id, role, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null]);
+    forgetActors();
     await audit(pool, request.actor, 'role.added', request.params.id, { role });
     return { ok: true };
   });
@@ -85,6 +115,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     await pool.query('UPDATE users SET removed_at = now() WHERE id = $1', [request.params.id]);
     await pool.query('UPDATE devices SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [request.params.id]);
     await pool.query('DELETE FROM role_assignments WHERE user_id = $1', [request.params.id]);
+    forgetActors();
     await audit(pool, request.actor, 'user.removed', request.params.id);
     return { ok: true };
   });
@@ -140,6 +171,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (typeof status !== 'string' || STATUSES.indexOf(status) !== STATUSES.indexOf(current.rows[0].status) + 1) return reply.code(409).send({ error: 'invalid_step' });
     if (status === 'purgada') return reply.code(409).send({ error: 'use_purge' });
     await pool.query(`UPDATE elections SET status = $2, closed_at = CASE WHEN $2 = 'cerrada' THEN now() ELSE closed_at END WHERE id = $1`, [request.params.id, status]);
+    forgetStatuses();
     await audit(pool, request.actor, 'election.status', request.params.id, { status });
     return { status };
   });
@@ -280,6 +312,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (typeof fiscal === 'string') {
       await pool.query(`DELETE FROM role_assignments WHERE table_id = $1 AND role = 'fiscal'`, [request.params.table]);
       await pool.query(`INSERT INTO role_assignments (id, user_id, role, table_id) VALUES ($1, $2, 'fiscal', $3)`, [randomUUID(), fiscal, request.params.table]);
+      forgetActors();
       await audit(pool, request.actor, 'fiscal.assigned', request.params.table, { user: fiscal });
     }
     return { ok: true };
