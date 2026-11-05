@@ -27,6 +27,7 @@
   import More from '../lib/screens/More.svelte';
   import Numbers from '../lib/screens/Numbers.svelte';
   import Party from '../lib/screens/Party.svelte';
+  import Permissions from '../lib/screens/Permissions.svelte';
   import Persons from '../lib/screens/Persons.svelte';
   import Photo from '../lib/screens/Photo.svelte';
   import Review from '../lib/screens/Review.svelte';
@@ -43,7 +44,7 @@
   const SCREENS: Record<string, any> = {
     home: Home, addPerson: AddPerson, adminHome: AdminHome, alert: Alert, audit: Audit, backups: Backups, chooseTheme: ChooseTheme, district: District, districts: Districts,
     election: Election, electionNew: ElectionNew, envelopes: Envelopes, fiscalPlan: FiscalPlan, fiscales: Fiscales, installIphone: InstallIphone, invite: Invite,
-    lightCategories: LightCategories, lightHome: LightHome, more: More, numbers: Numbers, party: Party, persons: Persons, photo: Photo, review: Review, roll: Roll,
+    lightCategories: LightCategories, lightHome: LightHome, more: More, numbers: Numbers, party: Party, permissions: Permissions, persons: Persons, photo: Photo, review: Review, roll: Roll,
     rollUpload: RollUpload, security: Security, settings: Settings, tableDetail: TableDetail, tables: Tables, tally: Tally, team: Team, voted: Voted,
   };
 

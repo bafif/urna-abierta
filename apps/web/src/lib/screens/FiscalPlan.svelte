@@ -14,7 +14,7 @@
 
   const table = $derived(app.table);
   const step = $derived(app.step);
-  const days = $derived(table?.days ?? []);
+  const days = $derived(table?.shift ?? table?.days ?? []);
   const multiDay = $derived(days.length > 1);
   const pending = $derived(app.pendingCount + app.pendingPhotos);
 

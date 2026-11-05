@@ -16,6 +16,7 @@ label.boton { text-align: center; }
 .boton:disabled { opacity: 0.55; cursor: default; }
 .fila:disabled { opacity: 0.45; cursor: default; }
 .fila.tachada:disabled { opacity: 1; }
+.luz-chica { display: inline-block; width: 12px; height: 12px; margin-left: 8px; border-radius: 50%; vertical-align: middle; box-shadow: 0 0 0 1.5px var(--fondo); }
 .oculto { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 .centrado { text-align: center; }
 .separado { margin-top: 12px; }

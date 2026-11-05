@@ -2,14 +2,15 @@
   import { onMount } from 'svelte';
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
-  import { t } from '../i18n.svelte.ts';
+  import { formatDay, t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { inviteLink, session } from '../session.svelte.ts';
+  import type { ElectionSummary } from '../types.ts';
 
   interface Table {
     id: string;
     name: string;
-    fiscal: { id: string; name: string } | null;
+    fiscales: { id: string; name: string; days: string[] | null }[];
   }
   interface Pending {
     name: string;
@@ -20,16 +21,33 @@
 
   let { election }: { election: string } = $props();
   let tables = $state.raw<Table[]>([]);
+  let electionDays = $state.raw<string[]>([]);
   let pending = $state.raw<Pending[] | null>(null);
   let loaded = $state(false);
   let copied = $state(false);
 
   onMount(async () => {
-    tables = (await session.api<{ tables: Table[] }>(`/elections/${election}/tables`)).tables;
+    const [listed, all] = await Promise.all([
+      session.api<{ tables: Table[] }>(`/elections/${election}/tables`),
+      session.api<{ elections: ElectionSummary[] }>('/elections'),
+    ]);
+    tables = listed.tables;
+    electionDays = all.elections.find((item) => item.id === election)?.days ?? [];
     loaded = true;
   });
 
-  const missing = $derived(tables.filter((table) => !table.fiscal));
+  /** A shift with no days covers all of them, and a table is complete when every day has someone. */
+  const missingDays = (table: Table) => {
+    const covered = new Set(table.fiscales.flatMap((fiscal) => fiscal.days?.map((day) => day.slice(0, 10)) ?? electionDays));
+    return electionDays.filter((day) => !covered.has(day));
+  };
+  const missing = $derived(tables.filter((table) => missingDays(table).length > 0));
+  const complete = $derived(tables.filter((table) => missingDays(table).length === 0));
+  const manyDays = $derived(electionDays.length > 1);
+
+  function add(table: Table) {
+    nav.go('addPerson', { role: 'fiscal', table: table.id, label: t('fiscales.who', { table: table.name }), electionDays, freeDays: missingDays(table) });
+  }
 
   async function inviteAll() {
     pending = (await session.api<{ invitations: Pending[] }>(`/elections/${election}/invitations`, { method: 'POST' })).invitations;
@@ -61,19 +79,20 @@
     {/snippet}
   </Pantalla>
 {:else}
-  <Pantalla accion="equipo" volver ojo={t('fiscales.eyebrow')} titulo={!loaded ? '' : missing.length ? t('fiscales.missing', { count: missing.length }) : t('fiscales.complete')} desliza>
+  <Pantalla accion="equipo" volver ojo={t('fiscales.eyebrow')} titulo={!loaded ? '' : missing.length ? t('fiscales.missing', { count: missing.length }) : t('fiscales.complete')} bajada={manyDays && loaded ? t('fiscales.days') : ''} desliza>
     <div class="tarjetas compactas">
       {#each missing as table (table.id)}
-        <button class="tarjeta falta" data-testid="table-missing" onclick={() => nav.go('addPerson', { role: 'fiscal', table: table.id, label: t('fiscales.who', { table: table.name }) })}>
-          <strong>{table.name}</strong><span>{t('fiscales.none')}</span>
+        <button class="tarjeta falta" data-testid="table-missing" onclick={() => add(table)}>
+          <strong>{table.name}</strong>
+          <span>{table.fiscales.length === 0 ? t('fiscales.none') : t('fiscales.missingDays', { days: missingDays(table).map(formatDay).join(', ') })}</span>
         </button>
       {/each}
-      {#each tables.filter((table) => table.fiscal) as table (table.id)}
-        <div class="tarjeta fila-mesa"><strong>{table.name}</strong><span>{table.fiscal?.name}</span></div>
+      {#each complete as table (table.id)}
+        <div class="tarjeta fila-mesa"><strong>{table.name}</strong><span>{table.fiscales.map((fiscal) => fiscal.name).join(', ')}</span></div>
       {/each}
     </div>
     {#snippet pie()}
-      <button class="boton primario" disabled={tables.length === missing.length} onclick={inviteAll}><Ic name="sobre" /><span>{t('fiscales.inviteAll')}</span></button>
+      <button class="boton primario" disabled={tables.every((table) => table.fiscales.length === 0)} onclick={inviteAll}><Ic name="sobre" /><span>{t('fiscales.inviteAll')}</span></button>
     {/snippet}
   </Pantalla>
 {/if}

@@ -81,7 +81,7 @@
           {@const done = staying.has(entry.id)}
           <button class="fila" class:tachada={done} data-testid={done ? 'person-done' : 'person'} disabled={app.noRoom || done} onclick={() => mark(entry)}>
             <span class="num">{entry.order}</span>
-            <span class="nombre"><span class="nombre-t">{entry.name}</span></span>
+            <span class="nombre"><span class="nombre-t">{entry.name}</span>{#if entry.light}<span class="luz-chica" style:background={entry.light.color} title={entry.light.name} role="img" aria-label={entry.light.name}></span>{/if}</span>
             <span class="doc">{shownDocument(entry.documentSuffix)}</span>
           </button>
         {/snippet}

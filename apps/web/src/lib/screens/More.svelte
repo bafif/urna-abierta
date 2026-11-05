@@ -8,6 +8,7 @@
     [
       { screen: 'party', title: t('more.party'), detail: t('more.party.detail'), show: session.can('coordinacion') },
       { screen: 'team', title: t('more.team'), detail: t('more.team.detail'), show: session.can('coordinacion', 'sistema') },
+      { screen: 'permissions', title: t('permissions.title'), detail: t('more.permissions.detail'), show: session.can('coordinacion', 'sistema') },
       { screen: 'security', title: t('more.security'), detail: t('more.security.detail'), show: session.can('sistema') },
       { screen: 'backups', title: t('more.backups'), detail: t('more.backups.detail'), show: session.can('sistema') },
       { screen: 'lightCategories', title: t('more.light'), detail: t('more.light.detail'), show: session.can('coordinacion') },
