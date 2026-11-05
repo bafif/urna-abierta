@@ -49,7 +49,7 @@ are worth knowing:
 
 ## Tools to comply
 
-The app will bring optional tools. Using them is up to each party, and having them does not guarantee legal compliance:
+The app brings optional tools. Using them is up to each party, and having them does not guarantee legal compliance:
 
 - recording each person's consent, with date and means;
 - marking traffic light categories as sensitive, with a separate permission;
@@ -61,7 +61,7 @@ The traffic light starts empty: each party defines its categories.
 
 ## External artificial intelligence
 
-The roll scanner reads on your computer by default. If you choose an external AI, the data of the roll goes through that company, with your
+The roll scanner reads on your computer by default, and for now that is the only option. If you later choose an external AI, the data of the roll goes through that company, with your
 account and under its terms, and some free plans train on what they receive. No roll goes through an account or a server of the project.
 
 ## Third parties

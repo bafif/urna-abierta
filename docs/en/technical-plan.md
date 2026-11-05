@@ -208,6 +208,6 @@ chosen, never guessed. The code is in English.
 5. **Dry run** with real people and invented data, including restoring a backup on another server.
 6. **Landing page:** a static site, with no analytics, forms or cookies, to promote the app and link to the installer.
 
-## Stage 1 measurements
+## Measurements
 
-See [stage-1-results.md](stage-1-results.md).
+See [stage-1-results.md](stage-1-results.md) and [stage-4-results.md](stage-4-results.md), which also lists what is left to test.

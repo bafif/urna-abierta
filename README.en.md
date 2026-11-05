@@ -52,7 +52,7 @@ time they open it. You can also add your own, with your party's colors. You can 
   telemetry.
 - **Works without signal.** Many classrooms have no connection. Everything is saved on the phone first and sent when it returns.
 - **Designed not to pay for a server.** It aims at free tiers: I measured it within the limits of those machines, 1 GB of memory and a
-  quarter of a processor, and it was plenty for 200 tables.
+  quarter of a processor, and it worked with 200 tables, in a [lab test](docs/en/stage-4-results.md).
 - **Reads your rolls.** It reads a scanned PDF with a model that runs on your computer, without sending the roll to anyone.
 - **With Argentine law in mind.** It brings permissions, a log nobody can change and tools to handle requests from people and erase the data at the end.
 
@@ -86,6 +86,7 @@ The first real test is a university election, in April 2027.
 | [Installation](docs/en/installation.md) | The installer, and how to try it |
 | [Creating a server](docs/en/servers.md) | Oracle, AWS and Google, step by step, and how to maintain it |
 | [Drill](docs/en/drill.md) | What to test with real people before an election |
+| [Your own theme](docs/en/themes.md) | Your party's colors, as long as they can be read |
 | [Technical plan](docs/en/technical-plan.md) | Architecture, sync, permissions and roll format |
 | [Measurements](docs/en/stage-4-results.md) | What was tested and what it showed, with the [initial risks](docs/en/stage-1-results.md) |
 | [Legal](LEGAL.en.md) | License, responsibilities and personal data |

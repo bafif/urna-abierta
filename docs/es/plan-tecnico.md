@@ -205,6 +205,6 @@ nunca se adivina. El código va en inglés.
 5. **Simulacro** con personas reales y datos falsos, incluido restaurar un backup en otro servidor.
 6. **Landing:** un sitio estático, sin analíticas, formularios ni cookies, para publicitar la app y enlazar al instalador.
 
-## Mediciones de la etapa 1
+## Mediciones
 
-Ver [resultados-etapa-1.md](resultados-etapa-1.md).
+Ver [resultados-etapa-1.md](resultados-etapa-1.md) y [resultados-etapa-4.md](resultados-etapa-4.md), que también lista lo que falta probar.
