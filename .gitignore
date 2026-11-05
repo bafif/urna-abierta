@@ -11,3 +11,6 @@ playwright-report/
 *.padron
 *.jsonl
 /privado/
+
+# Temas de terceros: no se publican sin decidirlo.
+/design/privado/
