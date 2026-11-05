@@ -2,3 +2,10 @@ packages:
   - apps/*
   - packages/*
   - tools/*
+
+# No dependency runs install scripts. esbuild finds its binary in its platform package, and ssh2 works without its
+# optional native crypto (cpu-features comes with it). Without this list, pnpm stops a clean install in CI.
+allowBuilds:
+  cpu-features: false
+  esbuild: false
+  ssh2: false
