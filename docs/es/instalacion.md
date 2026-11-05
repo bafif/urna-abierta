@@ -23,7 +23,7 @@ Para ver la propuesta de diseño alcanza con abrir `design/index.html` en el nav
 
 ## Cómo va a ser
 
-Vas a bajar un instalador desde la página de releases de GitHub, para Windows, macOS o Linux. Te hace dos preguntas y hace el resto.
+Vas a bajar un instalador desde la página de releases de GitHub, para Windows, macOS o Linux. Te hace tres preguntas y hace el resto.
 
 **1. ¿Dónde va a vivir tu Urna Abierta?** Cualquiera de estas opciones funciona:
 
@@ -36,6 +36,9 @@ Vas a bajar un instalador desde la página de releases de GitHub, para Windows, 
 
 **2. ¿Cómo leemos los padrones escaneados?** En tu computadora, que es lo recomendado porque un padrón trae datos de personas; con
 tu propia IA, pegando tu clave; o lo decidís después.
+
+**3. ¿Cómo querés que se vea?** Elegís uno de los temas, viéndolos antes en claro y en oscuro. Cada persona lo puede cambiar después en
+su teléfono.
 
 Al terminar te da la dirección de tu servidor y una llave de recuperación para las copias de seguridad, y abre la app. Ahí sigue un
 asistente para el partido, el equipo y la primera elección.

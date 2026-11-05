@@ -61,7 +61,8 @@ El instalador pide todo lo técnico una sola vez, para que la app arranque direc
    | Probar en esta computadora | Levanta todo localmente | Quien quiere mirarla antes de decidir |
 
 2. **Cómo leer los padrones.** En esa computadora, que es lo recomendado; con su propia IA, pegando su clave; o después.
-3. **Instalar.** Termina con la dirección, una llave de recuperación para las copias de seguridad, y abriendo la app.
+3. **Cómo se ve.** Todos los temas, con vista previa en claro y en oscuro.
+4. **Instalar.** Termina con la dirección, una llave de recuperación para las copias de seguridad, y abriendo la app.
 
 ### Firma
 
@@ -108,6 +109,9 @@ el texto tiene que llegar a 7:1, pensando en la vista de la gente grande.
 | Feria | Un color por tarea, para poder explicar por teléfono «tocá el verde» |
 | Tablero | Sin adornos: el número manda, como un tablero de resultados |
 | Mate | El más tranquilo: formas redondas, y quien ya votó se aparta con un tilde |
+
+Todos los temas vienen incluidos. Se eligen con vista previa en dos momentos: en el instalador, el que va a ver todo el partido al
+entrar; y la primera vez que alguien abre la app, en el celular o en la computadora, donde puede cambiarlo para sí con un toque.
 
 Las fuentes viajan con la app, porque tiene que funcionar sin señal, y todas tienen licencia OFL.
 

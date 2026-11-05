@@ -42,8 +42,8 @@ su trabajo.
   <img src="docs/assets/temas.png" alt="La misma pantalla en cinco temas: Aula, Vidrio, Feria, Tablero y Mate" width="100%">
 </p>
 
-Con temas para todos los gustos, en modo claro y oscuro, y la posibilidad de crear el tuyo con los colores de tu partido. Podés
-recorrer [la propuesta de diseño](design/index.html) abriéndola en tu navegador.
+Con temas para todos los gustos, en modo claro y oscuro: se eligen con vista previa al instalarla, y cada persona lo puede cambiar la
+primera vez que la abre. También vas a poder crear el tuyo, con los colores de tu partido. Podés recorrer [la propuesta de diseño](design/index.html) abriéndola en tu navegador.
 
 ## Lo que la hace distinta
 

@@ -61,7 +61,8 @@ The installer asks for everything technical once, so that the app starts directl
    | Try it on this computer | Runs everything locally | Whoever wants to look at it before deciding |
 
 2. **How to read rolls.** On that computer, which is recommended; with their own AI, pasting their key; or later.
-3. **Install.** It ends with the address, a recovery key for the backups, and opening the app.
+3. **How it looks.** All the themes, with a preview in light and dark.
+4. **Install.** It ends with the address, a recovery key for the backups, and opening the app.
 
 ### Signing
 
@@ -108,6 +109,9 @@ thinking of older eyes.
 | Feria | One color per task, so that you can say over the phone “tap the green one” |
 | Tablero | No ornaments: the number rules, like a results board |
 | Mate | The calmest: round shapes, and whoever voted moves aside with a tick |
+
+All the themes are included. They are chosen with a preview at two moments: in the installer, the one the whole party sees when
+joining; and the first time someone opens the app, on a phone or a computer, where they can change it for themselves with one tap.
 
 Fonts travel with the app, because it has to work without signal, and all of them are under the OFL.
 
