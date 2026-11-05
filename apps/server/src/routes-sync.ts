@@ -1,0 +1,125 @@
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { FastifyInstance } from 'fastify';
+import type pg from 'pg';
+import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation, type SecurityProfile } from '@urna-abierta/domain';
+import { audit, authenticated, canReachTable, getSetting } from './actor.ts';
+
+const MAX_PULL = 200;
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const TABLE_ID = /^[\w-]{1,64}$/;
+const photosDir = () => process.env.URNA_PHOTOS_DIR ?? '/tmp/urna-fotos';
+
+/**
+ * Stores a batch in one transaction. Locking the row of the table gives every operation of
+ * that table a number in commit order. With one global sequence, a reader could pass a number
+ * whose transaction had not committed yet and never see that row.
+ */
+async function storeBatch(pool: pg.Pool, table: string, operations: Operation[], author: string, quarantined: boolean): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query<{ last_seq: string }>('SELECT last_seq FROM polling_tables WHERE id = $1 FOR UPDATE', [table]);
+    const last = Number(locked.rows[0]!.last_seq);
+    const inserted = await client.query(
+      `INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload, author, quarantined)
+       SELECT id, $1, $2 + ordinality, type, device, device_seq, device_time, payload, $9, $10
+       FROM unnest($3::uuid[], $4::text[], $5::text[], $6::bigint[], $7::timestamptz[], $8::jsonb[])
+         WITH ORDINALITY AS t (id, type, device, device_seq, device_time, payload, ordinality)
+       ON CONFLICT (id) DO NOTHING`,
+      [table, last, operations.map((o) => o.id), operations.map((o) => o.type), operations.map((o) => o.device), operations.map((o) => o.device_seq), operations.map((o) => o.device_time), operations.map((o) => JSON.stringify(o.payload)), author, quarantined],
+    );
+    if (inserted.rowCount) await client.query('UPDATE polling_tables SET last_seq = $2 WHERE id = $1', [table, last + operations.length]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
+  const signedIn = authenticated(pool);
+
+  /** Only what the poll watcher needs: no addresses, and as few document digits as the election asks for. */
+  app.get<{ Params: { table: string } }>('/api/tables/:table/bundle', { preHandler: signedIn }, async (request, reply) => {
+    const { table } = request.params;
+    if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
+    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+    const digits = SECURITY_PROFILES[profile].documentDigits;
+    const rows = await pool.query('SELECT id, order_number, full_name, document FROM electors WHERE table_id = $1 ORDER BY order_number NULLS LAST, full_name', [table]);
+    const electors = rows.rows.map((row, index) => {
+      const order = row.order_number ?? index + 1;
+      const documentSuffix = String(row.document ?? '').slice(-digits);
+      return { id: row.id, order, name: row.full_name, documentSuffix, search: foldText(`${order} ${row.full_name} ${documentSuffix}`) };
+    });
+    await audit(pool, request.actor, 'roll.downloaded', table, { people: electors.length });
+    return { table, electors };
+  });
+
+  app.post<{ Body: { table?: unknown; operations?: unknown } }>('/api/sync/push', { preHandler: signedIn }, async (request, reply) => {
+    const { table, operations } = request.body ?? {};
+    if (typeof table !== 'string' || !TABLE_ID.test(table) || !Array.isArray(operations)) return reply.code(400).send({ error: 'invalid_request' });
+    if (operations.length > MAX_BATCH) return reply.code(413).send({ error: 'batch_too_large', max: MAX_BATCH });
+    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    const status = await pool.query('SELECT e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1', [table]);
+    if (!status.rows[0]) return reply.code(404).send({ error: 'no_such_table' });
+    const valid: Operation[] = [];
+    const rejected: { id: unknown; reason: string }[] = [];
+    for (const raw of operations) {
+      const parsed = parseOperation(raw);
+      if (!parsed) rejected.push({ id: (raw as { id?: unknown })?.id, reason: 'invalid' });
+      else if (parsed.table !== table) rejected.push({ id: parsed.id, reason: 'wrong_table' });
+      else valid.push(parsed);
+    }
+    // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
+    const late = ['cerrada', 'purgada'].includes(status.rows[0].status);
+    if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
+    return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };
+  });
+
+  app.get<{ Querystring: { table?: string; since?: string } }>('/api/sync/pull', { preHandler: signedIn }, async (request, reply) => {
+    const { table, since } = request.query;
+    const cursor = Number(since ?? 0);
+    if (!table || !TABLE_ID.test(table) || !Number.isSafeInteger(cursor) || cursor < 0) return reply.code(400).send({ error: 'invalid_request' });
+    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    const result = await pool.query(
+      `SELECT id, table_id AS table, seq, type, device, device_seq, device_time, payload
+       FROM operations WHERE table_id = $1 AND seq > $2 AND NOT quarantined ORDER BY seq LIMIT $3`,
+      [table, cursor, MAX_PULL + 1],
+    );
+    const rows = result.rows.slice(0, MAX_PULL);
+    return {
+      operations: rows.map((row) => ({ id: row.id, schema: 1, table: row.table, type: row.type, device: row.device, device_seq: Number(row.device_seq), device_time: new Date(row.device_time).toISOString(), payload: row.payload })),
+      next: rows.length > 0 ? Number(rows[rows.length - 1].seq) : cursor,
+      more: result.rows.length > MAX_PULL,
+    };
+  });
+
+  /** The photo of the tally sheet, identified by its own hash, so that repeating the upload changes nothing. */
+  app.addContentTypeParser(/^image\//, { parseAs: 'buffer', bodyLimit: MAX_PHOTO_BYTES }, (_request, body, done) => done(null, body));
+  app.put<{ Params: { table: string; sha: string }; Body: Buffer }>('/api/tables/:table/photos/:sha', { preHandler: signedIn, bodyLimit: MAX_PHOTO_BYTES }, async (request, reply) => {
+    const { table, sha } = request.params;
+    if (!TABLE_ID.test(table) || !/^[0-9a-f]{64}$/.test(sha)) return reply.code(400).send({ error: 'invalid_request' });
+    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'not_an_image' });
+    if (createHash('sha256').update(request.body).digest('hex') !== sha) return reply.code(400).send({ error: 'hash_mismatch' });
+    await mkdir(photosDir(), { recursive: true });
+    await writeFile(join(photosDir(), sha), request.body);
+    await pool.query('INSERT INTO photos (sha256, table_id, bytes) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [sha, table, request.body.length]);
+    return { ok: true };
+  });
+
+  app.get<{ Params: { table: string; sha: string } }>('/api/tables/:table/photos/:sha', { preHandler: signedIn }, async (request, reply) => {
+    const { table, sha } = request.params;
+    if (!/^[0-9a-f]{64}$/.test(sha)) return reply.code(400).send({ error: 'invalid_request' });
+    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    const known = await pool.query('SELECT 1 FROM photos WHERE sha256 = $1 AND table_id = $2', [sha, table]);
+    if (!known.rowCount) return reply.code(404).send({ error: 'not_found' });
+    reply.type('image/jpeg');
+    return readFile(join(photosDir(), sha));
+  });
+}

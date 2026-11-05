@@ -1,10 +1,15 @@
+import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { buildApp, migrate } from './app.ts';
 
-if (process.env.URNA_TEST_SERVER !== 'fake-data-only') {
-  // This early server has no login yet. It must not run by accident with real data.
-  console.error('Servidor de prueba sin autenticación: definí URNA_TEST_SERVER=fake-data-only para aceptarlo.');
+const testMode = process.env.URNA_TEST_SERVER === 'fake-data-only';
+if (!testMode && process.env.URNA_ACEPTO_RESPONSABILIDAD !== 'si') {
+  console.error('El partido es el responsable de esta base y de cumplir la ley. Definí URNA_ACEPTO_RESPONSABILIDAD=si para aceptarlo, o URNA_TEST_SERVER=fake-data-only para probar con personas inventadas.');
   process.exit(1);
+}
+if (!process.env.URNA_SETUP_CODE) {
+  process.env.URNA_SETUP_CODE = randomBytes(9).toString('base64url');
+  console.log(`Código de instalación: ${process.env.URNA_SETUP_CODE}`);
 }
 
 const pool = new pg.Pool({
@@ -27,7 +32,7 @@ async function waitForDatabase(): Promise<void> {
 
 await waitForDatabase();
 await migrate(pool);
-const app = buildApp(pool);
+const app = buildApp(pool, { testMode });
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 3000) });
 console.log('servidor listo');
 
