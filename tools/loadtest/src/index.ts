@@ -39,11 +39,13 @@ class Phone {
     ? new https.Agent({ keepAlive: true, maxSockets: 1, rejectUnauthorized: false })
     : new http.Agent({ keepAlive: true, maxSockets: 1 });
 
+  token: string | null = null;
+
   close(): void {
     this.agent.destroy();
   }
 
-  request(method: string, path: string, body?: unknown): Promise<{ status: number; json: any }> {
+  request(method: string, path: string, body?: unknown, timeout = TIMEOUT_MS): Promise<{ status: number; json: any }> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     return new Promise((resolve, reject) => {
       const started = performance.now();
@@ -52,8 +54,11 @@ class Phone {
         {
           method,
           agent: this.agent,
-          timeout: TIMEOUT_MS,
-          headers: payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {},
+          timeout,
+          headers: {
+            ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+            ...(payload ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
+          },
         },
         (response) => {
           const chunks: Buffer[] = [];
@@ -112,7 +117,26 @@ function percentile(sorted: number[], fraction: number): number {
   return sorted.length === 0 ? 0 : Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))]!);
 }
 
-const tableIds = Array.from({ length: Number(args.tables) }, (_, i) => `carga-${args.run}-${i}`);
+/** A test election with invented people, and a credential per table, the way the phones get in. */
+const setup = new Phone();
+const SEED_LIMIT_MS = 10 * 60_000;
+const seeded = (await setup.request('POST', '/api/test/seed', { size: 350, tables: Number(args.tables), label: args.run }, SEED_LIMIT_MS)).json as {
+  election: string;
+  links: Record<string, string>;
+  tables: { table: string; invitations: string[] }[];
+};
+const redeem = async (invitation: string) => (await setup.request('POST', '/api/auth/redeem', { token: invitation })).json.token as string;
+const tableIds = seeded.tables.map((item) => item.table);
+const tokens = new Map<string, string>();
+for (const item of seeded.tables) tokens.set(item.table, await redeem(item.invitations[0]!));
+const chiefToken = await redeem(seeded.links.jefe!);
+setup.close();
+counters.latencies.length = 0;
+const phoneOf = (table: string) => {
+  const phone = new Phone();
+  phone.token = tokens.get(table)!;
+  return phone;
+};
 
 async function countStored(phone: Phone, table: string): Promise<number> {
   let since = 0;
@@ -133,7 +157,7 @@ async function storm(): Promise<Record<string, unknown>> {
   const results = await Promise.all(
     tableIds.map(async (table, tableIndex) => {
       await sleep(Math.random() * jitter);
-      const phone = new Phone();
+      const phone = phoneOf(table);
       const started = performance.now();
       const operations = Array.from({ length: backlog }, (_, i) => makeOperation(table, `d-${tableIndex}`, i));
       for (let i = 0; i < operations.length; i += MAX_BATCH) {
@@ -153,6 +177,7 @@ async function storm(): Promise<Record<string, unknown>> {
   for (const table of sample) {
     // Sending again must not duplicate anything.
     const index = tableIds.indexOf(table);
+    checker.token = tokens.get(table)!;
     await checker.withRetries('POST', '/api/sync/push', { table, operations: firstBatches[index] });
     lost += Math.abs(backlog - (await countStored(checker, table)));
   }
@@ -173,7 +198,7 @@ async function steady(): Promise<Record<string, unknown>> {
   const stopAt = Date.now() + Number(args.seconds) * 1000;
   const meanGap = 3_600_000 / Number(args['votes-per-hour']);
   const fiscal = async (table: string, tableIndex: number) => {
-    const phone = new Phone();
+    const phone = phoneOf(table);
     let seq = 0;
     let since = 0;
     await sleep(Math.random() * meanGap);
@@ -189,10 +214,12 @@ async function steady(): Promise<Record<string, unknown>> {
   };
   const chief = async (index: number) => {
     const phone = new Phone();
+    phone.token = chiefToken;
     await sleep(Math.random() * 15_000);
     while (Date.now() < stopAt) {
+      await phone.withRetries('GET', `/api/district/${seeded.election}`);
       for (let i = index; i < Math.min(index + 10, tableIds.length); i += 1) {
-        await phone.withRetries('GET', `/api/tables/${tableIds[i]}/summary`);
+        await phone.withRetries('GET', `/api/tables/${tableIds[i]}/detail`);
       }
       await sleep(15_000);
     }

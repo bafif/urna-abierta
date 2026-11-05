@@ -14,7 +14,7 @@ trap 'podman pod rm -f "$pod" >/dev/null 2>&1 || true' EXIT
 podman pod create --name "$pod" -p "127.0.0.1:$port:$port" >/dev/null
 podman run -d --pod "$pod" --name "$pod-db" -e POSTGRES_USER=urna -e POSTGRES_DB=urna -e POSTGRES_PASSWORD=prueba \
   docker.io/library/postgres:18-alpine >/dev/null
-podman run -d --pod "$pod" --name "$pod-server" -e URNA_TEST_SERVER=fake-data-only \
+podman run -d --pod "$pod" --name "$pod-server" -e URNA_TEST_SERVER=fake-data-only -e URNA_SETUP_CODE=codigo-de-prueba \
   -e DATABASE_URL=postgres://urna:prueba@localhost:5432/urna urna-server >/dev/null
 podman run -d --pod "$pod" --name "$pod-web" -e URNA_SITE=":$port" -e URNA_API=localhost:3000 urna-web >/dev/null
 for _ in $(seq 1 90); do

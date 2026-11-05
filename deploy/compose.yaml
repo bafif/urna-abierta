@@ -1,4 +1,4 @@
-# Early test server: no login yet, invented data only.
+# The server with invented data, for trying it out. The real installation comes from the installer.
 services:
   database:
     image: docker.io/library/postgres:18-alpine
