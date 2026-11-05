@@ -71,11 +71,23 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
     const digits = SECURITY_PROFILES[profile].documentDigits;
-    const rows = await pool.query('SELECT id, order_number, full_name, document FROM electors WHERE table_id = $1 ORDER BY order_number NULLS LAST, full_name', [table]);
+    // Only if the party allows it in a low risk election, and never a sensitive category.
+    const withLight = SECURITY_PROFILES[profile].fiscalSeesSemaphore && (await getSetting(pool, 'fiscal_semaphore', false));
+    const rows = await pool.query(
+      `SELECT x.id, x.order_number, x.full_name, x.document, c.name AS light_name, c.color AS light_color
+       FROM electors x
+       LEFT JOIN semaphore_marks m ON $2 AND m.election_id = x.election_id AND m.elector_id = x.id
+       LEFT JOIN semaphore_categories c ON c.id = m.category_id AND NOT c.sensitive
+       WHERE x.table_id = $1 ORDER BY x.order_number NULLS LAST, x.full_name`,
+      [table, withLight],
+    );
     const electors = rows.rows.map((row, index) => {
       const order = row.order_number ?? index + 1;
       const documentSuffix = String(row.document ?? '').slice(-digits);
-      return { id: row.id, order, name: row.full_name, documentSuffix, search: foldText(`${order} ${row.full_name} ${documentSuffix}`) };
+      return {
+        id: row.id, order, name: row.full_name, documentSuffix, search: foldText(`${order} ${row.full_name} ${documentSuffix}`),
+        ...(row.light_name ? { light: { name: row.light_name, color: row.light_color } } : {}),
+      };
     });
     await audit(pool, request.actor, 'roll.downloaded', table, { people: electors.length });
     return { table, electors };

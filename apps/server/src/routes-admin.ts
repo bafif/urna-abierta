@@ -4,12 +4,13 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, isRole, isSecurityProfile, readCsvRoll, readPadron, SECURITY_PROFILES, themeProblems, type PadronRead } from '@urna-abierta/domain';
+import { foldText, isRole, isSecurityProfile, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 import { audit, authenticated, can, forgetActors, getSetting, requires, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { createInvitation } from './routes-auth.ts';
 
 const MAX_ROLL_BYTES = 64 * 1024 * 1024;
+const STATS_ROLE_DAYS = 90;
 const STATUSES = ['preparacion', 'jornada', 'escrutinio', 'cerrada', 'purgada'];
 const KINDS = ['estudiantil', 'local', 'nacional', 'otra'];
 const text = (value: unknown, max = 200) => (typeof value === 'string' && value.trim() && value.length <= max ? value.trim() : null);
@@ -43,8 +44,48 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { profile } = request.body ?? {};
     if (!isSecurityProfile(profile)) return reply.code(400).send({ error: 'invalid_profile' });
     await setSetting(pool, 'security_profile', profile);
+    // Going to a stricter profile takes away what it does not allow.
+    if (!SECURITY_PROFILES[profile].fiscalSeesSemaphore) await setSetting(pool, 'fiscal_semaphore', false);
     await audit(pool, request.actor, 'security.changed', profile);
     return { profile, ...SECURITY_PROFILES[profile] };
+  });
+
+  // ---------- Roles: the permissions are a fixed list, and what each role gets can be edited ----------
+  app.get('/api/roles', { preHandler: manageUsers }, async () => ({
+    permissions: PERMISSIONS,
+    recommended: ROLES,
+    edited: await getSetting<RoleOverrides>(pool, 'role_permissions', {}),
+    kept: PERMISSIONS_KEPT,
+  }));
+
+  app.put<{ Params: { role: string }; Body: { permissions?: unknown } }>('/api/roles/:role', { preHandler: manageUsers }, async (request, reply) => {
+    const { role } = request.params;
+    const { permissions } = request.body ?? {};
+    if (!isRole(role)) return reply.code(404).send({ error: 'no_such_role' });
+    const edited = await getSetting<RoleOverrides>(pool, 'role_permissions', {});
+    if (permissions === null) {
+      delete edited[role as Role];
+    } else {
+      const known = new Set<string>(PERMISSIONS);
+      if (!Array.isArray(permissions) || permissions.some((item) => !known.has(item))) return reply.code(400).send({ error: 'invalid_permissions' });
+      const kept = PERMISSIONS_KEPT[role as Role] ?? [];
+      if (kept.some((item) => !permissions.includes(item))) return reply.code(409).send({ error: 'must_keep' });
+      edited[role as Role] = permissions as Permission[];
+    }
+    await setSetting(pool, 'role_permissions', edited);
+    forgetActors();
+    await audit(pool, request.actor, 'role.edited', role, { permissions });
+    return { ok: true };
+  });
+
+  /** In a low risk election, the party can let poll watchers see the traffic light of their table. */
+  app.put<{ Body: { enabled?: unknown } }>('/api/semaphore/fiscal-view', { preHandler: manageElection }, async (request, reply) => {
+    const enabled = request.body?.enabled === true;
+    const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+    if (enabled && !SECURITY_PROFILES[profile].fiscalSeesSemaphore) return reply.code(409).send({ error: 'profile_forbids' });
+    await setSetting(pool, 'fiscal_semaphore', enabled);
+    await audit(pool, request.actor, 'semaphore.fiscal_view', undefined, { enabled });
+    return { enabled };
   });
 
   // ---------- Backups ----------
@@ -84,14 +125,17 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { users: users.rows };
   });
 
-  app.post<{ Body: { name?: unknown; phone?: unknown; role?: unknown; table?: unknown; unit?: unknown; expiresAt?: unknown } }>('/api/users', { preHandler: manageUsers }, async (request, reply) => {
-    const { role, phone, table, unit, expiresAt } = request.body ?? {};
+  app.post<{ Body: { name?: unknown; phone?: unknown; role?: unknown; table?: unknown; unit?: unknown; expiresAt?: unknown; days?: unknown } }>('/api/users', { preHandler: manageUsers }, async (request, reply) => {
+    const { role, phone, table, unit, expiresAt, days } = request.body ?? {};
     const name = text(request.body?.name, 120);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     if (!isRole(role)) return reply.code(400).send({ error: 'invalid_role' });
     const userId = randomUUID();
     await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name, typeof phone === 'string' ? phone : null]);
-    await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id, expires_at) VALUES ($1, $2, $3, $4, $5, $6)', [randomUUID(), userId, role, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null, typeof expiresAt === 'string' ? expiresAt : null]);
+    const shift = Array.isArray(days) ? days.filter((day) => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day)) : null;
+    // Whoever only looks at the numbers does not keep access for good.
+    const expires = typeof expiresAt === 'string' ? expiresAt : role === 'estadistico' ? new Date(Date.now() + STATS_ROLE_DAYS * 86_400_000).toISOString() : null;
+    await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id, expires_at, days) VALUES ($1, $2, $3, $4, $5, $6, $7::date[])', [randomUUID(), userId, role, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null, expires, shift]);
     await audit(pool, request.actor, 'user.created', userId, { role });
     return { id: userId, invitation: await createInvitation(pool, userId) };
   });
@@ -128,8 +172,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id AND x.needs_review) AS to_review,
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id AND x.table_id IS NULL) AS without_table,
               (SELECT count(*)::int FROM polling_tables t WHERE t.election_id = e.id) AS tables,
-              (SELECT count(*)::int FROM polling_tables t WHERE t.election_id = e.id AND NOT EXISTS
-                (SELECT 1 FROM role_assignments a WHERE a.table_id = t.id AND a.role = 'fiscal')) AS tables_without_fiscal
+              (SELECT count(*)::int FROM polling_tables t WHERE t.election_id = e.id AND NOT (
+                 EXISTS (SELECT 1 FROM role_assignments a WHERE a.table_id = t.id AND a.role = 'fiscal' AND a.days IS NULL)
+                 OR e.days <@ COALESCE((SELECT array_agg(d) FROM role_assignments a, unnest(a.days) AS d WHERE a.table_id = t.id AND a.role = 'fiscal'), '{}'::date[])
+               )) AS tables_without_fiscal
        FROM elections e ORDER BY e.created_at DESC`,
     );
     return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((d: Date) => d.toISOString().slice(0, 10)) })) };
@@ -279,8 +325,8 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       `SELECT t.id, t.name, t.place, t.unit_id, count(x.id)::int AS people,
               (SELECT min(x2.search) FROM electors x2 WHERE x2.table_id = t.id) AS first,
               (SELECT max(x2.search) FROM electors x2 WHERE x2.table_id = t.id) AS last,
-              (SELECT json_build_object('id', u.id, 'name', u.name) FROM role_assignments a JOIN users u ON u.id = a.user_id
-               WHERE a.table_id = t.id AND a.role = 'fiscal' AND u.removed_at IS NULL LIMIT 1) AS fiscal
+              COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'days', a.days)) FROM role_assignments a JOIN users u ON u.id = a.user_id
+               WHERE a.table_id = t.id AND a.role = 'fiscal' AND u.removed_at IS NULL), '[]') AS fiscales
        FROM polling_tables t LEFT JOIN electors x ON x.table_id = t.id
        WHERE t.election_id = $1 GROUP BY t.id ORDER BY t.position`,
       [request.params.id],

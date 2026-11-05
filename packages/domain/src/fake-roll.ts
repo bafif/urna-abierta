@@ -1,6 +1,8 @@
 import { foldText } from './text.ts';
 
 export interface RollEntry {
+  /** The traffic light, only if the party lets poll watchers see it. */
+  light?: { name: string; color: string };
   id: string;
   order: number;
   name: string;
