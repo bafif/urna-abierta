@@ -337,8 +337,67 @@ const es = {
 
   'roll.upload.eyebrow': 'Padrón',
   'roll.upload.title': 'Subí el padrón',
-  'roll.upload.text': 'Puede ser una planilla CSV o el archivo .padron.',
+  'roll.upload.text': 'Puede ser una planilla de Excel o CSV, o el archivo .padron.',
   'roll.upload.scanned': 'Si tenés un PDF escaneado, primero pasalo por el lector de padrones en tu computadora: arma el archivo .padron y no manda los datos a ningún lado.',
+  'roll.upload.reader': 'Bajar el lector de padrones',
+  'roll.upload.pdf.title': 'Un PDF no se sube directo',
+  'roll.upload.pdf.text': 'Si es un padrón escaneado, abrilo con el lector de padrones en tu computadora. Lo lee ahí mismo, sin mandarlo a ningún lado, y te da un archivo .padron para subir acá. Si lo tenés en Excel o CSV, subí esa planilla.',
+  'roll.upload.problems': 'Esto encontramos:',
+  'roll.upload.warnings': 'Mirá esto antes de cargarlo:',
+  'roll.upload.more': 'y {count} más',
+  'roll.where.manifest': 'La descripción del padrón',
+  'roll.where.electors': 'Personas, línea {line}',
+  'roll.where.electors.many': 'Personas, líneas {line}',
+  'roll.where.units': 'Mesas, línea {line}',
+  'roll.where.units.many': 'Mesas, líneas {line}',
+  'roll.where.line': 'Fila {line}',
+  'roll.where.line.many': 'Filas {line}',
+  'roll.where.and': 'y',
+  'roll.where.andMore': '{list} y {count} más',
+  'roll.problem.not_a_zip': 'No es un archivo .padron ni una planilla.',
+  'roll.problem.not_a_spreadsheet': 'No es una planilla de Excel que se pueda abrir. Guardala de nuevo como .xlsx o como CSV.',
+  'roll.problem.other_spreadsheet': 'Esta planilla no se puede leer así. Guardala como .xlsx o .csv y subila de nuevo.',
+  'roll.problem.too_big': 'Es demasiado grande para leerlo. Fijate que sea solo el padrón.',
+  'roll.problem.missing_manifest': 'No parece un archivo .padron: le falta su descripción.',
+  'roll.problem.not_json': 'Tiene texto roto que no se puede leer.',
+  'roll.problem.not_json.many': 'Tienen texto roto que no se puede leer.',
+  'roll.problem.invalid': 'No trae todo lo necesario para leerlo.',
+  'roll.problem.unsupported_version': 'Lo armó una versión más nueva del lector. Hay que actualizar Urna Abierta para leerlo.',
+  'roll.problem.missing_file': 'Falta adentro del .padron.',
+  'roll.problem.count_mismatch': 'Dice cuántas personas trae, y trae otra cantidad. Puede estar incompleto.',
+  'roll.problem.repeated_id': 'Quedó afuera porque su DNI o su legajo ya está en una fila anterior.',
+  'roll.problem.repeated_id.many': 'Quedaron afuera porque su DNI o su legajo ya está en una fila anterior.',
+  'roll.problem.repeated_id.padron': 'Quedó afuera porque su identificación ya está en una línea anterior.',
+  'roll.problem.repeated_id.padron.many': 'Quedaron afuera porque su identificación ya está en una línea anterior.',
+  'roll.problem.unknown_table': 'Nombra una mesa que el archivo no tiene.',
+  'roll.problem.unknown_table.many': 'Nombran una mesa que el archivo no tiene.',
+  'roll.problem.odd_document': 'El documento no tiene 7 u 8 números. Se carga igual y queda para que lo revises.',
+  'roll.problem.odd_document.many': 'El documento no tiene 7 u 8 números. Se cargan igual y quedan para que los revises.',
+  'roll.problem.empty': 'El archivo está vacío.',
+  'roll.problem.no_name_column': 'No encontramos la columna de los nombres. Fijate que tenga un título como «Apellido y nombre», «Nombre» o «Apellido».',
+  'roll.problem.no_name': 'No tiene nombre, así que quedó afuera.',
+  'roll.problem.no_name.many': 'No tienen nombre, así que quedaron afuera.',
+  'roll.problem.invalidField': 'No se entiende {field}, así que quedó afuera.',
+  'roll.problem.invalidField.many': 'No se entiende {field}, así que quedaron afuera.',
+  'roll.problem.tooLong': 'Hay demasiado texto en {field}, así que quedó afuera.',
+  'roll.problem.tooLong.many': 'Hay demasiado texto en {field}, así que quedaron afuera.',
+  'roll.problem.other': 'No se pudo leer.',
+  'roll.field.id': 'la identificación',
+  'roll.field.full_name': 'el nombre',
+  'roll.field.name': 'el nombre',
+  'roll.field.family_name': 'el apellido',
+  'roll.field.given_names': 'los nombres',
+  'roll.field.table': 'la mesa',
+  'roll.field.order': 'el número de orden',
+  'roll.field.identifiers': 'el documento',
+  'roll.field.address': 'el domicilio',
+  'roll.field.birth_year': 'el año de nacimiento',
+  'roll.field.level': 'el nivel',
+  'roll.field.parent': 'de dónde depende',
+  'roll.field.declared_total': 'el total declarado',
+  'roll.field.review': 'la marca de revisión',
+  'roll.field.extra': 'los datos extra',
+  'roll.field.row': 'la fila',
   'roll.upload.choose': 'Elegir el archivo',
   'roll.upload.another': 'Elegir otro',
   'roll.upload.reading': 'Leyendo…',
@@ -913,8 +972,67 @@ const en: Record<MessageKey, string> = {
 
   'roll.upload.eyebrow': 'Roll',
   'roll.upload.title': 'Upload the roll',
-  'roll.upload.text': 'It can be a CSV sheet or a .padron file.',
+  'roll.upload.text': 'It can be an Excel or CSV spreadsheet, or the .padron file.',
   'roll.upload.scanned': 'If you have a scanned PDF, first run it through the roll reader on your computer: it builds the .padron file and sends the data nowhere.',
+  'roll.upload.reader': 'Download the roll reader',
+  'roll.upload.pdf.title': 'A PDF is not uploaded directly',
+  'roll.upload.pdf.text': 'If it is a scanned roll, open it with the roll reader on your computer. It reads it right there, without sending it anywhere, and gives you a .padron file to upload here. If you have it in Excel or CSV, upload that spreadsheet.',
+  'roll.upload.problems': 'This is what we found:',
+  'roll.upload.warnings': 'Look at this before loading it:',
+  'roll.upload.more': 'and {count} more',
+  'roll.where.manifest': 'The roll description',
+  'roll.where.electors': 'People, line {line}',
+  'roll.where.electors.many': 'People, lines {line}',
+  'roll.where.units': 'Tables, line {line}',
+  'roll.where.units.many': 'Tables, lines {line}',
+  'roll.where.line': 'Row {line}',
+  'roll.where.line.many': 'Rows {line}',
+  'roll.where.and': 'and',
+  'roll.where.andMore': '{list} and {count} more',
+  'roll.problem.not_a_zip': 'It is not a .padron file or a spreadsheet.',
+  'roll.problem.not_a_spreadsheet': 'It is not an Excel spreadsheet that can be opened. Save it again as .xlsx or as CSV.',
+  'roll.problem.other_spreadsheet': 'This spreadsheet cannot be read as it is. Save it as .xlsx or .csv and upload it again.',
+  'roll.problem.too_big': 'It is too big to read. Check that it is only the roll.',
+  'roll.problem.missing_manifest': 'It does not look like a .padron file: its description is missing.',
+  'roll.problem.not_json': 'It has broken text that cannot be read.',
+  'roll.problem.not_json.many': 'They have broken text that cannot be read.',
+  'roll.problem.invalid': 'Something needed to read it is missing.',
+  'roll.problem.unsupported_version': 'A newer version of the reader built it. Urna Abierta needs an update to read it.',
+  'roll.problem.missing_file': 'It is missing inside the .padron.',
+  'roll.problem.count_mismatch': 'It says how many people it has, and it has a different number. It may be incomplete.',
+  'roll.problem.repeated_id': 'It was left out because its DNI or legajo is already on an earlier row.',
+  'roll.problem.repeated_id.many': 'They were left out because their DNI or legajo is already on an earlier row.',
+  'roll.problem.repeated_id.padron': 'It was left out because its id is already on an earlier line.',
+  'roll.problem.repeated_id.padron.many': 'They were left out because their id is already on an earlier line.',
+  'roll.problem.unknown_table': 'It names a table the file does not have.',
+  'roll.problem.unknown_table.many': 'They name a table the file does not have.',
+  'roll.problem.odd_document': 'The document does not have 7 or 8 digits. It is loaded anyway, for you to check.',
+  'roll.problem.odd_document.many': 'The document does not have 7 or 8 digits. They are loaded anyway, for you to check.',
+  'roll.problem.empty': 'The file is empty.',
+  'roll.problem.no_name_column': 'We did not find the column with the names. Check that it has a heading such as “Apellido y nombre”, “Nombre” or “Name”.',
+  'roll.problem.no_name': 'It has no name, so it was left out.',
+  'roll.problem.no_name.many': 'They have no name, so they were left out.',
+  'roll.problem.invalidField': '{field} cannot be understood, so it was left out.',
+  'roll.problem.invalidField.many': '{field} cannot be understood, so they were left out.',
+  'roll.problem.tooLong': '{field} has too much text, so it was left out.',
+  'roll.problem.tooLong.many': '{field} has too much text, so they were left out.',
+  'roll.problem.other': 'It could not be read.',
+  'roll.field.id': 'The identifier',
+  'roll.field.full_name': 'The name',
+  'roll.field.name': 'The name',
+  'roll.field.family_name': 'The family name',
+  'roll.field.given_names': 'The given names',
+  'roll.field.table': 'The table',
+  'roll.field.order': 'The order number',
+  'roll.field.identifiers': 'The document',
+  'roll.field.address': 'The address',
+  'roll.field.birth_year': 'The year of birth',
+  'roll.field.level': 'The level',
+  'roll.field.parent': 'What it belongs to',
+  'roll.field.declared_total': 'The declared total',
+  'roll.field.review': 'The review mark',
+  'roll.field.extra': 'The extra data',
+  'roll.field.row': 'The row',
   'roll.upload.choose': 'Choose the file',
   'roll.upload.another': 'Choose another',
   'roll.upload.reading': 'Reading…',
@@ -1229,4 +1347,35 @@ export function roleName(role: string): string {
   };
   const key = names[role];
   return key ? t(key).split(':')[0]! : role;
+}
+
+/** «3, 4, 5 y 12 más»: up to four numbers, or the first three and how many more. */
+function numberList(lines: number[]): string {
+  if (lines.length > 4) return t('roll.where.andMore', { list: lines.slice(0, 3).join(', '), count: lines.length - 3 });
+  return lines.length > 1 ? `${lines.slice(0, -1).join(', ')} ${t('roll.where.and')} ${lines[lines.length - 1]}` : String(lines[0] ?? '');
+}
+
+/**
+ * Problems of one kind in words, all their rows in one line: where they are (a row and its number, or the part of a .padron)
+ * and what is wrong. Problems only ever carry a place and a code, never what a row says.
+ */
+export function rollProblem({ place, problem, lines }: { place: string; problem: string; lines: number[] }): { where: string; text: string } {
+  const has = (key: string): key is MessageKey => key in es;
+  const many = lines.length > 1;
+  const where =
+    place === 'file' ? ''
+    : place === 'manifest.json' ? `${t('roll.where.manifest')} (manifest.json)`
+    : place === 'line' || place === 'electors' || place === 'units' ? t(`roll.where.${place}${many ? '.many' : ''}` as MessageKey, { line: numberList(lines) })
+    : place;
+  const [code, field] = problem.split(':');
+  const fieldKey = `roll.field.${field}`;
+  const key: string =
+    code === 'invalid' && field ? 'roll.problem.invalidField'
+    : code === 'too_long' && field ? 'roll.problem.tooLong'
+    : code === 'repeated_id' && place !== 'line' ? 'roll.problem.repeated_id.padron'
+    : has(`roll.problem.${code}`) ? `roll.problem.${code}`
+    : 'roll.problem.other';
+  const text = t((many && has(`${key}.many`) ? `${key}.many` : key) as MessageKey, { field: t(has(fieldKey) ? fieldKey : 'roll.field.row') });
+  // After the place and a colon, the sentence goes on in lower case.
+  return { where, text: where ? text.charAt(0).toLowerCase() + text.slice(1) : text };
 }

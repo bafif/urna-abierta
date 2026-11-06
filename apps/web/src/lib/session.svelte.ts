@@ -10,7 +10,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
-    readonly problems: string[] = [],
+    /** What the server could not read in a file. Its shape depends on the route: each screen checks what it expects. */
+    readonly problems: unknown[] = [],
   ) {
     super(code);
   }
