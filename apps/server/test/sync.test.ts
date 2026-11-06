@@ -1,11 +1,18 @@
+import { createHash, randomBytes } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { uuidv7, writePadron, type Operation } from '@urna-abierta/domain';
 import { forgetActors, totpCode } from '../src/actor.ts';
 import { buildApp, migrate, seedDemo } from '../src/app.ts';
+import { diskPhotoStore, photoStoreFromEnv, PhotoStoreUnavailable, s3PhotoStore, type PhotoStore } from '../src/photo-store.ts';
+import { fakeS3 } from './fake-s3.ts';
 
 const url = process.env.TEST_DATABASE_URL;
+const s3Endpoint = process.env.URNA_TEST_S3_ENDPOINT;
 
 function operation(table: string, seq: number, elector = `e-${seq}`): Operation {
   return { id: uuidv7(), schema: 1, table, device: 'd-1', device_seq: seq, device_time: '2027-04-06T12:00:00.000Z', type: 'voter.marked', payload: { elector } };
@@ -17,6 +24,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
   let demo: Awaited<ReturnType<typeof seedDemo>>;
   let table: string;
   let tokens: Record<string, string>;
+  let photosFolder: string;
 
   const redeem = async (invitation: string) => (await app.inject({ method: 'POST', url: '/api/auth/redeem', payload: { token: invitation } })).json().token as string;
   const call = (who: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, payload?: object) =>
@@ -38,7 +46,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
     pool = new pg.Pool({ connectionString: url, max: 8 });
     await migrate(pool);
     process.env.URNA_FIELD_KEY = 'clave de prueba';
-    app = buildApp(pool);
+    photosFolder = await mkdtemp(join(tmpdir(), 'urna-fotos-prueba-'));
+    app = buildApp(pool, { photos: diskPhotoStore(photosFolder) });
     await app.ready();
   });
   beforeEach(async () => {
@@ -58,6 +67,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
   afterAll(async () => {
     await app.close();
     await pool.end();
+    await rm(photosFolder, { recursive: true, force: true });
   });
 
   describe('getting in', () => {
@@ -256,8 +266,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
 
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
-      const sha = (await import('node:crypto')).createHash('sha256').update(bytes).digest('hex');
-      process.env.URNA_PHOTOS_DIR = '/tmp/urna-fotos-prueba';
+      const sha = createHash('sha256').update(bytes).digest('hex');
       const put = (who: string, hash: string, where = table) => app.inject({ method: 'PUT', url: `/api/tables/${where}/photos/${hash}`, payload: bytes, headers: { authorization: `Bearer ${tokens[who]}`, 'content-type': 'image/jpeg' } });
       expect((await put('fiscal', 'a'.repeat(64))).statusCode).toBe(400);
       expect((await put('otra', sha)).statusCode).toBe(403);
@@ -267,6 +276,113 @@ describe.skipIf(!url)('against a real Postgres', () => {
       // The same picture sent from another table belongs to that one as well.
       expect((await put('otra', sha, demo.tables[1]!.table)).statusCode).toBe(200);
       expect((await call('otra', 'GET', `/api/tables/${demo.tables[1]!.table}/photos/${sha}`)).body).toBe('foto de prueba');
+      // On disk, as always, under its hash.
+      expect((await diskPhotoStore(photosFolder).get(sha))?.toString()).toBe('foto de prueba');
+      expect((await app.inject({ url: '/api/health' })).json()).toEqual({ ok: true, photos: { storage: 'disk' } });
+    });
+
+    it('when the photo storage fails, the phone hears 503 and nothing is recorded', async () => {
+      let failing = true;
+      const kept = new Map<string, Buffer>();
+      const flaky: PhotoStore = {
+        where: 'en ninguna parte',
+        async put(sha, bytes) {
+          if (failing) throw new PhotoStoreUnavailable('prueba');
+          kept.set(sha, bytes);
+        },
+        async get(sha) {
+          if (failing) throw new PhotoStoreUnavailable('prueba');
+          return kept.get(sha) ?? null;
+        },
+        status: () => ({ storage: 's3', working: !failing }),
+        probe: async () => !failing,
+      };
+      const other = buildApp(pool, { photos: flaky });
+      try {
+        const bytes = Buffer.from('foto que espera');
+        const sha = createHash('sha256').update(bytes).digest('hex');
+        const send = () => other.inject({ method: 'PUT', url: `/api/tables/${table}/photos/${sha}`, payload: bytes, headers: { authorization: `Bearer ${tokens.fiscal}`, 'content-type': 'image/jpeg' } });
+        const fetchIt = () => other.inject({ url: `/api/tables/${table}/photos/${sha}`, headers: { authorization: `Bearer ${tokens.jefe}` } });
+        const response = await send();
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toEqual({ error: 'photo_storage_unavailable' });
+        expect((await pool.query('SELECT 1 FROM photos WHERE sha256 = $1', [sha])).rowCount).toBe(0);
+        expect(await diskPhotoStore(photosFolder).get(sha)).toBeNull();
+        expect((await other.inject({ url: '/api/health' })).json()).toEqual({ ok: true, photos: { storage: 's3', working: false } });
+        // The phone tries again later, and then it goes through.
+        failing = false;
+        expect((await send()).statusCode).toBe(200);
+        expect((await fetchIt()).body).toBe('foto que espera');
+        failing = true;
+        expect((await fetchIt()).statusCode).toBe(503);
+        // Recorded, but the store lost it: not found, never a crash.
+        failing = false;
+        kept.clear();
+        expect((await fetchIt()).statusCode).toBe(404);
+      } finally {
+        await other.close();
+      }
+    });
+
+    it('after switching to a bucket that cannot be listed, the photos from the disk are still served', async () => {
+      const bytes = Buffer.from('foto de antes del bucket');
+      const sha = createHash('sha256').update(bytes).digest('hex');
+      const send = (to: FastifyInstance, payload: Buffer, hash: string) => to.inject({ method: 'PUT', url: `/api/tables/${table}/photos/${hash}`, payload, headers: { authorization: `Bearer ${tokens.fiscal}`, 'content-type': 'image/jpeg' } });
+      expect((await send(app, bytes, sha)).statusCode).toBe(200);
+
+      const credentials = { region: 'us-east-1', accessKeyId: 'prueba', secretAccessKey: 'secreto de prueba' };
+      const bucket = await fakeS3(credentials);
+      // As AWS answers a missing object when the key has no s3:ListBucket.
+      bucket.denyListing(true);
+      const photos = s3PhotoStore({ config: { ...credentials, endpoint: bucket.endpoint, bucket: 'fotos-prueba' }, prefix: 'fotos/', fieldKey: 'clave de prueba', previous: diskPhotoStore(photosFolder), log: { info: () => undefined, error: () => undefined } });
+      const other = buildApp(pool, { photos });
+      const fetchIt = (hash: string) => other.inject({ url: `/api/tables/${table}/photos/${hash}`, headers: { authorization: `Bearer ${tokens.jefe}` } });
+      try {
+        const old = await fetchIt(sha);
+        expect(old.statusCode).toBe(200);
+        expect(old.body).toBe('foto de antes del bucket');
+        expect(bucket.requests).toHaveLength(0);
+        // A new one goes to the bucket and comes back from it.
+        const fresh = Buffer.from('foto nueva, en el bucket');
+        const freshSha = createHash('sha256').update(fresh).digest('hex');
+        expect((await send(other, fresh, freshSha)).statusCode).toBe(200);
+        expect((await fetchIt(freshSha)).body).toBe('foto nueva, en el bucket');
+        // Recorded but lost from both: not found, and the bucket is not marked as failing.
+        bucket.objects.clear();
+        expect((await fetchIt(freshSha)).statusCode).toBe(404);
+        expect((await other.inject({ url: '/api/health' })).json()).toEqual({ ok: true, photos: { storage: 's3', working: true } });
+      } finally {
+        await other.close();
+        await bucket.close();
+      }
+    });
+
+    it.skipIf(!s3Endpoint)('photos also go through a real S3 bucket (URNA_TEST_S3_ENDPOINT)', async () => {
+      const photos = photoStoreFromEnv({
+        URNA_S3_ENDPOINT: s3Endpoint,
+        URNA_S3_BUCKET: process.env.URNA_TEST_S3_BUCKET,
+        URNA_S3_REGION: process.env.URNA_TEST_S3_REGION,
+        URNA_S3_ACCESS_KEY_ID: process.env.URNA_TEST_S3_ACCESS_KEY_ID,
+        URNA_S3_SECRET_ACCESS_KEY: process.env.URNA_TEST_S3_SECRET_ACCESS_KEY,
+        URNA_S3_PREFIX: `prueba-${randomBytes(4).toString('hex')}/`,
+        URNA_FIELD_KEY: 'clave de prueba',
+        URNA_PHOTOS_DIR: photosFolder,
+      });
+      const other = buildApp(pool, { photos });
+      try {
+        expect(await photos.probe()).toBe(true);
+        const bytes = randomBytes(200_000);
+        const sha = createHash('sha256').update(bytes).digest('hex');
+        const response = await other.inject({ method: 'PUT', url: `/api/tables/${table}/photos/${sha}`, payload: bytes, headers: { authorization: `Bearer ${tokens.fiscal}`, 'content-type': 'image/jpeg' } });
+        expect(response.statusCode).toBe(200);
+        expect(await diskPhotoStore(photosFolder).get(sha)).toBeNull();
+        const back = await other.inject({ url: `/api/tables/${table}/photos/${sha}`, headers: { authorization: `Bearer ${tokens.jefe}` } });
+        expect(back.statusCode).toBe(200);
+        expect(back.rawPayload.equals(bytes)).toBe(true);
+        expect((await other.inject({ url: '/api/health' })).json()).toEqual({ ok: true, photos: { storage: 's3', working: true } });
+      } finally {
+        await other.close();
+      }
     });
   });
 

@@ -8,6 +8,7 @@ import { images, newSecrets, type Secrets } from './settings.ts';
 const exec = promisify(execFile);
 const PORT = process.env.URNA_LOCAL_PORT ?? '8090';
 const NAME = process.env.URNA_LOCAL_NAME ?? 'urna-local';
+const S3_SETTINGS = ['URNA_S3_ENDPOINT', 'URNA_S3_BUCKET', 'URNA_S3_REGION', 'URNA_S3_PREFIX', 'URNA_S3_ACCESS_KEY_ID', 'URNA_S3_SECRET_ACCESS_KEY'];
 
 /** Podman or Docker, whichever this computer has. On a server it is always Podman; here it is up to the person. */
 export async function findEngine(): Promise<string | null> {
@@ -54,10 +55,16 @@ export async function startLocal(theme: string, log: (line: string) => void): Pr
 
   log('start');
   await run('run', '-d', '--name', `${NAME}-db`, '--network', NAME, '--restart=unless-stopped', '-e', 'POSTGRES_USER=urna', '-e', 'POSTGRES_DB=urna', '-e', `POSTGRES_PASSWORD=${secrets.postgresPassword}`, '-v', `${NAME}-database:/var/lib/postgresql`, chosen.db);
+  // The photos live in a volume, like the database, so that trying it again keeps them. A new
+  // volume belongs to root under Docker, and the server runs as `node`.
+  const photos = `${NAME}-fotos:/fotos`;
+  await run('run', '--rm', '--user', '0', '-v', photos, chosen.server, 'chown', 'node', '/fotos');
+  // Whoever wants to try photos in a bucket from here sets the same variables as on a server.
+  const bucket = S3_SETTINGS.flatMap((name) => (process.env[name] ? ['-e', `${name}=${process.env[name]}`] : []));
   await run(
     'run', '-d', '--name', `${NAME}-server`, '--network', NAME, '--restart=unless-stopped', '-e', 'URNA_ACEPTO_RESPONSABILIDAD=si',
     '-e', `URNA_SETUP_CODE=${secrets.setupCode}`, '-e', `URNA_FIELD_KEY=${secrets.fieldKey}`, '-e', `URNA_TEMA=${theme}`,
-    '-e', `DATABASE_URL=postgres://urna:${secrets.postgresPassword}@${NAME}-db:5432/urna`, '-e', 'URNA_PHOTOS_DIR=/tmp/fotos', chosen.server,
+    '-e', `DATABASE_URL=postgres://urna:${secrets.postgresPassword}@${NAME}-db:5432/urna`, '-e', 'URNA_PHOTOS_DIR=/fotos', '-v', photos, ...bucket, chosen.server,
   );
   await run('run', '-d', '--name', `${NAME}-web`, '--network', NAME, '--restart=unless-stopped', '-p', `127.0.0.1:${PORT}:80`, '-e', 'URNA_SITE=:80', '-e', `URNA_API=${NAME}-server:3000`, chosen.web);
   return { secrets, url: `http://localhost:${PORT}` };
