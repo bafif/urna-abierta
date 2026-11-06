@@ -5,7 +5,8 @@
   import Pantalla from '../components/Pantalla.svelte';
   import { t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
-  import { session } from '../session.svelte.ts';
+  import { autoPick, statusName, type OpenElection } from '../open-elections.ts';
+  import { ApiError, session } from '../session.svelte.ts';
 
   interface Category {
     id: string;
@@ -21,20 +22,24 @@
     category: string | null;
   }
 
-  let election = $state<{ id: string; name: string } | null>(null);
+  let elections = $state.raw<OpenElection[]>([]);
+  let election = $state<OpenElection | null>(null);
+  /** With several elections and none clearly under way, the person says which one. */
+  let choosing = $state(false);
   let categories = $state.raw<Category[]>([]);
   let query = $state('');
   let people = $state.raw<Person[]>([]);
   let person = $state<Person | null>(null);
   let choice = $state<string | null>(null);
   let offline = $state(false);
-  let failed = $state(false);
+  let failed = $state<'signal' | 'sensitive' | null>(null);
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   onMount(async () => {
     try {
-      const { elections } = await session.api<{ elections: { id: string; name: string; status: string }[] }>('/open-elections');
-      election = elections[0] ?? null;
+      elections = (await session.api<{ elections: OpenElection[] }>('/open-elections')).elections;
+      election = autoPick(elections);
+      choosing = !election && elections.length > 1;
       categories = (await session.api<{ categories: Category[] }>('/semaphore/categories')).categories;
     } catch {
       offline = true;
@@ -51,6 +56,13 @@
     }
   }
 
+  function pick(chosen: OpenElection) {
+    election = chosen;
+    choosing = false;
+    query = '';
+    people = [];
+  }
+
   function typed() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(search, 300);
@@ -59,7 +71,7 @@
   function open(found: Person) {
     person = found;
     choice = found.category;
-    failed = false;
+    failed = null;
   }
 
   /** It is only edited with signal, so that two people never hold different versions of it. */
@@ -70,25 +82,39 @@
       person = null;
       query = '';
       people = [];
-    } catch {
-      failed = true;
+    } catch (error) {
+      failed = error instanceof ApiError && error.code === 'sensitive_mark' ? 'sensitive' : 'signal';
     }
   }
 
   const items = $derived(categories.map((category) => ({ id: category.id, title: category.name, color: category.color })));
 </script>
 
-{#if person}
+{#if choosing}
+  <Pantalla accion="equipo" volver={nav.current.name !== 'home'} titulo={t('light.pick')} desliza>
+    <div class="tarjetas">
+      {#each elections as option (option.id)}
+        <button class="tarjeta eleccion" data-testid="pick-election" onclick={() => pick(option)}>
+          <strong>{option.name}</strong>
+          <span>{t(statusName(option.status))}</span>
+        </button>
+      {/each}
+    </div>
+    {#snippet pie()}
+      <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+    {/snippet}
+  </Pantalla>
+{:else if person}
   <Pantalla accion="equipo" volver onback={() => (person = null)} ojo={t('light.eyebrow')} titulo={person.name} bajada={person.table ? t('light.where', { table: person.table, order: person.order ?? '' }) : ''} desliza>
     <Options {items} bind:value={choice} />
     {#if choice}<button class="enlace" onclick={() => (choice = null)}>{t('light.clear')}</button>{/if}
-    {#if failed}<p class="problema" role="alert">{t('light.needSignal')}</p>{/if}
+    {#if failed}<p class="problema" role="alert">{t(failed === 'sensitive' ? 'light.sensitiveMark' : 'light.needSignal')}</p>{/if}
     {#snippet pie()}
       <button class="boton primario" onclick={save}><Ic name="flecha" /><span>{t('light.save')}</span></button>
     {/snippet}
   </Pantalla>
 {:else}
-  <Pantalla accion="equipo" volver={nav.current.name !== 'home'} ojo={election?.name ?? ''} titulo={t('light.title')} bajada={t('light.text')} desliza>
+  <Pantalla accion="equipo" volver={nav.current.name !== 'home' || elections.length > 1} onback={elections.length > 1 ? () => (choosing = true) : undefined} ojo={election?.name ?? ''} titulo={t('light.title')} bajada={t('light.text')} desliza>
     {#if offline}<p class="estado envio"><span class="foco"></span>{t('light.needSignal')}</p>{/if}
     {#if categories.length === 0 && !offline}<p class="aviso-suave">{t('light.empty')}</p>{/if}
     <label class="buscar">

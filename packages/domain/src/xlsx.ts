@@ -29,7 +29,7 @@ const STRING_ITEM = tag('si');
 const RELATIONSHIP = tag('Relationship');
 const ROW = tag('row');
 const CELL = tag('c');
-const FIRST_SHEET = tag('sheet', '');
+const SHEET = tag('sheet');
 const SHEET_DATA = tag('sheetData', '');
 const VALUE = tag('v', '');
 const INLINE = tag('is', '');
@@ -135,8 +135,11 @@ export function unzipSome(bytes: Uint8Array, wanted: (name: string) => boolean, 
   return total > limit ? 'too_big' : { files, names };
 }
 
-/** The first worksheet of an .xlsx file, as rows of text, or why it cannot be read. */
-export function readFirstSheet(bytes: Uint8Array): SheetRow[] | 'not_a_spreadsheet' | 'too_big' {
+/** Whether a worksheet has any cell with something in it. */
+const HAS_VALUE = /<(?:[\w.-]+:)?(?:v|t)\b[^>]*>\s*[^<\s]/;
+
+/** The first worksheet of an .xlsx file, as rows of text, and how many of the other sheets have something written; or why it cannot be read. */
+export function readFirstSheet(bytes: Uint8Array): { rows: SheetRow[]; otherSheetsWithData: number } | 'not_a_spreadsheet' | 'too_big' {
   // First the small parts that say where everything is. Pictures and anything else inside the file are never unpacked.
   const index = unzipSome(bytes, (name) => /\.rels$/i.test(name) || /(^|\/)workbook\.xml$/i.test(name));
   if (index === 'not_a_zip') return 'not_a_spreadsheet';
@@ -150,12 +153,15 @@ export function readFirstSheet(bytes: Uint8Array): SheetRow[] | 'not_a_spreadshe
   const inFolder = (name: string) => (folder ? `${folder}/${name}` : name);
   const links = relationships(files, inFolder(`_rels/${workbookPath.split('/').pop()}.rels`));
 
-  const firstSheet = FIRST_SHEET.exec(strFromU8(workbookFile));
-  const sheetId = firstSheet ? (attribute(firstSheet[1]!, 'r:id') ?? attribute(firstSheet[1]!, '[\\w.-]+:id')) : undefined;
-  const sheetLink = links.find((rel) => rel.id === sheetId);
+  const sheetPaths = [...strFromU8(workbookFile).matchAll(SHEET)].map((sheet) => {
+    const id = attribute(sheet[1]!, 'r:id') ?? attribute(sheet[1]!, '[\\w.-]+:id');
+    const link = links.find((rel) => rel.id === id);
+    return link ? resolve(folder, link.target) : undefined;
+  });
   const fallback = names.filter((name) => /^xl\/worksheets\/[^/]+\.xml$/i.test(name)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))[0];
-  const sheetPath = sheetLink ? resolve(folder, sheetLink.target) : fallback;
+  const sheetPath = sheetPaths[0] ?? fallback;
   if (!sheetPath) return 'not_a_spreadsheet';
+  const otherPaths = new Set(sheetPaths.filter((path): path is string => path !== undefined && path !== sheetPath && names.includes(path)));
   const linked = (type: string, name: string) => {
     const link = links.find((rel) => rel.type.endsWith(type));
     return link ? resolve(folder, link.target) : inFolder(name);
@@ -200,5 +206,19 @@ export function readFirstSheet(bytes: Uint8Array): SheetRow[] | 'not_a_spreadshe
     }
     rows.push({ line, cells });
   }
-  return rows;
+  return { rows, otherSheetsWithData: otherSheetsWithData(bytes, otherPaths) };
+}
+
+/**
+ * Only the first sheet is read, so a roll that goes on in another sheet has to be noticed. Sheets too big to unpack
+ * here certainly have something in them.
+ */
+function otherSheetsWithData(bytes: Uint8Array, paths: Set<string>): number {
+  if (paths.size === 0) return 0;
+  const others = unzipSome(bytes, (name) => paths.has(name));
+  if (typeof others === 'string') return paths.size;
+  return [...paths].filter((path) => {
+    const file = others.files[path];
+    return file !== undefined && HAS_VALUE.test(SHEET_DATA.exec(strFromU8(file))?.[2] ?? '');
+  }).length;
 }

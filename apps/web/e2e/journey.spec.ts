@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { backOnline, enter, expectLeft, onIphone, openRoll, PHOTO, prepare, prepared, seed, totp, typeNumber } from './helpers.ts';
 
 test.beforeEach(({ page }) => {
@@ -7,6 +7,14 @@ test.beforeEach(({ page }) => {
 });
 
 const useThis = (page: Page) => page.getByRole('button', { name: 'Usar este' }).click();
+
+/** Picks the newest election when several are under way, and goes on when the screen already opened one. */
+async function pickNewest(page: Page, ready: Locator): Promise<void> {
+  const pick = page.getByTestId('pick-election');
+  await expect(ready.or(pick.first())).toBeVisible();
+  if ((await pick.count()) > 0) await pick.first().click();
+  await expect(ready).toBeVisible();
+}
 const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
 
 test('the first run: code, party, team, security, and a second step when the profile asks for it', async ({ page }) => {
@@ -52,6 +60,37 @@ test('the first run: code, party, team, security, and a second step when the pro
       headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('urna-abierta-token')}` },
       body: JSON.stringify({ profile: 'estudiantil' }),
     });
+  });
+});
+
+test('creating an election that asks for a second step leads to it, not to an empty screen', async ({ page, request }) => {
+  const demo = await seed(request, { size: 5 });
+  await page.goto(`/#invitacion=${demo.links.coordinacion}`);
+  await useThis(page);
+  await button(page, 'Crear una elección').click();
+  await page.getByRole('radio', { name: /Municipal o provincial/ }).click();
+  await page.getByTestId('election-name').fill('Concejo');
+  await button(page, 'Seguir').click();
+  const today = await page.evaluate(() => new Date().getDate());
+  await page.getByTestId('day').nth(today - 1).click();
+  await button(page, 'Seguir').click();
+  await page.getByTestId('category-name').fill('Concejales');
+  await page.getByTestId('category-lists').fill('Lista Azul');
+  await button(page, 'Crear la elección').click();
+
+  const secret = await page.getByTestId('totp-secret').innerText();
+  await button(page, 'Seguir').click();
+  for (const digit of totp(secret)) await page.locator('.tecla', { hasText: new RegExp(`^${digit}$`) }).click();
+  await button(page, 'Confirmar').click();
+  await expect(button(page, 'Crear una elección')).toBeVisible();
+
+  // Closed again, so that the rest of the tests keep the student level.
+  await page.evaluate(async () => {
+    const api = (path: string, init: RequestInit = {}) =>
+      fetch(`/api${path}`, { ...init, headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('urna-abierta-token')}` } }).then((response) => response.json());
+    const { elections } = await api('/elections');
+    const { id } = elections.find((election: { name: string }) => election.name === 'Concejo');
+    for (const status of ['jornada', 'escrutinio', 'cerrada']) await api(`/elections/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) });
   });
 });
 
@@ -330,6 +369,8 @@ test('the traffic light starts empty, and the numbers never show a name', async 
   const other = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });
   const light = await other.newPage();
   await enter(light, demo.links.semaforo!);
+  // The server keeps the elections of earlier tests open: with several under way, it asks which one, newest first.
+  await pickNewest(light, light.getByRole('searchbox'));
   await light.getByRole('searchbox').fill('99000001');
   await light.getByTestId('light-person').first().click();
   await light.getByRole('radio', { name: `Puede ser ${test.info().project.name}` }).click();
@@ -342,6 +383,7 @@ test('the traffic light starts empty, and the numbers never show a name', async 
   const third = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });
   const numbers = await third.newPage();
   await enter(numbers, demo.links.estadistico!);
+  await pickNewest(numbers, numbers.getByTestId('share'));
   await expect(numbers.getByTestId('share')).toBeVisible();
   await expect(numbers.locator('body')).not.toContainText('Acuña');
   await third.close();
@@ -402,6 +444,22 @@ test('a theme with its own fonts, in one file, stays on the phone with no signal
   await device.close();
 });
 
+test('whoever only looks after the system lands on what they can do, and sees nothing else', async ({ page, request }) => {
+  const demo = await seed(request, { size: 5 });
+  const token = (await (await request.post('/api/auth/redeem', { data: { token: demo.links.coordinacion } })).json()).token;
+  const created = await request.post('/api/users', { data: { name: 'Sistemas Solo', role: 'sistema' }, headers: { authorization: `Bearer ${token}` } });
+  await page.goto(`/#invitacion=${(await created.json()).invitation}`);
+  await useThis(page);
+  await expect(page.getByRole('heading')).toHaveText('Más cosas');
+  await expect(page.getByText('No se pudo')).toHaveCount(0);
+  for (const name of [/^Tu equipo/, /^Permisos/, /^Seguridad/, /^Copias de seguridad/, /^Registro/, /^Ajustes/]) await expect(page.getByRole('button', { name })).toBeVisible();
+  // Rolls, people and the traffic light are not this role's work.
+  for (const name of [/^Pedidos de personas/, /^Semáforo/, /^Tu partido/]) await expect(page.getByRole('button', { name })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Volver' })).toHaveCount(0);
+  await page.getByRole('button', { name: /^Registro/ }).click();
+  await expect(page.getByTestId('audit-entry').first()).toBeVisible();
+});
+
 test('someone asks for their data and to be erased', async ({ page, request }) => {
   const demo = await seed(request, { size: 10 });
   await page.goto(`/#invitacion=${demo.links.coordinacion}`);
@@ -413,7 +471,14 @@ test('someone asks for their data and to be erased', async ({ page, request }) =
   await page.getByTestId('found-person').first().click();
   const download = page.waitForEvent('download');
   await page.getByTestId('person-export').click();
-  expect((await download).suggestedFilename()).toMatch(/^datos-/);
+  // A page anyone can read and print, in the language of the screen, with no internal fields.
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^datos-[a-z0-9-]+\.html$/);
+  const page14 = readFileSync(await file.path(), 'utf8');
+  expect(page14).toContain('Los datos que tenemos de');
+  expect(page14).toContain('Tus derechos');
+  expect(page14).toContain('99000001');
+  expect(page14).not.toMatch(/election_id|needs_review/);
   await page.getByTestId('person-fix-name').fill('Nombre Corregido');
   await page.getByTestId('person-fix').click();
   await expect(page.getByText('Datos corregidos.')).toBeVisible();

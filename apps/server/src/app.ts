@@ -8,11 +8,19 @@ import { photoStoreFromEnv, type PhotoStore } from './photo-store.ts';
 import { adminRoutes } from './routes-admin.ts';
 import { authRoutes, createInvitation } from './routes-auth.ts';
 import { syncRoutes } from './routes-sync.ts';
-import { workRoutes } from './routes-work.ts';
+import { eraseElector, workRoutes } from './routes-work.ts';
 
 export async function migrate(pool: pg.Pool): Promise<void> {
   const sql = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
   await pool.query(sql);
+  // Erasures from before the roll id went too still have it, often the DNI: they are erased again, the way it is done now.
+  // That takes the field key, which the server always has by now.
+  if (!process.env.URNA_FIELD_KEY) return;
+  const old = await pool.query(
+    `SELECT x.election_id, x.id FROM electors x JOIN elections e ON e.id = x.election_id
+     WHERE x.erased_at IS NULL AND x.full_name = 'Borrado a pedido' AND x.search = '' AND x.document IS NULL AND e.status <> 'purgada'`,
+  );
+  for (const row of old.rows) await eraseElector(pool, row.election_id, row.id);
 }
 
 /** An election with invented people and one person per role, for tests and for trying the app. */

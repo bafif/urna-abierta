@@ -120,6 +120,34 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('jefe', 'POST', '/api/auth/second-factor/start')).json().enrolled).toBe(true);
     });
 
+    it('an open election holds the security level of its kind, on the server and for everyone', async () => {
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
+      tokens.sistema = await redeem(invitation);
+      expect((await call('jefe', 'GET', '/api/me')).json().secondFactorNeeded).toBe(false);
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Nacional', kind: 'nacional', days: ['2027-10-24'] })).json().id;
+      // From here on administrators need the second step too: this test gives it to all but the chief.
+      expect((await call('coordinacion', 'GET', '/api/users')).json().error).toBe('second_factor_needed');
+      const jefe = (await pool.query(`SELECT id FROM users WHERE name = 'Rubén'`)).rows[0].id;
+      await pool.query('UPDATE devices SET second_factor_at = now() WHERE user_id <> $1', [jefe]);
+      forgetActors();
+      const me = (await call('jefe', 'GET', '/api/me')).json();
+      expect(me.secondFactorNeeded).toBe(true);
+      expect(me.security).toMatchObject({ profile: 'nacional', minimum: 'nacional', choice: 'estudiantil' });
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json().electors[0].documentSuffix).toHaveLength(3);
+      expect((await call('coordinacion', 'PUT', '/api/semaphore/fiscal-view', { enabled: true })).statusCode).toBe(409);
+      // Nobody lowers it while that election is open, not even whoever looks after the system.
+      const lower = await call('sistema', 'PUT', '/api/security', { profile: 'local' });
+      expect(lower.statusCode).toBe(409);
+      expect(lower.json()).toEqual({ error: 'election_needs_more', minimum: 'nacional' });
+      // Keeping what the party had chosen lowers nothing, and does not turn the election's level into the party's choice.
+      expect((await call('sistema', 'PUT', '/api/security', { profile: 'estudiantil' })).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', '/api/me')).json().security).toMatchObject({ profile: 'nacional', choice: 'estudiantil' });
+      for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+      expect((await call('sistema', 'PUT', '/api/security', { profile: 'estudiantil' })).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', '/api/me')).json().secondFactorNeeded).toBe(false);
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json().electors[0].documentSuffix).toHaveLength(8);
+    });
+
     it('removing someone stops their phone', async () => {
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       const marta = users.find((u: { name: string }) => u.name === 'Marta');
@@ -186,6 +214,13 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(body.voted).toBe(1);
       expect(body.hours).toEqual([]);
       expect(JSON.stringify(body)).not.toMatch(/Acuña|document/);
+    });
+
+    it('hours come in a form every browser reads', async () => {
+      await push('fiscal', table, Array.from({ length: 5 }, (_, i) => operation(table, i + 1)));
+      const { hours } = (await call('estadistico', 'GET', `/api/elections/${demo.election}/stats`)).json();
+      expect(hours).toEqual([{ hour: '2027-04-06T12:00:00Z', marks: 5 }]);
+      expect(new Date(hours[0].hour).getTime()).toBe(Date.UTC(2027, 3, 6, 12));
     });
   });
 
@@ -294,9 +329,32 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await push('fiscal', table, [operation(table, 1)]);
       for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
       expect((await push('fiscal', table, [operation(table, 2)])).json().acked).toHaveLength(1);
-      expect(await pullAll('fiscal', table)).toHaveLength(1);
+      expect(await pullAll('coordinacion', table)).toHaveLength(1);
       const kept = await pool.query('SELECT count(*)::int AS n FROM operations WHERE quarantined');
       expect(kept.rows[0].n).toBe(1);
+    });
+
+    it('closing the election takes the roll away from poll watchers and chiefs, and only the tally photo stays for the chief', async () => {
+      const bytes = Buffer.from('acta');
+      const sha = createHash('sha256').update(bytes).digest('hex');
+      const photo = (who: string) => call(who, 'GET', `/api/tables/${table}/photos/${sha}`);
+      await app.inject({ method: 'PUT', url: `/api/tables/${table}/photos/${sha}`, payload: bytes, headers: { authorization: `Bearer ${tokens.fiscal}`, 'content-type': 'image/jpeg' } });
+      await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status: 'escrutinio' });
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status: 'cerrada' });
+      for (const who of ['fiscal', 'jefe']) {
+        const bundle = await call(who, 'GET', `/api/tables/${table}/bundle`);
+        expect(bundle.statusCode).toBe(410);
+        expect(bundle.json().error).toBe('election_closed');
+        expect((await call(who, 'GET', `/api/sync/pull?table=${table}&since=0`)).statusCode).toBe(410);
+      }
+      expect((await photo('fiscal')).statusCode).toBe(410);
+      expect((await photo('jefe')).body).toBe('acta');
+      // Whoever runs the election still sees it all, to review what came late.
+      expect((await call('coordinacion', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      expect((await call('coordinacion', 'GET', `/api/sync/pull?table=${table}&since=0`)).statusCode).toBe(200);
+      // And the phone hears how long it may keep the roll.
+      expect((await call('fiscal', 'GET', '/api/me')).json().security.localHoursAfterClose).toBe(12);
     });
   });
 
@@ -633,6 +691,61 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await pool.query(`SELECT public_id FROM electors WHERE id = 'd-99000001'`)).rows[0]).toEqual(person);
     });
 
+    it('importing again keeps what was corrected and who asked to be erased, and a closed election takes no roll', async () => {
+      const id = await newElection();
+      const file = writePadron({ electors: people(5) as never });
+      await upload(id, file);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}/electors/p-0`, { full_name: 'Corregida, Ana', document: '123' })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${id}/p-1`)).statusCode).toBe(200);
+      const preview = (await upload(id, file, true)).json();
+      expect(preview).toMatchObject({ people: 4, added: 0, kept: 4, missing: 0, erased: 1, corrected: 1, toReview: 0 });
+      expect((await upload(id, file)).statusCode).toBe(200);
+      const rows = (await pool.query('SELECT id, full_name, document, needs_review FROM electors WHERE election_id = $1 ORDER BY id', [id])).rows;
+      expect(rows).toHaveLength(5);
+      expect(rows.find((row) => row.id === 'p-0')).toMatchObject({ full_name: 'Corregida, Ana', document: '123', needs_review: false });
+      expect(rows.some((row) => row.id === 'p-1')).toBe(false);
+      expect(rows.filter((row) => row.id.startsWith('x-'))).toEqual([expect.objectContaining({ full_name: 'Borrado a pedido', document: null })]);
+
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/tables/propose`, { size: 10 })).json().created).toBe(1);
+      const mesa = (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string;
+      for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+      expect((await upload(id, file)).json().error).toBe('election_closed');
+      expect((await upload(id, file, true)).statusCode).toBe(409);
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/tables/propose`, { size: 10 })).statusCode).toBe(409);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}/electors/p-2`, { full_name: 'Otra, Eva' })).statusCode).toBe(409);
+      // Nor its tables or districts: who watched where stays as it was.
+      expect((await call('coordinacion', 'PUT', `/api/tables/${mesa}`, { name: 'Otra mesa' })).statusCode).toBe(409);
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/units`, { name: 'Distrito tarde' })).statusCode).toBe(409);
+      expect((await pool.query('SELECT name FROM polling_tables WHERE id = $1', [mesa])).rows[0].name).toBe('Mesa 1');
+      await call('coordinacion', 'POST', `/api/elections/${id}/purge`);
+      expect((await upload(id, file)).statusCode).toBe(409);
+      expect((await call('coordinacion', 'PUT', `/api/tables/${mesa}`, { place: 'Otra escuela' })).statusCode).toBe(409);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND full_name <> ''`, [id])).rows[0].n).toBe(0);
+    });
+
+    it('a roll without DNI or legajo names people by their row: a row added on top moves no erasure and no correction to someone else', async () => {
+      const id = await newElection();
+      const csv = (text: string, preview = false) =>
+        app.inject({ method: 'POST', url: `/api/elections/${id}/roll${preview ? '?preview=1' : ''}`, payload: Buffer.from(text), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'text/csv' } });
+      const first = 'Apellido y nombre;DNI\nAlfa, Ana;123456\nBeta, Bea;654321\nGama, Gus;111222\n';
+      expect((await csv(first)).statusCode).toBe(200);
+      const rows = async () => (await pool.query('SELECT id, full_name, document FROM electors WHERE election_id = $1 AND erased_at IS NULL ORDER BY full_name', [id])).rows;
+      expect((await rows()).map((row) => row.id)).toEqual(['f-1', 'f-2', 'f-3']);
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${id}/f-2`)).statusCode).toBe(200);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/f-3`, { full_name: 'Gama, Gustavo' })).statusCode).toBe(200);
+
+      const second = 'Apellido y nombre;DNI\nCero, Ceci;222333\nAlfa, Ana;123456\nBeta, Bea;654321\nGama, Gus;111222\n';
+      expect((await csv(second, true)).json()).toMatchObject({ people: 3, added: 1, kept: 2, missing: 0, erased: 1, corrected: 1 });
+      expect((await csv(second)).statusCode).toBe(200);
+      // Each one keeps their own id, the new person takes nobody's, and whoever asked to be erased stays out.
+      expect(await rows()).toEqual([
+        { id: 'f-1', full_name: 'Alfa, Ana', document: '123456' },
+        { id: 'f-5', full_name: 'Cero, Ceci', document: '222333' },
+        { id: 'f-3', full_name: 'Gama, Gustavo', document: '111222' },
+      ]);
+      expect((await csv(first, true)).json()).toMatchObject({ people: 2, added: 0, kept: 2, missing: 1, erased: 1, corrected: 1 });
+    });
+
     it('refuses what it cannot read, and a roll made with an external AI if the election forbids it', async () => {
       const id = await newElection();
       expect((await upload(id, new TextEncoder().encode('nada'))).statusCode).toBe(422);
@@ -640,8 +753,16 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"nacional"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
       await pool.query('UPDATE devices SET second_factor_at = now()');
       forgetActors();
-      const res = await upload(id, writePadron({ electors: people(2) as never, externalAi: true }));
+      const withAi = writePadron({ electors: people(2) as never, externalAi: true });
+      const res = await upload(id, withAi);
       expect(res.json().error).toBe('external_ai_forbidden');
+      // The other levels let it in, and say so before it is loaded.
+      const fileProblems = async () => (await upload(id, withAi, true)).json().problems.filter((item: { where: string }) => item.where === 'file');
+      await pool.query(`UPDATE settings SET value = '"local"' WHERE key = 'security_profile'`);
+      expect(await fileProblems()).toEqual([{ where: 'file', problem: 'external_ai_paid_only' }]);
+      await pool.query(`UPDATE settings SET value = '"estudiantil"' WHERE key = 'security_profile'`);
+      expect(await fileProblems()).toEqual([{ where: 'file', problem: 'external_ai' }]);
+      expect((await upload(id, writePadron({ electors: people(2) as never }), true)).json().problems).toEqual([]);
     });
   });
 
@@ -679,6 +800,25 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('jefe', 'PUT', '/api/roles/jefe', { permissions: [] })).statusCode).toBe(403);
       expect((await edit('jefe', null)).statusCode).toBe(200);
       expect((await call('jefe', 'GET', `/api/elections/${demo.election}/stats`)).statusCode).toBe(403);
+    });
+
+    it('each person hears their own permissions, and a request about someone\'s data needs only that permission', async () => {
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
+      tokens.sistema = await redeem(invitation);
+      expect((await call('sistema', 'GET', '/api/me')).json().permissions.sort()).toEqual(['audit.read', 'security.manage', 'users.manage']);
+      const { recommended } = (await call('sistema', 'GET', '/api/roles')).json();
+      await call('sistema', 'PUT', '/api/roles/coordinacion', { permissions: recommended.coordinacion.filter((p: string) => p !== 'election.manage') });
+      expect((await call('coordinacion', 'GET', '/api/me')).json().permissions).not.toContain('election.manage');
+      const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
+      const fix = { full_name: 'Acuña, Corregida', document: '' };
+      expect((await call('coordinacion', 'PUT', `/api/elections/${found.election_id}/electors/${found.id}`, fix)).statusCode).toBe(403);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${found.election_id}/${found.id}`, fix)).statusCode).toBe(200);
+      // The document stays, and can still be searched.
+      const again = (await call('coordinacion', 'GET', `/api/persons?q=${found.document}`)).json().people.find((p: { id: string }) => p.id === found.id);
+      expect(again).toMatchObject({ full_name: 'Acuña, Corregida', document: found.document });
+      expect((await call('coordinacion', 'PUT', `/api/persons/${found.election_id}/${found.id}`, { full_name: ' ' })).statusCode).toBe(400);
+      await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [found.election_id]);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${found.election_id}/${found.id}`, fix)).statusCode).toBe(409);
     });
 
     it('taking away the work of a table really takes it away', async () => {
@@ -825,16 +965,51 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(again.category).toBe(closed);
     });
 
+    it('a sensitive mark cannot be seen through an export, nor replaced or cleared, without its own permission', async () => {
+      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      const idOf = (name: string) => users.find((u: { name: string }) => u.name === name).id;
+      await call('coordinacion', 'POST', `/api/users/${idOf('Juli')}/roles`, { role: 'semaforo_sensible' });
+      tokens.otro = await redeem((await call('coordinacion', 'POST', '/api/users', { name: 'Otro semáforo', role: 'semaforo' })).json().invitation);
+      const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
+      const mark = (who: string, category: string | null) => call(who, 'PUT', `/api/elections/${found.election_id}/people/${found.id}/semaphore`, { category });
+      expect((await mark('semaforo', closed)).statusCode).toBe(200);
+
+      expect((await mark('otro', open)).json().error).toBe('sensitive_mark');
+      expect((await mark('otro', null)).statusCode).toBe(403);
+      expect((await pool.query('SELECT sealed FROM semaphore_marks')).rows[0].sealed).toBeTruthy();
+
+      const exported = (await call('coordinacion', 'GET', `/api/persons/${found.election_id}/${found.id}/export`)).json();
+      expect(exported.semaphore).toMatchObject({ category: null, sensitive: true, hidden: true });
+      expect(JSON.stringify(exported)).not.toContain('Milita');
+
+      await call('coordinacion', 'POST', `/api/users/${idOf('Coordinación')}/roles`, { role: 'semaforo_sensible' });
+      const opened = (await call('coordinacion', 'GET', `/api/persons/${found.election_id}/${found.id}/export`)).json();
+      expect(opened.semaphore).toMatchObject({ category: 'Milita', sensitive: true, hidden: false });
+      const logged = await pool.query(`SELECT target FROM audit_log WHERE action = 'semaphore.sensitive_viewed' ORDER BY id DESC LIMIT 1`);
+      expect(logged.rows[0].target).toBe((await pool.query('SELECT ref FROM electors WHERE id = $1', [found.id])).rows[0].ref);
+      // With the permission, the mark can be changed again.
+      expect((await mark('semaforo', open)).statusCode).toBe(200);
+      expect((await mark('otro', null)).statusCode).toBe(200);
+    });
+
     it('finds, exports, records consent and erases a person, and purges an election', async () => {
       const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
       expect(found.document).toBeTruthy();
       const base = `/api/persons/${found.election_id}/${found.id}`;
       expect((await call('coordinacion', 'PUT', `${base}/consent`, { date: '2027-01-01', means: 'firma' })).statusCode).toBe(200);
-      expect((await call('coordinacion', 'GET', `${base}/export`)).json().person.consent.means).toBe('firma');
+      const exported = (await call('coordinacion', 'GET', `${base}/export`)).json();
+      expect(exported).toMatchObject({ party: 'Agrupación Ejemplo', consent: { date: '2027-01-01', means: 'firma' }, person: { name: found.full_name, document: found.document }, table: { name: found.table_name } });
+      expect(exported.election.name).toContain('Elección de prueba');
+      // Nothing internal: no ids, flags or raw columns.
+      expect(Object.keys(exported).sort()).toEqual(['consent', 'election', 'markedVoted', 'others', 'party', 'person', 'semaphore', 'table']);
+      expect(JSON.stringify(exported)).not.toMatch(/election_id|needs_review|search|"review"|"ref"/);
       expect((await call('coordinacion', 'DELETE', base)).statusCode).toBe(200);
       expect((await call('coordinacion', 'GET', '/api/persons?q=borrado')).json().people).toEqual([]);
-      const erased = (await pool.query('SELECT full_name, document FROM electors WHERE id = $1', [found.id])).rows[0];
-      expect(erased).toEqual({ full_name: 'Borrado a pedido', document: null });
+      expect((await pool.query('SELECT 1 FROM electors WHERE id = $1', [found.id])).rowCount).toBe(0);
+      const erased = (await pool.query(`SELECT full_name, document FROM electors WHERE election_id = $1 AND id LIKE 'x-%'`, [found.election_id])).rows;
+      expect(erased).toEqual([{ full_name: 'Borrado a pedido', document: null }]);
 
       expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(409);
       for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
@@ -843,12 +1018,195 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(left.rows[0].n).toBe(0);
     });
 
+    it('what is handed to a person says they voted only if the mark stands, and in which other rolls they are', async () => {
+      const [person] = (await pool.query('SELECT id, document FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 1', [table])).rows;
+      const exported = async () => (await call('coordinacion', 'GET', `/api/persons/${demo.election}/${person.id}/export`)).json();
+      const marked = { ...operation(table, 1), payload: { elector: person.id } };
+      await push('fiscal', table, [marked]);
+      expect((await exported()).markedVoted).toEqual([marked.device_time]);
+      await push('fiscal', table, [{ ...operation(table, 2), type: 'voter.unmarked', payload: { elector: person.id, cancels: [marked.id] } }]);
+      expect((await exported()).markedVoted).toEqual([]);
+      expect((await call('coordinacion', 'GET', `/api/elections/${demo.election}/stats`)).json().voted).toBe(0);
+
+      expect((await exported()).others).toEqual([]);
+      const other = (await call('coordinacion', 'POST', '/api/elections', { name: 'Claustro', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+      const file = writePadron({ electors: [{ id: `d-${person.document}`, full_name: 'La misma, Persona', identifiers: [{ type: 'DNI', value: person.document }] }] as never });
+      await app.inject({ method: 'POST', url: `/api/elections/${other}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      expect((await exported()).others).toEqual(['Claustro']);
+    });
+
+    it('erasing a person and purging the election leave no document behind, anywhere in the database', async () => {
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Con DNI', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+      const dnis = ['99111222', '99111333', '99111444'];
+      const file = writePadron({ electors: dnis.map((dni, i) => ({ id: `d-${dni}`, full_name: `Persona${i}, Ana`, identifiers: [{ type: 'DNI', value: dni }], table: '1' })) as never });
+      await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      const mesa = (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string;
+      const voted = (dni: string, seq: number) => ({ ...operation(mesa, seq), payload: { elector: `d-${dni}` } });
+      expect((await push('coordinacion', mesa, [voted(dnis[0]!, 1), voted(dnis[1]!, 2)])).statusCode).toBe(200);
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
+      const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      for (const dni of dnis) expect((await call('semaforo', 'PUT', `/api/elections/${id}/people/d-${dni}/semaphore`, { category: sensitive })).statusCode).toBe(200);
+      const base = `/api/persons/${id}/d-${dnis[0]}`;
+      await call('coordinacion', 'PUT', `${base}/consent`, { date: '2027-01-01', means: 'firma' });
+      await call('coordinacion', 'GET', `${base}/export`);
+      await call('coordinacion', 'PUT', `/api/elections/${id}/electors/d-${dnis[0]}`, { full_name: 'Persona0, Ana María', document: dnis[0] });
+      expect((await call('coordinacion', 'DELETE', base)).statusCode).toBe(200);
+      // A phone that never heard of the erasure marks the person under the old id.
+      expect((await push('coordinacion', mesa, [voted(dnis[0]!, 3)])).statusCode).toBe(200);
+
+      const everything = async () => {
+        const tables = await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`);
+        let dump = '';
+        for (const { table_name } of tables.rows) dump += (await pool.query(`SELECT coalesce(string_agg(row_to_json(t)::text, E'\\n'), '') AS rows FROM "${table_name}" t`)).rows[0].rows;
+        return dump;
+      };
+      expect(await everything()).not.toContain(dnis[0]);
+      expect(await everything()).toContain(dnis[1]);
+      // The erased person still counts as voted, once.
+      const totals = (await call('coordinacion', 'GET', `/api/elections/${id}/stats`)).json();
+      expect(totals.voted).toBe(2);
+
+      for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+      expect((await push('coordinacion', mesa, [voted(dnis[2]!, 4)])).statusCode).toBe(200);
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/purge`)).statusCode).toBe(200);
+      // And a phone that sends late after the purge is heard, and what it names is dropped.
+      const late = voted(dnis[2]!, 5);
+      expect((await push('coordinacion', mesa, [late])).json().acked).toEqual([late.id]);
+      const dump = await everything();
+      for (const dni of dnis) expect(dump).not.toContain(dni);
+    });
+
+    it('after an erasure, and after the purge, nothing in the audit log leads back to the table and order of anyone', async () => {
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
+      const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const [erased, kept] = (await pool.query('SELECT id FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 2', [table])).rows.map((row) => row.id as string);
+      for (const person of [erased!, kept!]) expect((await call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${person}/semaphore`, { category: sensitive })).statusCode).toBe(200);
+      const since = Number((await pool.query('SELECT coalesce(max(id), 0) AS n FROM audit_log')).rows[0].n);
+      const linked = async () =>
+        (await pool.query(`SELECT DISTINCT x.order_number FROM audit_log a JOIN electors x ON x.ref::text = a.target OR a.detail->'people' ? x.ref::text WHERE a.action LIKE 'semaphore.%'`)).rows.map((row) => row.order_number);
+      expect(await linked()).toHaveLength(2);
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${demo.election}/${erased}`)).statusCode).toBe(200);
+      // Erasing again is not an error, and does not erase anyone else.
+      const renamed = (await pool.query(`SELECT id FROM electors WHERE election_id = $1 AND erased_at IS NOT NULL`, [demo.election])).rows[0].id;
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${demo.election}/${renamed}`)).statusCode).toBe(200);
+      expect(await linked()).toHaveLength(1);
+      expect((await pool.query(`SELECT target FROM audit_log WHERE action = 'person.erased' AND id > $1`, [since])).rowCount).toBe(1);
+      for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
+      expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(200);
+      expect(await linked()).toEqual([]);
+      expect((await pool.query('SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND order_number IS NOT NULL', [demo.election])).rows[0].n).toBe(0);
+    });
+
+    it('a mark that arrives while someone is erased, or while the election is purged, does not keep their roll id', async () => {
+      const load = async (dni: string) => {
+        const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Carrera', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+        const file = writePadron({ electors: [{ id: `d-${dni}`, full_name: 'Persona, Ana', identifiers: [{ type: 'DNI', value: dni }], table: '1' }] as never });
+        await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+        return { id, mesa: (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string };
+      };
+      const left = async (mesa: string, dni: string) => (await pool.query(`SELECT count(*)::int AS n FROM operations WHERE table_id = $1 AND payload::text LIKE '%' || $2 || '%'`, [mesa, dni])).rows[0].n;
+      for (let round = 0; round < 8; round += 1) {
+        const dni = `9930${String(round).padStart(4, '0')}`;
+        const { id, mesa } = await load(dni);
+        await Promise.all([push('coordinacion', mesa, [{ ...operation(mesa, round + 1), payload: { elector: `d-${dni}` } }]), call('coordinacion', 'DELETE', `/api/persons/${id}/d-${dni}`)]);
+        expect(await left(mesa, dni), `erasure, round ${round}`).toBe(0);
+        // The mark counts once, under the new id, whichever came first.
+        expect((await pool.query(`SELECT count(*)::int AS n FROM operations o JOIN electors x ON x.id = o.payload->>'elector' WHERE o.table_id = $1`, [mesa])).rows[0].n).toBe(1);
+      }
+      for (let round = 0; round < 8; round += 1) {
+        const dni = `9931${String(round).padStart(4, '0')}`;
+        const { id, mesa } = await load(dni);
+        for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+        const [late, purged] = await Promise.all([push('coordinacion', mesa, [{ ...operation(mesa, round + 1), payload: { elector: `d-${dni}` } }]), call('coordinacion', 'POST', `/api/elections/${id}/purge`)]);
+        expect([late.statusCode, purged.statusCode]).toEqual([200, 200]);
+        expect(await left(mesa, dni), `purge, round ${round}`).toBe(0);
+      }
+    });
+
+    it('erasures and purges made before the roll id went too are done again when the server starts', async () => {
+      const load = async (dnis: string[]) => {
+        const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Vieja', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+        const file = writePadron({ electors: dnis.map((dni, i) => ({ id: `d-${dni}`, full_name: `Vieja${i}, Ana`, identifiers: [{ type: 'DNI', value: dni }], table: '1' })) as never });
+        await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+        return { id, file, mesa: (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string };
+      };
+      const open = await load(['99320001', '99320002']);
+      expect((await push('coordinacion', open.mesa, [{ ...operation(open.mesa, 1), payload: { elector: 'd-99320001' } }])).statusCode).toBe(200);
+      // As erasing and purging left them before: the name gone, the roll id still there.
+      await pool.query(`UPDATE electors SET full_name = 'Borrado a pedido', search = '', document = NULL WHERE id = 'd-99320001'`);
+      const closed = await load(['99320003']);
+      await pool.query(`UPDATE electors SET full_name = '', search = '', document = NULL WHERE election_id = $1`, [closed.id]);
+      await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [closed.id]);
+
+      await migrate(pool);
+      await migrate(pool);
+      let dump = '';
+      for (const name of ['electors', 'operations']) dump += (await pool.query(`SELECT coalesce(string_agg(row_to_json(t)::text, E'\\n'), '') AS rows FROM ${name} t`)).rows[0].rows;
+      expect(dump).not.toContain('99320001');
+      expect(dump).not.toContain('99320003');
+      expect(dump).toContain('99320002');
+      // Now it is an erasure like any other: the same roll does not bring the person back, and their vote still counts.
+      const preview = await app.inject({ method: 'POST', url: `/api/elections/${open.id}/roll?preview=1`, payload: Buffer.from(open.file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      expect(preview.json()).toMatchObject({ people: 1, erased: 1, added: 0 });
+      expect((await call('coordinacion', 'GET', `/api/elections/${open.id}/stats`)).json().voted).toBe(1);
+    });
+
+    it('any roll id can be erased, even one that looks like an erased one, and it is not counted as new afterwards', async () => {
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Equis', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+      const file = writePadron({ electors: [{ id: 'x-ana', full_name: 'Equis, Ana', identifiers: [{ type: 'DNI', value: '99123456' }] }, { id: 'x-eva', full_name: 'Equis, Eva' }] as never });
+      const upload = (preview = false) =>
+        app.inject({ method: 'POST', url: `/api/elections/${id}/roll${preview ? '?preview=1' : ''}`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      await upload();
+      expect((await upload(true)).json()).toMatchObject({ added: 0, kept: 2 });
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${id}/x-ana`)).statusCode).toBe(200);
+      const rows = (await pool.query('SELECT id, full_name, document FROM electors WHERE election_id = $1 ORDER BY full_name', [id])).rows;
+      expect(rows.map((row) => row.full_name)).toEqual(['Borrado a pedido', 'Equis, Eva']);
+      expect(rows.some((row) => row.id === 'x-ana' || row.document)).toBe(false);
+      expect((await upload(true)).json()).toMatchObject({ people: 1, added: 0, kept: 1, erased: 1 });
+      // An erased row cannot get a name or a consent back.
+      const erased = rows[0]!.id;
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/${erased}`, { full_name: 'Otra, Vez' })).statusCode).toBe(404);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/${erased}/consent`, { date: '2027-01-01', means: 'firma' })).statusCode).toBe(404);
+    });
+
+    it('the audit log records who saw whom, by reference, and each panel once every few minutes', async () => {
+      const since = Number((await pool.query('SELECT coalesce(max(id), 0) AS n FROM audit_log')).rows[0].n);
+      const logged = async () => (await pool.query('SELECT action, target, detail FROM audit_log WHERE id > $1 ORDER BY id', [since])).rows;
+      const people = (await call('semaforo', 'GET', `/api/elections/${demo.election}/people?q=ez`)).json().people;
+      expect(people.length).toBeGreaterThan(0);
+      await call('coordinacion', 'GET', '/api/persons?q=acu');
+      for (let i = 0; i < 2; i += 1) {
+        await call('coordinacion', 'GET', '/api/users');
+        await call('jefe', 'GET', `/api/district/${demo.election}`);
+        await call('jefe', 'GET', `/api/tables/${table}/detail`);
+        await call('jefe', 'GET', `/api/sync/pull?table=${table}&since=0`);
+        await call('fiscal', 'GET', `/api/sync/pull?table=${table}&since=0`);
+        await call('coordinacion', 'GET', '/api/audit');
+      }
+      const unit = (await call('coordinacion', 'POST', `/api/elections/${demo.election}/units`, { name: 'Distrito nuevo' })).json().id;
+      await call('coordinacion', 'PUT', `/api/tables/${table}`, { name: 'Mesa nueva', unit });
+      const entries = await logged();
+      const searched = entries.find((e) => e.action === 'semaphore.searched');
+      const refs = (await pool.query('SELECT ref FROM electors WHERE id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows.map((row) => row.ref);
+      expect(searched.detail.people.sort()).toEqual(refs.sort());
+      expect(entries.find((e) => e.action === 'person.searched').detail.people.length).toBeGreaterThan(0);
+      const count = (action: string) => entries.filter((e) => e.action === action).length;
+      for (const action of ['users.viewed', 'district.viewed', 'table.viewed', 'table.pulled', 'audit.viewed', 'unit.created', 'table.changed']) expect(count(action), action).toBe(1);
+      // Nothing in the log names anyone by roll id, document or name.
+      const text = JSON.stringify(entries);
+      const seen = (await pool.query('SELECT id, full_name, document FROM electors WHERE id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows;
+      for (const person of seen) for (const value of [person.id, person.full_name, person.document]) expect(text).not.toContain(value);
+    });
+
     it('the audit log records who did what, and cannot be changed', async () => {
       await call('fiscal', 'GET', `/api/tables/${table}/bundle`);
       const { entries } = (await call('coordinacion', 'GET', '/api/audit')).json();
       expect(entries.some((e: { action: string; who: string }) => e.action === 'roll.downloaded' && e.who === 'Marta')).toBe(true);
       await expect(pool.query('DELETE FROM audit_log')).rejects.toThrow(/cannot be changed/);
       await expect(pool.query(`UPDATE audit_log SET action = 'x'`)).rejects.toThrow(/cannot be changed/);
+      await expect(pool.query('TRUNCATE audit_log')).rejects.toThrow(/cannot be changed/);
       expect((await call('fiscal', 'GET', '/api/audit')).statusCode).toBe(403);
     });
   });

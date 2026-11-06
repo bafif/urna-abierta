@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { isRole, permissionsOf, SECURITY_PROFILES, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
+import { isRole, isSecurityProfile, permissionsOf, SECURITY_PROFILES, stricterProfile, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 
 export interface Assignment {
   role: Role;
@@ -71,10 +71,30 @@ declare module 'fastify' {
   }
 }
 
+export interface ProfileInForce {
+  /** What applies now. */
+  profile: SecurityProfile;
+  /** What the party chose. */
+  chosen: SecurityProfile;
+  /** The least an open election asks for, by its kind. */
+  minimum: SecurityProfile | null;
+}
+
+/** The profile in force: the one the party chose, or the one an open election asks for when it is stricter. */
+export async function securityProfile(pool: pg.Pool): Promise<ProfileInForce> {
+  const found = await pool.query(
+    `SELECT (SELECT value FROM settings WHERE key = 'security_profile') AS chosen,
+            ARRAY(SELECT DISTINCT kind FROM elections WHERE status NOT IN ('cerrada', 'purgada')) AS kinds`,
+  );
+  const chosen: SecurityProfile = isSecurityProfile(found.rows[0].chosen) ? found.rows[0].chosen : 'estudiantil';
+  const minimum = (found.rows[0].kinds as string[]).filter(isSecurityProfile).reduce<SecurityProfile | null>((most, kind) => stricterProfile(kind, most), null);
+  return { profile: stricterProfile(chosen, minimum), chosen, minimum };
+}
+
 /** Poll watchers never need it: they get in with their link, and only ever see their own table. */
 export async function needsSecondFactor(pool: pg.Pool, actor: Actor): Promise<boolean> {
   if (actor.verified || actor.roles.every((role) => role === 'fiscal')) return false;
-  const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+  const { profile } = await securityProfile(pool);
   return SECURITY_PROFILES[profile].secondFactor;
 }
 
@@ -114,6 +134,21 @@ export async function audit(pool: pg.Pool, actor: Actor | null, action: string, 
   await pool.query('INSERT INTO audit_log (user_id, action, target, detail) VALUES ($1, $2, $3, $4)', [actor?.userId ?? null, action, target ?? null, JSON.stringify(detail)]);
 }
 
+/**
+ * For views that are looked at again and again, such as a panel that refreshes by itself: one entry per
+ * person, thing and few minutes says who looked, without burying everything else in the log.
+ */
+const AUDIT_AGAIN_MS = 5 * 60_000;
+const lastAudited = new Map<string, number>();
+export async function auditView(pool: pg.Pool, actor: Actor, action: string, target?: string): Promise<void> {
+  const key = `${actor.userId}\n${action}\n${target ?? ''}`;
+  const now = Date.now();
+  if (now - (lastAudited.get(key) ?? 0) < AUDIT_AGAIN_MS) return;
+  if (lastAudited.size > 10_000) lastAudited.clear();
+  lastAudited.set(key, now);
+  await audit(pool, actor, action, target);
+}
+
 export async function getSetting<T>(pool: pg.Pool, key: string, fallback: T): Promise<T> {
   const result = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
   return result.rows[0]?.value ?? fallback;
@@ -124,13 +159,32 @@ export async function setSetting(pool: pg.Pool, key: string, value: unknown) {
 }
 
 /**
- * Sensitive traffic light categories are sealed with a key from the environment. That protects
- * disk copies and backups. It does not protect a running server, where the key is.
+ * Sensitive traffic light categories are sealed with a key from the environment. That protects a dump of
+ * the database taken without the .env. It does not protect a copy of the whole disk or a backup, which
+ * carry the key, nor a running server.
  */
 function sealingKey(): Buffer {
   const secret = process.env.URNA_FIELD_KEY;
   if (!secret) throw new Error('URNA_FIELD_KEY is required to store sensitive categories');
   return createHash('sha256').update(secret).digest();
+}
+
+/**
+ * What an erased person's row is called from then on, since a roll id is often the DNI. It cannot be turned back
+ * into that id without the field key, and it is always the same for the same id: a phone that still has the old
+ * id can still mark the person, and the same roll uploaded again knows they asked to be erased. Whoever has the
+ * key can try every DNI until one matches, in minutes: until the purge, the erasure is as safe as the key.
+ */
+export function erasedId(id: string): string {
+  return `x-${createHmac('sha256', sealingKey()).update(`erased:${id}`).digest('hex').slice(0, 32)}`;
+}
+
+/**
+ * Who a person was in the file they came from, as their name and document read for search: enough to know them in
+ * the next file when their id is only a position, not to read it back without the field key.
+ */
+export function rollKey(search: string): string {
+  return createHmac('sha256', sealingKey()).update(`roll:${search}`).digest('hex').slice(0, 32);
 }
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';

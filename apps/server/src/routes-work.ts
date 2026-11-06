@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, can, canReachTable, requires, seal, unseal, type Actor } from './actor.ts';
+import { audit, auditView, can, canReachTable, erasedId, getSetting, requires, rollKey, seal, unseal, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
+import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
@@ -22,6 +23,63 @@ async function votesPerTable(pool: pg.Pool, tables: string[]): Promise<Map<strin
     [tables],
   );
   return new Map(rows.rows.map((row) => [row.table_id, row.voted]));
+}
+
+/** How the audit log names a person: a random reference, never the roll id, which is often their DNI. */
+export async function refOf(pool: pg.Pool, election: string, id: string): Promise<string | null> {
+  const found = await pool.query('SELECT ref FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
+  return found.rows[0]?.ref ?? null;
+}
+
+/** The rows a phone's push locks, all of an election and always in the same order, so that two of these never wait on each other. */
+export async function lockTables(client: pg.PoolClient, election: string): Promise<void> {
+  await client.query('SELECT id FROM polling_tables WHERE election_id = $1 ORDER BY id FOR UPDATE', [election]);
+}
+
+/**
+ * Erases a person: name, contact, roll id and reference go. The new reference keeps what the audit log said about
+ * them, a sensitive mark included, from leading back to their table and order. The random id phones know them by
+ * stays, so that a mark sent meanwhile still counts once. Null when there is no such person, 'already' when they
+ * were erased before. Inside a transaction the caller opened: the route's, or a migration's.
+ */
+export async function eraseIn(client: pg.PoolClient, election: string, id: string): Promise<{ ref: string } | 'already' | null> {
+  // A mark a phone sends meanwhile is either stored before, under the random id, or after, and named by it on the way in.
+  await lockTables(client, election);
+  const found = await client.query('SELECT ref, search, corrected_at IS NOT NULL AS corrected, erased_at IS NOT NULL AS erased FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
+  const row = found.rows[0];
+  if (!row || row.erased) return row ? 'already' : null;
+  const renamed = erasedId(id);
+  await client.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
+  await client.query(
+    `UPDATE electors SET id = $3, ref = gen_random_uuid(), erased_at = now(), full_name = 'Borrado a pedido', search = '', document = NULL, file_number = NULL, address = NULL,
+       extra = '{}', needs_review = false, review = NULL, consent = NULL, source_key = COALESCE(source_key, $4)
+     WHERE election_id = $1 AND id = $2`,
+    // What the file said about them stays, keyed: the same file loaded again knows them even if their id was a position.
+    [election, id, renamed, row.corrected || !row.search ? null : rollKey(row.search)],
+  );
+  // Marks name people by their random id. One stored under the roll id, from a phone that named someone of another table, goes too.
+  await client.query(
+    `UPDATE operations SET payload = jsonb_set(payload, '{elector}', to_jsonb($3::text))
+     WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND payload->>'elector' = $2`,
+    [election, id, renamed],
+  );
+  // The old reference: what the log already said about them, and nothing that points at the row.
+  return { ref: row.ref };
+}
+
+export async function eraseElector(pool: pg.Pool, election: string, id: string): Promise<{ ref: string } | 'already' | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const erased = await eraseIn(client, election, id);
+    await client.query(erased !== null && erased !== 'already' ? 'COMMIT' : 'ROLLBACK');
+    return erased;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
@@ -46,6 +104,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** Not a dashboard: what needs someone now comes first, and the rest fits in one line. */
   app.get<{ Params: { id: string } }>('/api/district/:id', { preHandler: watch }, async (request) => {
     const scope = await tablesInScope(request, request.params.id);
+    await auditView(pool, request.actor, 'district.viewed', request.params.id);
     const key = `${request.actor.userId}:${request.params.id}`;
     const cached = cache.get(key);
     if (cached && Date.now() - cached.at < SUMMARY_CACHE_MS) return cached.value;
@@ -108,6 +167,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       [table, clock.now()],
     );
     if (!info.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await auditView(pool, request.actor, 'table.viewed', table);
     // An alert that came after the close shows too, said so, like in the district: otherwise nobody could ever resolve it.
     const operations = await pool.query(
       `SELECT id, type, payload, device_time, author, quarantined FROM operations
@@ -171,7 +231,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const people = totals.rows.reduce((sum, row) => sum + row.total, 0);
     const voted = [...votes.values()].reduce((sum, value) => sum + value, 0);
     const hours = await pool.query(
-      `SELECT (date_trunc('hour', device_time))::text AS hour, count(*)::int AS marks FROM operations
+      `SELECT to_char(date_trunc('hour', device_time AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:00:00"Z"') AS hour, count(*)::int AS marks FROM operations
        WHERE table_id = ANY($1) AND type = 'voter.marked' AND NOT quarantined GROUP BY 1 ORDER BY 1`,
       [ids],
     );
@@ -211,14 +271,17 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const query = foldText(request.query.q ?? '').trim();
     if (query.length < 2) return { people: [] };
     const rows = await pool.query(
-      `SELECT x.id, x.full_name, x.order_number, t.name AS table_name, m.category_id, m.sealed
+      `SELECT x.id, x.ref, x.full_name, x.order_number, t.name AS table_name, m.category_id, m.sealed
        FROM electors x LEFT JOIN polling_tables t ON t.id = x.table_id
        LEFT JOIN semaphore_marks m ON m.election_id = x.election_id AND m.elector_id = x.id
        WHERE x.election_id = $1 AND x.search LIKE '%' || $2 || '%' ORDER BY x.search LIMIT 25`,
       [request.params.id, query],
     );
+    // Each name comes with what the party thinks of that person's vote: who saw whom is recorded, by reference.
+    if (rows.rows.length > 0) await audit(pool, request.actor, 'semaphore.searched', request.params.id, { people: rows.rows.map((row) => row.ref) });
     const sensitive = can(request.actor, 'semaphore.sensitive');
-    if (rows.rows.some((row) => row.sealed) && sensitive) await audit(pool, request.actor, 'semaphore.sensitive_viewed', request.params.id, { rows: rows.rows.length });
+    const sealed = rows.rows.filter((row) => row.sealed).map((row) => row.ref);
+    if (sealed.length > 0 && sensitive) await audit(pool, request.actor, 'semaphore.sensitive_viewed', request.params.id, { people: sealed });
     return {
       people: rows.rows.map((row) => ({
         id: row.id, name: row.full_name, order: row.order_number, table: row.table_name,
@@ -230,9 +293,14 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.put<{ Params: { id: string; elector: string }; Body: { category?: unknown } }>('/api/elections/:id/people/:elector/semaphore', { preHandler: writeLight }, async (request, reply) => {
     const { id, elector } = request.params;
     const { category } = request.body ?? {};
+    const ref = await refOf(pool, id, elector);
+    if (!ref) return reply.code(404).send({ error: 'not_found' });
+    // Whoever cannot see a sensitive mark sees no mark at all: they must not replace it or clear it without knowing.
+    const current = await pool.query('SELECT sealed IS NOT NULL AS sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
+    if (current.rows[0]?.sealed && !can(request.actor, 'semaphore.sensitive')) return reply.code(403).send({ error: 'sensitive_mark' });
     if (category === null) {
       await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
-      await audit(pool, request.actor, 'semaphore.cleared', elector);
+      await audit(pool, request.actor, 'semaphore.cleared', ref);
       return { ok: true };
     }
     if (typeof category !== 'string') return reply.code(400).send({ error: 'invalid_category' });
@@ -245,7 +313,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
        ON CONFLICT (election_id, elector_id) DO UPDATE SET category_id = $3, sealed = $4, noted_by = $5, noted_at = now()`,
       [id, elector, sensitive ? null : category, sensitive ? seal(category) : null, request.actor.userId],
     );
-    await audit(pool, request.actor, 'semaphore.noted', elector, { sensitive });
+    await audit(pool, request.actor, 'semaphore.noted', ref, { sensitive });
     return { ok: true };
   });
 
@@ -256,14 +324,14 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const query = foldText(request.query.q ?? '').trim();
     if (query.length < 3) return { people: [] };
     const rows = await pool.query(
-      `SELECT x.election_id, e.name AS election, x.id, x.full_name, x.document, x.file_number, x.address, x.consent, t.name AS table_name, m.elector_id IS NOT NULL AS has_mark
+      `SELECT x.election_id, e.name AS election, x.id, x.ref, x.full_name, x.document, x.file_number, x.address, x.consent, t.name AS table_name, m.elector_id IS NOT NULL AS has_mark
        FROM electors x JOIN elections e ON e.id = x.election_id LEFT JOIN polling_tables t ON t.id = x.table_id
        LEFT JOIN semaphore_marks m ON m.election_id = x.election_id AND m.elector_id = x.id
        WHERE x.search LIKE '%' || $1 || '%' ORDER BY x.search LIMIT 25`,
       [query],
     );
-    await audit(pool, request.actor, 'person.searched');
-    return { people: rows.rows };
+    await audit(pool, request.actor, 'person.searched', undefined, { people: rows.rows.map((row) => row.ref) });
+    return { people: rows.rows.map(({ ref: _ref, ...row }) => row) };
   });
 
   app.get<{ Params: { election: string; id: string } }>('/api/persons/:election/:id/export', { preHandler: managePersons }, async (request, reply) => {
@@ -271,29 +339,74 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const person = await pool.query('SELECT * FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
     if (!person.rows[0]) return reply.code(404).send({ error: 'not_found' });
     const mark = await pool.query('SELECT category_id, sealed, noted_at FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
-    const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, person.rows[0].public_id]);
-    await audit(pool, request.actor, 'person.exported', id);
+    // Like the count: a mark that a later undo cancelled does not say the person voted. Marks name people by their random id.
+    const voted = await pool.query(
+      `SELECT o.device_time FROM operations o WHERE o.table_id = $1 AND o.type = 'voter.marked' AND NOT o.quarantined AND o.payload->>'elector' = $2
+         AND NOT EXISTS (SELECT 1 FROM operations u WHERE u.table_id = $1 AND u.type = 'voter.unmarked' AND NOT u.quarantined AND u.payload->'cancels' ? o.id::text)
+       ORDER BY o.device_time`,
+      [person.rows[0].table_id, person.rows[0].public_id],
+    );
+    const { ref } = person.rows[0];
+    await audit(pool, request.actor, 'person.exported', ref);
     const row = mark.rows[0];
-    const category = row && (row.sealed ? unseal(row.sealed) : row.category_id);
+    // A sensitive category is opened only for whoever has its own permission, and that is recorded as such.
+    const hidden = Boolean(row?.sealed) && !can(request.actor, 'semaphore.sensitive');
+    if (row?.sealed && !hidden) await audit(pool, request.actor, 'semaphore.sensitive_viewed', ref, { people: [ref] });
+    const category = row && !hidden ? (row.sealed ? unseal(row.sealed) : row.category_id) : null;
     const name = category && (await pool.query('SELECT name FROM semaphore_categories WHERE id = $1', [category])).rows[0]?.name;
-    const { search: _search, ...data } = person.rows[0];
-    return { person: data, semaphore: name ?? null, markedVoted: voted.rows.map((r) => r.device_time) };
+    const found = person.rows[0];
+    const place = await pool.query(
+      'SELECT e.name, e.days, t.name AS table_name, t.place FROM elections e LEFT JOIN polling_tables t ON t.id = $2 WHERE e.id = $1',
+      [election, found.table_id],
+    );
+    const where = place.rows[0];
+    // The page is about one roll: it says in which others the same document is, so that nobody takes it for everything.
+    const others = found.document
+      ? await pool.query(
+          `SELECT DISTINCT e.name FROM electors x JOIN elections e ON e.id = x.election_id WHERE x.document = $1 AND x.election_id <> $2 AND x.erased_at IS NULL AND e.status <> 'purgada' ORDER BY e.name`,
+          [found.document, election],
+        )
+      : { rows: [] };
+    // Only what is held about the person, with names a person understands: the screen turns it into a page to hand over.
+    return {
+      party: (await getSetting<{ name: string }>(pool, 'party', { name: '' })).name,
+      election: { name: where.name, days: where.days.map((day: Date) => day.toISOString().slice(0, 10)) },
+      person: { name: found.full_name, document: found.document, fileNumber: found.file_number, address: found.address, order: found.order_number, extra: found.extra, toReview: found.needs_review },
+      table: where.table_name ? { name: where.table_name, place: where.place } : null,
+      consent: found.consent,
+      semaphore: row ? { category: name ?? null, sensitive: Boolean(row.sealed), hidden, notedAt: row.noted_at } : null,
+      markedVoted: voted.rows.map((r) => r.device_time),
+      others: others.rows.map((r) => r.name as string),
+    };
+  });
+
+  /** Art. 16: whoever finds a mistake in their data has the right to have it corrected, until the election is purged. */
+  app.put<{ Params: { election: string; id: string }; Body: { full_name?: unknown; document?: unknown } }>('/api/persons/:election/:id', { preHandler: managePersons }, async (request, reply) => {
+    const status = await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.election]);
+    if (status.rows[0]?.status === 'purgada') return reply.code(409).send({ error: 'election_purged' });
+    const result = await correctElector(pool, request.actor, request.params.election, request.params.id, request.body);
+    if (result === 'invalid_name') return reply.code(400).send({ error: 'invalid_name' });
+    if (result === 'not_found') return reply.code(404).send({ error: 'not_found' });
+    return { ok: true };
   });
 
   app.put<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {
     const { date, means } = request.body ?? {};
     if (typeof date !== 'string' || typeof means !== 'string') return reply.code(400).send({ error: 'invalid_request' });
-    await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
-    await audit(pool, request.actor, 'person.consent', request.params.id);
+    const saved = await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2 AND erased_at IS NULL RETURNING ref', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
+    if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await audit(pool, request.actor, 'person.consent', saved.rows[0].ref);
     return { ok: true };
   });
 
-  /** The name and contact go; the row stays anonymous, so that a table's totals still add up. */
-  app.delete<{ Params: { election: string; id: string } }>('/api/persons/:election/:id', { preHandler: managePersons }, async (request) => {
-    const { election, id } = request.params;
-    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
-    await pool.query(`UPDATE electors SET full_name = 'Borrado a pedido', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1 AND id = $2`, [election, id]);
-    await audit(pool, request.actor, 'person.erased', id);
+  /**
+   * The name, the contact and the roll id go; the row stays anonymous, so that a table's totals still add up.
+   * Who voted keeps counting, under the new id.
+   */
+  app.delete<{ Params: { election: string; id: string } }>('/api/persons/:election/:id', { preHandler: managePersons }, async (request, reply) => {
+    const erased = await eraseElector(pool, request.params.election, request.params.id);
+    if (erased === null) return reply.code(404).send({ error: 'not_found' });
+    if (erased !== 'already') await audit(pool, request.actor, 'person.erased', erased.ref);
     return { ok: true };
   });
 
@@ -303,15 +416,22 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // The same lock a phone's push takes: what it sends meanwhile is stored before, and goes with the rest, or after, and is dropped.
+      await lockTables(client, id);
       const status = await client.query('SELECT status FROM elections WHERE id = $1 FOR UPDATE', [id]);
       if (status.rows[0]?.status !== 'cerrada') {
         await client.query('ROLLBACK');
         return reply.code(409).send({ error: 'close_it_first' });
       }
-      // The same lock a batch from a phone takes: one that arrives meanwhile waits, and then sees the purge.
-      await client.query('SELECT 1 FROM polling_tables WHERE election_id = $1 ORDER BY id FOR UPDATE', [id]);
       await client.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
-      await client.query(`UPDATE electors SET full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1`, [id]);
+      // The roll ids go too, since they are often the DNI, and so do the references, the random ids and the order in the table:
+      // the audit log names people by reference, a phone by random id, and a table and an order, with the roll at hand, name them again.
+      await client.query(
+        `UPDATE electors SET id = 'x-' || replace(gen_random_uuid()::text, '-', ''), ref = gen_random_uuid(), public_id = new_public_id(), order_number = NULL,
+           full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', needs_review = false, review = NULL, consent = NULL, source_key = NULL
+         WHERE election_id = $1`,
+        [id],
+      );
       await client.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
       await client.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
       await client.query('COMMIT');
@@ -328,6 +448,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   app.get<{ Querystring: { before?: string } }>('/api/audit', { preHandler: requires(pool, 'audit.read') }, async (request) => {
     const before = Number(request.query.before) || Number.MAX_SAFE_INTEGER;
+    await auditView(pool, request.actor, 'audit.viewed');
     const rows = await pool.query(
       `SELECT l.id, l.at, l.action, l.target, u.name AS who FROM audit_log l LEFT JOIN users u ON u.id = l.user_id
        WHERE l.id < $1 ORDER BY l.id DESC LIMIT 100`,
