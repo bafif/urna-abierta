@@ -53,7 +53,7 @@
 
   /** Art. 16: whoever finds a mistake in their data has the right to have it corrected. */
   async function correct() {
-    await session.api(`/elections/${person!.election_id}/electors/${encodeURIComponent(person!.id)}`, { method: 'PUT', body: { full_name: fixedName, document: fixedDocument } });
+    await session.api(base, { method: 'PUT', body: { full_name: fixedName, document: fixedDocument } });
     person = { ...person!, full_name: fixedName.trim(), document: fixedDocument.replace(/\D/g, '') || person!.document };
     message = t('persons.corrected');
   }

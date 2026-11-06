@@ -10,6 +10,7 @@
   import FiscalPlan from './FiscalPlan.svelte';
   import Hello from './Hello.svelte';
   import LightHome from './LightHome.svelte';
+  import More from './More.svelte';
   import Numbers from './Numbers.svelte';
   import SecondFactor from './SecondFactor.svelte';
   import Setup from './Setup.svelte';
@@ -60,19 +61,21 @@
       <button class="boton primario" onclick={() => session.refresh()}>{t('space.retry')}</button>
     {/snippet}
   </Pantalla>
-{:else if !greeted && !session.can('coordinacion', 'sistema')}
+{:else if !greeted && !session.allows('election.manage', 'security.manage')}
   <Hello onstart={greet} />
 {:else if !hasChosen}
   <ChooseTheme first onchosen={() => (hasChosen = true)} />
-{:else if session.me.main === 'fiscal'}
+{:else if session.home === 'fiscalPlan'}
   <FiscalPlan />
-{:else if session.me.main === 'jefe'}
+{:else if session.home === 'district'}
   <District />
-{:else if session.me.main === 'coordinacion' || session.me.main === 'sistema'}
+{:else if session.home === 'adminHome'}
   <AdminHome />
-{:else if session.me.main === 'semaforo'}
+{:else if session.home === 'more'}
+  <More inicio />
+{:else if session.home === 'lightHome'}
   <LightHome />
-{:else if session.me.main === 'estadistico'}
+{:else if session.home === 'numbers'}
   <Numbers />
 {:else}
   <Pantalla titulo={t('noRole.title')} bajada={t('noRole.text')} />
