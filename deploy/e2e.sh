@@ -2,8 +2,8 @@
 # Runs the browser tests against the real containers: Postgres, server and Caddy.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-pod=urna-e2e
-port=8090
+pod=${URNA_E2E_POD:-urna-e2e}
+port=${URNA_E2E_PORT:-8090}
 version=$(node -p "require('$root/apps/web/node_modules/@playwright/test/package.json').version")
 
 podman build -q -t urna-e2e-browsers --build-arg PLAYWRIGHT_VERSION="$version" -f "$root/deploy/e2e.Containerfile" "$root/deploy" >/dev/null

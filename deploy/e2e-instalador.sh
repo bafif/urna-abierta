@@ -10,12 +10,12 @@ version=$(node -p "require('$root/apps/web/node_modules/@playwright/test/package
 cleanup() {
   [ -n "${installer:-}" ] && kill "$installer" 2>/dev/null || true
   podman rm -f "$name-web" "$name-server" "$name-db" >/dev/null 2>&1 || true
-  podman volume rm "$name-database" >/dev/null 2>&1 || true
+  podman volume rm "$name-database" "$name-fotos" >/dev/null 2>&1 || true
   podman network rm "$name" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
 trap cleanup EXIT
-cleanup_before() { podman rm -f "$name-web" "$name-server" "$name-db" >/dev/null 2>&1 || true; podman volume rm "$name-database" >/dev/null 2>&1 || true; }
+cleanup_before() { podman rm -f "$name-web" "$name-server" "$name-db" >/dev/null 2>&1 || true; podman volume rm "$name-database" "$name-fotos" >/dev/null 2>&1 || true; }
 cleanup_before
 
 podman build -q -t urna-e2e-browsers --build-arg PLAYWRIGHT_VERSION="$version" -f "$root/deploy/e2e.Containerfile" "$root/deploy" >/dev/null
