@@ -9,8 +9,12 @@ const PRACTICE_KEY = 'urna-abierta-practica';
 const PRACTICE_PEOPLE = 40;
 const MAX_PHOTO_SIDE = 1800;
 const SHRINK_LIMIT_MS = 15_000;
-/** A phone that never heard the election closed still lets go of the roll, once everything was sent. */
-const DAYS_KEPT_AFTER_LAST = 7;
+/**
+ * A phone that never heard the election closed takes it as closed once the night after the last day is over,
+ * counting included, and keeps the roll only the hours the security profile allows after that.
+ */
+const CLOSE_ASSUMED_HOURS = 30;
+const HOURS_KEPT_IF_UNKNOWN = 12;
 const PERIODIC_SYNC_MS = 30_000;
 const ROOM_CHECK_MS = 10 * 60_000;
 /** Enough to notice a full phone in time: what the app itself writes is far smaller than this. */
@@ -322,7 +326,8 @@ class AppState {
     const assigned = session.me?.table?.id;
     const reached = navigator.onLine && session.me !== null;
     const lastDay = session.me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
-    const longAgo = lastDay && Date.now() - Date.parse(`${lastDay}T12:00:00`) > DAYS_KEPT_AFTER_LAST * 86_400_000;
+    const kept = session.me?.security.localHoursAfterClose ?? HOURS_KEPT_IF_UNKNOWN;
+    const longAgo = lastDay && Date.now() - Date.parse(`${lastDay}T00:00:00`) > (CLOSE_ASSUMED_HOURS + kept) * 3_600_000;
     if ((reached && assigned !== this.tableId) || longAgo) await this.wipe();
   }
 
@@ -587,7 +592,12 @@ class AppState {
   private async runSync(): Promise<void> {
     this.sending = true;
     // Receiving operations writes too, so it waits while the phone has no room.
-    const result = this.noRoom ? 'failed' : await syncOnce(this.store, this.tableId, API, session.fetch);
+    let result = this.noRoom ? 'failed' : await syncOnce(this.store, this.tableId, API, session.fetch);
+    if (result === 'closed') {
+      // The server already said it: hearing it from /me as well lets the phone let go of the roll right away.
+      await session.refresh();
+      result = 'done';
+    }
     if (result === 'done') await this.sendPhotos().catch(() => undefined);
     await this.refreshPending().catch(() => undefined);
     if (result === 'done') await this.letGoIfFinished().catch(() => undefined);

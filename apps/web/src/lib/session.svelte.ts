@@ -37,7 +37,7 @@ export interface Me {
   main: string | null;
   secondFactorNeeded: boolean;
   party: { name: string; theme: string };
-  security: { profile: string; chosen: boolean; fiscalSeesSemaphore: boolean; fiscalView: boolean };
+  security: { profile: string; chosen: boolean; fiscalSeesSemaphore: boolean; fiscalView: boolean; localHoursAfterClose?: number };
   table: TableInfo | null;
   contact: { name: string; phone: string | null } | null;
 }
