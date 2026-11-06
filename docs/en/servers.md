@@ -129,7 +129,8 @@ account, they are lost with it. To always have one elsewhere:
 - **Send them to S3 storage.** If you set one up for the photos (below), each backup also goes to the bucket, to a `backups/` folder
   inside the photos one (`fotos/backups/`, unless you changed `URNA_S3_PREFIX`), and the 28 newest stay there. They are still encrypted with the recovery key: the provider keeps something it cannot open. To delete
   the old ones, the access key needs permission to list the bucket; without it they are still sent, but they pile up. A bucket from a
-  different provider than the server's is better, so the backup survives if that account closes.
+  different provider than the server's is better, so the backup survives if that account closes. A backup over 5 GB (because of the
+  photos left on disk from before the bucket) does not fit in one upload: it stays only on the server, and `urna estado` flags it.
 
 `urna estado` says whether the last backup reached the bucket. Without S3, it reminds you with an `aviso` line: the backups only live on
 that server.
