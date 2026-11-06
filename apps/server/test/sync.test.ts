@@ -438,6 +438,31 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(without.rows[0].n).toBe(0);
     });
 
+    it('importing again keeps what was corrected and who asked to be erased, and a closed election takes no roll', async () => {
+      const id = await newElection();
+      const file = writePadron({ electors: people(5) as never });
+      await upload(id, file);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}/electors/p-0`, { full_name: 'Corregida, Ana', document: '123' })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${id}/p-1`)).statusCode).toBe(200);
+      const preview = (await upload(id, file, true)).json();
+      expect(preview).toMatchObject({ people: 4, added: 0, kept: 4, missing: 0, erased: 1, corrected: 1, toReview: 0 });
+      expect((await upload(id, file)).statusCode).toBe(200);
+      const rows = (await pool.query('SELECT id, full_name, document, needs_review FROM electors WHERE election_id = $1 ORDER BY id', [id])).rows;
+      expect(rows).toHaveLength(5);
+      expect(rows.find((row) => row.id === 'p-0')).toMatchObject({ full_name: 'Corregida, Ana', document: '123', needs_review: false });
+      expect(rows.some((row) => row.id === 'p-1')).toBe(false);
+      expect(rows.filter((row) => row.id.startsWith('x-'))).toEqual([expect.objectContaining({ full_name: 'Borrado a pedido', document: null })]);
+
+      for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+      expect((await upload(id, file)).json().error).toBe('election_closed');
+      expect((await upload(id, file, true)).statusCode).toBe(409);
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/tables/propose`, { size: 10 })).statusCode).toBe(409);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}/electors/p-2`, { full_name: 'Otra, Eva' })).statusCode).toBe(409);
+      await call('coordinacion', 'POST', `/api/elections/${id}/purge`);
+      expect((await upload(id, file)).statusCode).toBe(409);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND full_name <> ''`, [id])).rows[0].n).toBe(0);
+    });
+
     it('refuses what it cannot read, and a roll made with an external AI if the election forbids it', async () => {
       const id = await newElection();
       expect((await upload(id, new TextEncoder().encode('nada'))).statusCode).toBe(422);

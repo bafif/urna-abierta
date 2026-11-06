@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
-import { audit, authenticated, can, forgetActors, getSetting, requires, setSetting } from './actor.ts';
+import { audit, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -21,6 +21,12 @@ const STATS_ROLE_DAYS = 90;
 const STATUSES = ['preparacion', 'jornada', 'escrutinio', 'cerrada', 'purgada'];
 const KINDS = ['estudiantil', 'local', 'nacional', 'otra'];
 const text = (value: unknown, max = 200) => (typeof value === 'string' && value.trim() && value.length <= max ? value.trim() : null);
+
+/** Once an election closes, its roll and its tables stay as they are: what remains is reviewing it and purging it. */
+export async function closedElection(pool: pg.Pool, election: string): Promise<boolean | null> {
+  const found = await pool.query('SELECT status FROM elections WHERE id = $1', [election]);
+  return found.rows[0] ? ['cerrada', 'purgada'].includes(found.rows[0].status) : null;
+}
 
 export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   const manageElection = requires(pool, 'election.manage');
@@ -236,24 +242,33 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** ?preview=1 says what would change, without touching anything. Crossed-out names and the traffic light stay. */
   app.post<{ Params: { id: string }; Querystring: { preview?: string }; Body: Buffer }>('/api/elections/:id/roll', { preHandler: manageElection, bodyLimit: MAX_ROLL_BYTES }, async (request, reply) => {
     const election = request.params.id;
+    const closed = await closedElection(pool, election);
+    if (closed === null) return reply.code(404).send({ error: 'not_found' });
+    if (closed) return reply.code(409).send({ error: 'election_closed' });
     if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'send_a_file' });
     const isCsv = (request.headers['content-type'] ?? '').startsWith('text/csv');
     const read: PadronRead = isCsv ? readCsvRoll(csvText(request.body)) : readPadron(new Uint8Array(request.body));
     if (!read.padron) return reply.code(422).send({ error: 'cannot_read', problems: read.problems });
-    const { electors, manifest } = read.padron;
+    const { manifest } = read.padron;
     const profile = await getSetting(pool, 'security_profile', 'estudiantil');
     if (manifest.extraction?.external_ai === true && SECURITY_PROFILES[profile as keyof typeof SECURITY_PROFILES].externalAi === 'forbidden') {
       return reply.code(422).send({ error: 'external_ai_forbidden' });
     }
-    const existing = await pool.query('SELECT id FROM electors WHERE election_id = $1', [election]);
-    const known = new Set(existing.rows.map((row) => row.id));
+    const existing = await pool.query('SELECT id, corrected_at IS NOT NULL AS corrected FROM electors WHERE election_id = $1', [election]);
+    // Whoever asked to be erased is not loaded again, and what someone corrected stays corrected.
+    const erased = new Set(existing.rows.filter((row) => isErasedId(row.id)).map((row) => row.id));
+    const known = new Set(existing.rows.filter((row) => !isErasedId(row.id)).map((row) => row.id));
+    const corrected = new Set(existing.rows.filter((row) => row.corrected).map((row) => row.id));
+    const electors = read.padron.electors.filter((e) => erased.size === 0 || !erased.has(erasedId(e.id)));
     const incoming = new Set(electors.map((e) => e.id));
     const summary = {
       people: electors.length,
       added: electors.filter((e) => !known.has(e.id)).length,
       kept: electors.filter((e) => known.has(e.id)).length,
       missing: [...known].filter((id) => !incoming.has(id)).length,
-      toReview: electors.filter((e) => e.review?.status === 'pending').length,
+      erased: read.padron.electors.length - electors.length,
+      corrected: electors.filter((e) => corrected.has(e.id)).length,
+      toReview: electors.filter((e) => e.review?.status === 'pending' && !corrected.has(e.id)).length,
       withoutTable: electors.filter((e) => !e.table).length,
       problems: read.problems,
     };
@@ -281,8 +296,12 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
            SELECT $1, * FROM unnest($2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::jsonb[], $11::boolean[], $12::jsonb[])
            ON CONFLICT (election_id, id) DO UPDATE SET
              table_id = COALESCE(EXCLUDED.table_id, electors.table_id), order_number = COALESCE(EXCLUDED.order_number, electors.order_number),
-             full_name = EXCLUDED.full_name, search = EXCLUDED.search, document = EXCLUDED.document, file_number = EXCLUDED.file_number,
-             address = EXCLUDED.address, extra = EXCLUDED.extra, needs_review = EXCLUDED.needs_review, review = EXCLUDED.review`,
+             full_name = CASE WHEN electors.corrected_at IS NULL THEN EXCLUDED.full_name ELSE electors.full_name END,
+             search = CASE WHEN electors.corrected_at IS NULL THEN EXCLUDED.search ELSE electors.search END,
+             document = CASE WHEN electors.corrected_at IS NULL THEN EXCLUDED.document ELSE electors.document END,
+             needs_review = CASE WHEN electors.corrected_at IS NULL THEN EXCLUDED.needs_review ELSE electors.needs_review END,
+             review = CASE WHEN electors.corrected_at IS NULL THEN EXCLUDED.review ELSE electors.review END,
+             file_number = EXCLUDED.file_number, address = EXCLUDED.address, extra = EXCLUDED.extra`,
           [
             election,
             value((e) => e.id),
@@ -306,7 +325,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     } finally {
       client.release();
     }
-    await audit(pool, request.actor, 'roll.imported', election, { people: electors.length, added: summary.added });
+    await audit(pool, request.actor, 'roll.imported', election, { people: electors.length, added: summary.added, erased: summary.erased, corrected: summary.corrected });
     return summary;
   });
 
@@ -319,8 +338,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.put<{ Params: { id: string; elector: string }; Body: { full_name?: unknown; document?: unknown } }>('/api/elections/:id/electors/:elector', { preHandler: manageElection }, async (request, reply) => {
     const name = text(request.body?.full_name);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
+    const closed = await closedElection(pool, request.params.id);
+    if (closed) return reply.code(409).send({ error: 'election_closed' });
     const document = typeof request.body?.document === 'string' ? request.body.document.replace(/\D/g, '') || null : null;
-    const corrected = await pool.query('UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5, needs_review = false WHERE election_id = $1 AND id = $2 RETURNING ref', [request.params.id, request.params.elector, name, document, foldText(`${name} ${document ?? ''}`)]);
+    const corrected = await pool.query('UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5, needs_review = false, corrected_at = now() WHERE election_id = $1 AND id = $2 RETURNING ref', [request.params.id, request.params.elector, name, document, foldText(`${name} ${document ?? ''}`)]);
     if (!corrected.rows[0]) return reply.code(404).send({ error: 'not_found' });
     await audit(pool, request.actor, 'elector.corrected', corrected.rows[0].ref);
     return { ok: true };
@@ -342,9 +363,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** Proposes tables for whoever has none, by surname. The person only corrects if needed. */
-  app.post<{ Params: { id: string }; Body: { size?: unknown } }>('/api/elections/:id/tables/propose', { preHandler: manageElection }, async (request) => {
+  app.post<{ Params: { id: string }; Body: { size?: unknown } }>('/api/elections/:id/tables/propose', { preHandler: manageElection }, async (request, reply) => {
     const size = Math.max(10, Math.min(Number(request.body?.size) || 350, 2000));
     const election = request.params.id;
+    if (await closedElection(pool, election)) return reply.code(409).send({ error: 'election_closed' });
     const people = await pool.query('SELECT id FROM electors WHERE election_id = $1 AND table_id IS NULL ORDER BY search', [election]);
     const already = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM polling_tables WHERE election_id = $1', [election]);
     const needed = Math.ceil(people.rows.length / size);
