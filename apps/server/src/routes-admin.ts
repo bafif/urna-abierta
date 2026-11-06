@@ -240,7 +240,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const expires = typeof expiresAt === 'string' ? expiresAt : role === 'estadistico' ? new Date(Date.now() + STATS_ROLE_DAYS * 86_400_000).toISOString() : null;
     await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id, expires_at, days) VALUES ($1, $2, $3, $4, $5, $6, $7::date[])', [randomUUID(), userId, role, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null, expires, shift]);
     await audit(pool, request.actor, 'user.created', userId, { role });
-    return { id: userId, invitation: await createInvitation(pool, userId) };
+    return { id: userId, invitation: await createInvitation(pool, userId, request.actor) };
   });
 
   app.post<{ Params: { id: string }; Body: { role?: unknown; table?: unknown; unit?: unknown } }>('/api/users/:id/roles', { preHandler: manageUsers }, async (request, reply) => {
@@ -257,7 +257,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (allowed === null) return reply.code(404).send({ error: 'not_found' });
     if (!allowed) return reply.code(403).send({ error: 'forbidden' });
     await audit(pool, request.actor, 'invitation.created', request.params.id);
-    return { invitation: await createInvitation(pool, request.params.id) };
+    return { invitation: await createInvitation(pool, request.params.id, request.actor) };
   });
 
   /** Takes someone out: their phones stop working the next time they connect. */
@@ -528,7 +528,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     for (const row of pending.rows) {
       // A poll watcher who also does more, or works a table this person does not reach, is someone else's to invite.
       if (!(await mayInvite(pool, request.actor, row.id))) continue;
-      invitations.push({ name: row.name, phone: row.phone, table: row.table_name, invitation: await createInvitation(pool, row.id) });
+      invitations.push({ name: row.name, phone: row.phone, table: row.table_name, invitation: await createInvitation(pool, row.id, request.actor) });
     }
     await audit(pool, request.actor, 'invitations.created', request.params.id, { people: invitations.length });
     return { invitations };

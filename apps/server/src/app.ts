@@ -129,7 +129,7 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
     return id;
   };
   const chief = await person('Rubén', '+54 9 341 000-0000', 'jefe', { unit });
-  const links: Record<string, string> = { jefe: await createInvitation(pool, chief) };
+  const links: Record<string, string> = { jefe: await createInvitation(pool, chief, null) };
   const chiefs: { invitation: string; tables: string[] }[] = [];
   let currentUnit = unit;
   const fiscales: { table: string; invitations: string[] }[] = [];
@@ -139,7 +139,7 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
     if (tablesPerChief && t % tablesPerChief === 0) {
       currentUnit = randomUUID();
       await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [currentUnit, election, `Distrito ${t}`]);
-      chiefs.push({ invitation: await createInvitation(pool, await person(`Jefe ${t}`, '', 'jefe', { unit: currentUnit })), tables: [] });
+      chiefs.push({ invitation: await createInvitation(pool, await person(`Jefe ${t}`, '', 'jefe', { unit: currentUnit }), null), tables: [] });
     }
     chiefs.at(-1)?.tables.push(table);
     await pool.query('INSERT INTO polling_tables (id, election_id, unit_id, name, place, position) VALUES ($1, $2, $3, $4, $5, $6)', [table, election, currentUnit, `Mesa ${t + 12}`, 'Escuela Normal 1', t]);
@@ -151,14 +151,14 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
     const two = [];
     for (const name of t === 0 ? ['Marta', 'Laura'] : [`Fiscal ${t}`]) {
       const fiscal = await person(name, '+54 9 341 111-1111', 'fiscal', { table });
-      two.push(await createInvitation(pool, fiscal));
-      if (name === 'Laura') two.push(await createInvitation(pool, fiscal));
+      two.push(await createInvitation(pool, fiscal, null));
+      if (name === 'Laura') two.push(await createInvitation(pool, fiscal, null));
     }
     fiscales.push({ table, invitations: two });
   }
-  links.semaforo = await createInvitation(pool, await person('Juli', '', 'semaforo'));
-  links.estadistico = await createInvitation(pool, await person('Ana', '', 'estadistico'));
-  links.coordinacion = await createInvitation(pool, await person('Coordinación', '+54 9 341 222-2222', 'coordinacion'));
+  links.semaforo = await createInvitation(pool, await person('Juli', '', 'semaforo'), null);
+  links.estadistico = await createInvitation(pool, await person('Ana', '', 'estadistico'), null);
+  links.coordinacion = await createInvitation(pool, await person('Coordinación', '+54 9 341 222-2222', 'coordinacion'), null);
   await setSetting(pool, 'party', { name: 'Agrupación Ejemplo', theme: 'aula' });
   return { election, links, tables: fiscales, chiefs };
 }

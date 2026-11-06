@@ -2,7 +2,7 @@ import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto'
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { dayIn, mainRole, SECURITY_PROFILES, storedPhone, themeProblems } from '@urna-abierta/domain';
-import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpMatches, unseal } from './actor.ts';
+import { attemptLimiter, audit, authenticated, can, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpMatches, unseal, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
 import { rollRevision, tableRoll } from './routes-sync.ts';
 
@@ -12,15 +12,19 @@ const INVITATION_DAYS = 14;
 const GUESSES_ALLOWED = 10;
 const GUESS_WINDOW_MS = 15 * 60_000;
 
-export async function createInvitation(pool: pg.Pool, userId: string): Promise<string> {
+/**
+ * `by` is who asks for it, or null for the demo of whoever runs the server. A device that comes from the link of
+ * someone who does not manage people does not set up the second step of a person who never did.
+ */
+export async function createInvitation(pool: pg.Pool, userId: string, by: Actor | null): Promise<string> {
   const token = newToken();
-  await pool.query(`INSERT INTO invitations (token_hash, user_id, expires_at) VALUES ($1, $2, now() + make_interval(days => $3))`, [hashToken(token), userId, INVITATION_DAYS]);
+  await pool.query(`INSERT INTO invitations (token_hash, user_id, expires_at, may_enroll) VALUES ($1, $2, now() + make_interval(days => $3), $4)`, [hashToken(token), userId, INVITATION_DAYS, by === null || can(by, 'users.manage')]);
   return token;
 }
 
-async function newDevice(pool: pg.Pool, userId: string): Promise<string> {
+async function newDevice(pool: pg.Pool, userId: string, mayEnroll: boolean): Promise<string> {
   const token = newToken();
-  await pool.query('INSERT INTO devices (id, user_id, token_hash) VALUES ($1, $2, $3)', [randomUUID(), userId, hashToken(token)]);
+  await pool.query('INSERT INTO devices (id, user_id, token_hash, may_enroll) VALUES ($1, $2, $3, $4)', [randomUUID(), userId, hashToken(token), mayEnroll]);
   return token;
 }
 
@@ -87,7 +91,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     }
     await setSetting(pool, 'responsibility_accepted', { at: new Date().toISOString(), by: userId });
     await audit(pool, { userId } as never, 'setup', userId);
-    return { token: await newDevice(pool, userId) };
+    return { token: await newDevice(pool, userId, true) };
   });
 
   /** The theme chosen in the installer, which arrives right after the server starts and before anyone gets in. */
@@ -119,7 +123,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (typeof token !== 'string') return reply.code(400).send({ error: 'invalid_request' });
     if (guesses.blocked(request.ip)) return reply.code(429).send({ error: 'too_many_attempts' });
     const used = await pool.query(
-      `UPDATE invitations SET used_at = now() WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING user_id`,
+      `UPDATE invitations SET used_at = now() WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING user_id, may_enroll`,
       [hashToken(token)],
     );
     const userId = used.rows[0]?.user_id;
@@ -128,21 +132,25 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.code(410).send({ error: 'invitation_not_valid' });
     }
     await audit(pool, { userId } as never, 'device.joined', userId);
-    return { token: await newDevice(pool, userId) };
+    return { token: await newDevice(pool, userId, used.rows[0].may_enroll) };
   });
 
   /** A short code to bring this person's session to an installed app, which on iPhone starts empty. */
   app.post('/api/auth/handoff', { preHandler: beforeSecondFactor }, async (request) => {
     const code = String(randomInt(0, 100_000_000)).padStart(8, '0');
-    await pool.query(`INSERT INTO invitations (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '15 minutes')`, [hashToken(code), request.actor.userId]);
+    await pool.query(`INSERT INTO invitations (token_hash, user_id, expires_at, may_enroll) VALUES ($1, $2, now() + interval '15 minutes', $3)`, [hashToken(code), request.actor.userId, request.actor.mayEnroll]);
     return { code };
   });
 
-  /** The secret is kept sealed. It is shown once, and again only while it was never confirmed. */
+  /**
+   * The secret is kept sealed. It is shown once, and again only while it was never confirmed, to a device that may set
+   * it up: one that came from the link of someone who does not manage people asks for a new link.
+   */
   app.post('/api/auth/second-factor/start', { preHandler: beforeSecondFactor }, async (request, reply) => {
     const { actor } = request;
     const found = await pool.query('SELECT totp_sealed FROM users WHERE id = $1', [actor.userId]);
     if (found.rows[0].totp_sealed) return { enrolled: true };
+    if (!actor.mayEnroll) return reply.code(403).send({ error: 'needs_new_invitation' });
     const pending = await getSetting<string | null>(pool, `totp_pending_${actor.userId}`, null);
     const secret = pending ? unseal(pending) : newTotpSecret();
     if (!pending) await setSetting(pool, `totp_pending_${actor.userId}`, seal(secret));
@@ -155,6 +163,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (typeof code !== 'string') return reply.code(400).send({ error: 'invalid_request' });
     if (guesses.blocked(actor.userId)) return reply.code(429).send({ error: 'too_many_attempts' });
     const found = await pool.query('SELECT totp_sealed FROM users WHERE id = $1', [actor.userId]);
+    if (!found.rows[0].totp_sealed && !actor.mayEnroll) return reply.code(403).send({ error: 'needs_new_invitation' });
     const pending = await getSetting<string | null>(pool, `totp_pending_${actor.userId}`, null);
     const sealed: string | null = found.rows[0].totp_sealed ?? pending;
     if (!sealed || !totpMatches(unseal(sealed), code.replace(/\D/g, ''))) {
