@@ -51,9 +51,38 @@ Lo más importante de todo el simulacro.
       recuperación.
 - [ ] Si la dirección cambió, cada fiscal tiene que volver a preparar la mesa. Medí cuánto tarda eso con todo el equipo.
 
+## Ley y seguridad
+
+Cómo se usa cada herramienta está en la guía de [datos personales](datos-personales.md).
+
+- [ ] Una persona pide sus datos. En **Pedidos de personas**, buscala, tocá «Bajar todo lo que tenemos», corregí su documento, anotá un
+      consentimiento y borrá sus datos. Medí cuánto tardó cada cosa: los plazos de la ley son de 10 días corridos y 5 hábiles. ¿Lo que se
+      bajó se entiende sin explicación?
+- [ ] En **Registro** aparecen la búsqueda, la descarga, la corrección, el consentimiento y el borrado, con quién lo hizo.
+- [ ] Creá una categoría del semáforo marcada como sensible y anotá a alguien con ella. Alguien con «Anotar quién nos vota» no la tiene
+      que ver, ni poder cambiarla. Alguien con «Ver las categorías sensibles» la ve, y el registro dice «Miró categorías sensibles».
+- [ ] Bajá el padrón de una mesa preparándola desde un teléfono, y una copia de seguridad desde la app: el registro tiene que decir quién
+      lo hizo.
+- [ ] Pasá la seguridad a «Municipal o provincial». Todos menos los fiscales tienen que confirmar con un código, y el fiscal tiene que ver
+      solo los últimos 3 números de cada documento. Después volvé a la de antes.
+- [ ] Sacá a una persona del equipo: la próxima vez que su teléfono se conecte, tiene que decir «Este teléfono ya no tiene acceso».
+- [ ] Después de cerrar la elección, un fiscal intenta tachar y volver a preparar la mesa. Anotá qué pasa: nada de lo que mande tiene que
+      contar.
+
 ## Terminar
 
 - [ ] Cerrá la elección y purgala. Comprobá que no quede ningún nombre: buscá uno en **Pedidos de personas**.
+- [ ] Comprobá que no quede ningún documento en la base. Los del padrón inventado empiezan con 9900, así que esto tiene que contestar `0`:
+
+      ```sh
+      sudo runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta \
+        podman exec urna-db pg_dump -U urna urna | grep -cw '9900[0-9]\{4\}'
+      ```
+
+      Si da más, anotalo: es uno de los [límites de esta versión](datos-personales.md#límites-de-esta-versión).
+
+- [ ] Borrá las copias de seguridad anteriores a la purga, en el servidor y en tu computadora, como dice
+      [Las copias de seguridad](datos-personales.md#las-copias-de-seguridad).
 - [ ] Borrá el servidor. Revisá en la consola de la nube que no quede nada cobrando.
 
 ## Lo que hay que anotar
