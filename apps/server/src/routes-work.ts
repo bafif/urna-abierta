@@ -329,7 +329,13 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const person = await pool.query('SELECT * FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
     if (!person.rows[0]) return reply.code(404).send({ error: 'not_found' });
     const mark = await pool.query('SELECT category_id, sealed, noted_at FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
-    const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, id]);
+    // Like the count: a mark that a later undo cancelled does not say the person voted.
+    const voted = await pool.query(
+      `SELECT o.device_time FROM operations o WHERE o.table_id = $1 AND o.type = 'voter.marked' AND NOT o.quarantined AND o.payload->>'elector' = $2
+         AND NOT EXISTS (SELECT 1 FROM operations u WHERE u.table_id = $1 AND u.type = 'voter.unmarked' AND NOT u.quarantined AND u.payload->'cancels' ? o.id::text)
+       ORDER BY o.device_time`,
+      [person.rows[0].table_id, id],
+    );
     const { ref } = person.rows[0];
     await audit(pool, request.actor, 'person.exported', ref);
     const row = mark.rows[0];
@@ -344,6 +350,13 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       [election, found.table_id],
     );
     const where = place.rows[0];
+    // The page is about one roll: it says in which others the same document is, so that nobody takes it for everything.
+    const others = found.document
+      ? await pool.query(
+          `SELECT DISTINCT e.name FROM electors x JOIN elections e ON e.id = x.election_id WHERE x.document = $1 AND x.election_id <> $2 AND x.erased_at IS NULL AND e.status <> 'purgada' ORDER BY e.name`,
+          [found.document, election],
+        )
+      : { rows: [] };
     // Only what is held about the person, with names a person understands: the screen turns it into a page to hand over.
     return {
       party: (await getSetting<{ name: string }>(pool, 'party', { name: '' })).name,
@@ -353,6 +366,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       consent: found.consent,
       semaphore: row ? { category: name ?? null, sensitive: Boolean(row.sealed), hidden, notedAt: row.noted_at } : null,
       markedVoted: voted.rows.map((r) => r.device_time),
+      others: others.rows.map((r) => r.name as string),
     };
   });
 

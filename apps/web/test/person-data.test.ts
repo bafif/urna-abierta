@@ -31,6 +31,13 @@ describe('the page with what is held about a person', () => {
     expect(opened).toContain('category=Puede ser');
     const empty = personDataPage({ ...data, table: null, consent: null, semaphore: null, markedVoted: [] }, say as never, 'en');
     for (const key of ['data.noTable', 'data.consent.no', 'data.light.none', 'data.voted.no', 'data.empty']) expect(empty).toContain(key);
+    expect(empty).not.toContain('data.others');
+  });
+
+  it('says that it is about one roll, and names the others where the same document is', () => {
+    const page = personDataPage({ ...data, others: ['Claustro', 'Consejo <Superior>'] }, say as never, 'es');
+    expect(page).toContain('[data.intro party=Agrupación &lt;Ejemplo&gt; election=Centro de estudiantes]');
+    expect(page).toContain('[data.others elections=«Claustro», «Consejo &lt;Superior&gt;»]');
   });
 
   it('names the file after the person, without accents or anything a file name cannot have', () => {

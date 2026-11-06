@@ -781,7 +781,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(exported).toMatchObject({ party: 'Agrupación Ejemplo', consent: { date: '2027-01-01', means: 'firma' }, person: { name: found.full_name, document: found.document }, table: { name: found.table_name } });
       expect(exported.election.name).toContain('Elección de prueba');
       // Nothing internal: no ids, flags or raw columns.
-      expect(Object.keys(exported).sort()).toEqual(['consent', 'election', 'markedVoted', 'party', 'person', 'semaphore', 'table']);
+      expect(Object.keys(exported).sort()).toEqual(['consent', 'election', 'markedVoted', 'others', 'party', 'person', 'semaphore', 'table']);
       expect(JSON.stringify(exported)).not.toMatch(/election_id|needs_review|search|"review"|"ref"/);
       expect((await call('coordinacion', 'DELETE', base)).statusCode).toBe(200);
       expect((await call('coordinacion', 'GET', '/api/persons?q=borrado')).json().people).toEqual([]);
@@ -794,6 +794,23 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(200);
       const left = await pool.query(`SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND (full_name <> '' OR document IS NOT NULL)`, [demo.election]);
       expect(left.rows[0].n).toBe(0);
+    });
+
+    it('what is handed to a person says they voted only if the mark stands, and in which other rolls they are', async () => {
+      const [person] = (await pool.query('SELECT id, document FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 1', [table])).rows;
+      const exported = async () => (await call('coordinacion', 'GET', `/api/persons/${demo.election}/${person.id}/export`)).json();
+      const marked = { ...operation(table, 1), payload: { elector: person.id } };
+      await push('fiscal', table, [marked]);
+      expect((await exported()).markedVoted).toEqual([marked.device_time]);
+      await push('fiscal', table, [{ ...operation(table, 2), type: 'voter.unmarked', payload: { elector: person.id, cancels: [marked.id] } }]);
+      expect((await exported()).markedVoted).toEqual([]);
+      expect((await call('coordinacion', 'GET', `/api/elections/${demo.election}/stats`)).json().voted).toBe(0);
+
+      expect((await exported()).others).toEqual([]);
+      const other = (await call('coordinacion', 'POST', '/api/elections', { name: 'Claustro', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+      const file = writePadron({ electors: [{ id: `d-${person.document}`, full_name: 'La misma, Persona', identifiers: [{ type: 'DNI', value: person.document }] }] as never });
+      await app.inject({ method: 'POST', url: `/api/elections/${other}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      expect((await exported()).others).toEqual(['Claustro']);
     });
 
     it('erasing a person and purging the election leave no document behind, anywhere in the database', async () => {
