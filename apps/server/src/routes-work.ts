@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
 import { audit, auditView, can, canReachTable, erasedId, getSetting, isErasedId, requires, seal, unseal, type Actor } from './actor.ts';
+import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
@@ -306,6 +307,16 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       semaphore: row ? { category: name ?? null, sensitive: Boolean(row.sealed), hidden, notedAt: row.noted_at } : null,
       markedVoted: voted.rows.map((r) => r.device_time),
     };
+  });
+
+  /** Art. 16: whoever finds a mistake in their data has the right to have it corrected, until the election is purged. */
+  app.put<{ Params: { election: string; id: string }; Body: { full_name?: unknown; document?: unknown } }>('/api/persons/:election/:id', { preHandler: managePersons }, async (request, reply) => {
+    const status = await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.election]);
+    if (status.rows[0]?.status === 'purgada') return reply.code(409).send({ error: 'election_purged' });
+    const result = await correctElector(pool, request.actor, request.params.election, request.params.id, request.body);
+    if (result === 'invalid_name') return reply.code(400).send({ error: 'invalid_name' });
+    if (result === 'not_found') return reply.code(404).send({ error: 'not_found' });
+    return { ok: true };
   });
 
   app.put<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, securityProfile, setSetting } from './actor.ts';
+import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, securityProfile, setSetting, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -21,6 +21,21 @@ const STATS_ROLE_DAYS = 90;
 const STATUSES = ['preparacion', 'jornada', 'escrutinio', 'cerrada', 'purgada'];
 const KINDS = ['estudiantil', 'local', 'nacional', 'otra'];
 const text = (value: unknown, max = 200) => (typeof value === 'string' && value.trim() && value.length <= max ? value.trim() : null);
+
+/** A name or document someone corrected, from the review or from a person's request. Uploading the roll again does not undo it. */
+export async function correctElector(pool: pg.Pool, actor: Actor, election: string, elector: string, body: { full_name?: unknown; document?: unknown } | undefined): Promise<'invalid_name' | 'not_found' | 'ok'> {
+  const name = text(body?.full_name);
+  if (!name) return 'invalid_name';
+  const document = typeof body?.document === 'string' ? body.document.replace(/\D/g, '') || null : null;
+  const corrected = await pool.query(
+    `UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5 || COALESCE(' ' || COALESCE($4, document), ''), needs_review = false, corrected_at = now()
+     WHERE election_id = $1 AND id = $2 RETURNING ref`,
+    [election, elector, name, document, foldText(name)],
+  );
+  if (!corrected.rows[0]) return 'not_found';
+  await audit(pool, actor, 'elector.corrected', corrected.rows[0].ref);
+  return 'ok';
+}
 
 /** Once an election closes, its roll and its tables stay as they are: what remains is reviewing it and purging it. */
 export async function closedElection(pool: pg.Pool, election: string): Promise<boolean | null> {
@@ -341,14 +356,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   app.put<{ Params: { id: string; elector: string }; Body: { full_name?: unknown; document?: unknown } }>('/api/elections/:id/electors/:elector', { preHandler: manageElection }, async (request, reply) => {
-    const name = text(request.body?.full_name);
-    if (!name) return reply.code(400).send({ error: 'invalid_name' });
-    const closed = await closedElection(pool, request.params.id);
-    if (closed) return reply.code(409).send({ error: 'election_closed' });
-    const document = typeof request.body?.document === 'string' ? request.body.document.replace(/\D/g, '') || null : null;
-    const corrected = await pool.query('UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5, needs_review = false, corrected_at = now() WHERE election_id = $1 AND id = $2 RETURNING ref', [request.params.id, request.params.elector, name, document, foldText(`${name} ${document ?? ''}`)]);
-    if (!corrected.rows[0]) return reply.code(404).send({ error: 'not_found' });
-    await audit(pool, request.actor, 'elector.corrected', corrected.rows[0].ref);
+    if (await closedElection(pool, request.params.id)) return reply.code(409).send({ error: 'election_closed' });
+    const result = await correctElector(pool, request.actor, request.params.id, request.params.elector, request.body);
+    if (result === 'invalid_name') return reply.code(400).send({ error: 'invalid_name' });
+    if (result === 'not_found') return reply.code(404).send({ error: 'not_found' });
     return { ok: true };
   });
 

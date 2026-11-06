@@ -204,6 +204,8 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     return {
       user: { id: actor.userId, name: actor.name },
       roles: actor.roles,
+      // What each screen checks: a party can edit what a role allows.
+      permissions: actor.permissions,
       main: mainRole(actor.roles),
       secondFactorNeeded: await needsSecondFactor(pool, actor),
       party: await getSetting(pool, 'party', defaultParty()),

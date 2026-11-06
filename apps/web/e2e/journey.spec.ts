@@ -383,6 +383,22 @@ test('a theme with its own fonts, in one file, stays on the phone with no signal
   await device.close();
 });
 
+test('whoever only looks after the system lands on what they can do, and sees nothing else', async ({ page, request }) => {
+  const demo = await seed(request, { size: 5 });
+  const token = (await (await request.post('/api/auth/redeem', { data: { token: demo.links.coordinacion } })).json()).token;
+  const created = await request.post('/api/users', { data: { name: 'Sistemas Solo', role: 'sistema' }, headers: { authorization: `Bearer ${token}` } });
+  await page.goto(`/#invitacion=${(await created.json()).invitation}`);
+  await useThis(page);
+  await expect(page.getByRole('heading')).toHaveText('Más cosas');
+  await expect(page.getByText('No se pudo')).toHaveCount(0);
+  for (const name of [/^Tu equipo/, /^Permisos/, /^Seguridad/, /^Copias de seguridad/, /^Registro/, /^Ajustes/]) await expect(page.getByRole('button', { name })).toBeVisible();
+  // Rolls, people and the traffic light are not this role's work.
+  for (const name of [/^Pedidos de personas/, /^Semáforo/, /^Tu partido/]) await expect(page.getByRole('button', { name })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Volver' })).toHaveCount(0);
+  await page.getByRole('button', { name: /^Registro/ }).click();
+  await expect(page.getByTestId('audit-entry').first()).toBeVisible();
+});
+
 test('someone asks for their data and to be erased', async ({ page, request }) => {
   const demo = await seed(request, { size: 10 });
   await page.goto(`/#invitacion=${demo.links.coordinacion}`);

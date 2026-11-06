@@ -55,7 +55,7 @@
 
   // Also when someone gets in without reloading, by typing a code.
   $effect(() => {
-    if (session.ready && (app.practice || session.can('fiscal'))) void app.start();
+    if (session.ready && (app.practice || session.allows('table.work'))) void app.start();
   });
 
   const Screen = $derived(SCREENS[nav.current.name] ?? Home);

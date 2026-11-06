@@ -1,4 +1,5 @@
 import { resolve } from '$app/paths';
+import { isRole, permissionsOf, type Permission } from '@urna-abierta/domain';
 import { ui, type Theme } from './ui.svelte.ts';
 
 export const API = `${resolve('/')}api`;
@@ -34,6 +35,8 @@ export interface TableInfo {
 export interface Me {
   user: { id: string; name: string };
   roles: string[];
+  /** What this person may do, with the roles as the party edited them. A phone saved before it came works it out from the roles. */
+  permissions?: string[];
   main: string | null;
   secondFactorNeeded: boolean;
   party: { name: string; theme: string };
@@ -150,8 +153,22 @@ class Session {
     }
   }
 
-  can(...roles: string[]): boolean {
-    return roles.some((role) => this.me?.roles.includes(role));
+  /** Screens show what the server would allow: the permissions, never the name of a role. */
+  allows(...permissions: Permission[]): boolean {
+    const held = this.me?.permissions ?? permissionsOf((this.me?.roles ?? []).filter(isRole));
+    return permissions.some((permission) => held.includes(permission));
+  }
+
+  /** The work that opens first, in the same order as the roles: running elections, the system, a district, the traffic light, the numbers, a table. */
+  get home(): 'adminHome' | 'more' | 'district' | 'lightHome' | 'numbers' | 'fiscalPlan' | null {
+    if (this.allows('election.manage')) return 'adminHome';
+    if (this.allows('security.manage')) return 'more';
+    if (this.allows('district.watch')) return 'district';
+    if (this.allows('semaphore.read')) return 'lightHome';
+    if (this.allows('stats.read')) return 'numbers';
+    if (this.allows('table.work')) return 'fiscalPlan';
+    if (this.allows('users.manage', 'audit.read', 'persons.manage')) return 'more';
+    return null;
   }
 
   /** Forgets this device's access, so that another invitation can be used. Saved marks stay. */

@@ -544,6 +544,25 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('jefe', 'GET', `/api/elections/${demo.election}/stats`)).statusCode).toBe(403);
     });
 
+    it('each person hears their own permissions, and a request about someone\'s data needs only that permission', async () => {
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
+      tokens.sistema = await redeem(invitation);
+      expect((await call('sistema', 'GET', '/api/me')).json().permissions.sort()).toEqual(['audit.read', 'security.manage', 'users.manage']);
+      const { recommended } = (await call('sistema', 'GET', '/api/roles')).json();
+      await call('sistema', 'PUT', '/api/roles/coordinacion', { permissions: recommended.coordinacion.filter((p: string) => p !== 'election.manage') });
+      expect((await call('coordinacion', 'GET', '/api/me')).json().permissions).not.toContain('election.manage');
+      const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
+      const fix = { full_name: 'Acuña, Corregida', document: '' };
+      expect((await call('coordinacion', 'PUT', `/api/elections/${found.election_id}/electors/${found.id}`, fix)).statusCode).toBe(403);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${found.election_id}/${found.id}`, fix)).statusCode).toBe(200);
+      // The document stays, and can still be searched.
+      const again = (await call('coordinacion', 'GET', `/api/persons?q=${found.document}`)).json().people.find((p: { id: string }) => p.id === found.id);
+      expect(again).toMatchObject({ full_name: 'Acuña, Corregida', document: found.document });
+      expect((await call('coordinacion', 'PUT', `/api/persons/${found.election_id}/${found.id}`, { full_name: ' ' })).statusCode).toBe(400);
+      await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [found.election_id]);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${found.election_id}/${found.id}`, fix)).statusCode).toBe(409);
+    });
+
     it('taking away the work of a table really takes it away', async () => {
       const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
       tokens.sistema = await redeem(invitation);

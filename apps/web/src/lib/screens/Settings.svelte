@@ -16,12 +16,13 @@
   /** Other work this person also has, besides the one that opens first. */
   const tasks = $derived(
     [
-      { role: 'fiscal', screen: 'fiscalPlan', title: t('task.fiscal') },
-      { role: 'jefe', screen: 'district', title: t('task.jefe') },
-      { role: 'coordinacion', screen: 'adminHome', title: t('task.admin') },
-      { role: 'semaforo', screen: 'lightHome', title: t('task.light') },
-      { role: 'estadistico', screen: 'numbers', title: t('task.numbers') },
-    ].filter((task) => session.can(task.role) && task.role !== session.me?.main),
+      { screen: 'fiscalPlan', title: t('task.fiscal'), show: session.allows('table.work') },
+      { screen: 'district', title: t('task.jefe'), show: session.allows('district.watch') },
+      { screen: 'adminHome', title: t('task.admin'), show: session.allows('election.manage') },
+      { screen: 'lightHome', title: t('task.light'), show: session.allows('semaphore.read') },
+      { screen: 'numbers', title: t('task.numbers'), show: session.allows('stats.read') },
+      { screen: 'more', title: t('task.more'), show: session.allows('users.manage', 'security.manage', 'persons.manage', 'audit.read') },
+    ].filter((task) => task.show && task.screen !== session.home),
   );
 
   async function copyReport() {
@@ -58,13 +59,13 @@
       <button class="boton secundario" onclick={() => nav.go('installIphone')}>{t('settings.installIphone')}</button>
     {/if}
   {/if}
-  {#each tasks as task (task.role)}
+  {#each tasks as task (task.screen)}
     <button class="boton secundario" onclick={() => nav.go(task.screen)}>{task.title}</button>
   {/each}
-  {#if session.can('fiscal') && !app.practice}
+  {#if session.allows('table.work') && !app.practice}
     <button class="enlace" onclick={() => app.startPractice()}>{t('plan.practice')}</button>
   {/if}
-  {#if session.can('coordinacion')}
+  {#if session.allows('election.manage')}
     <label class="enlace">
       <input class="oculto" type="file" accept=".json,application/json" onchange={addTheme} data-testid="theme-file" />
       {t('settings.theme.add')}
