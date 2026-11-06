@@ -35,7 +35,7 @@ export function googleCloud(credentials: GoogleCredentials, request: typeof fetc
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }).toString(),
     });
-    const data = await response.json();
+    const data = (await response.json()) as { access_token: string; error_description?: string };
     if (!response.ok) throw new Error(`google_login: ${data.error_description ?? response.status}`);
     token = data.access_token;
   }
@@ -47,7 +47,7 @@ export function googleCloud(credentials: GoogleCredentials, request: typeof fetc
       headers: { authorization: `Bearer ${token}`, ...(payload ? { 'content-type': 'application/json' } : {}) },
       body: payload ? JSON.stringify(payload) : undefined,
     });
-    const data = await response.json().catch(() => ({}));
+    const data: any = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`google_${method}: ${data.error?.message ?? response.status}`);
     return data;
   }

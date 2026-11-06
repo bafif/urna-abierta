@@ -43,7 +43,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
     const headers = signOracle({ method, url, body, date: new Date().toUTCString(), credentials });
     const { host: _host, ...sent } = headers;
     const response = await request(url, { method, headers: sent, body });
-    const data = await response.json().catch(() => ({}));
+    const data: any = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`oracle_${method}_${url.pathname.split('/').pop()}: ${data.code ?? response.status} ${data.message ?? ''}`);
     return data;
   }
