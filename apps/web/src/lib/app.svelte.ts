@@ -368,7 +368,8 @@ class AppState {
     if (!this.tableId || this.pendingCount + this.pendingPhotos > 0) return;
     const { me } = session;
     const lastDay = me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
-    const roll = { tableId: this.tableId, reached: reached && me !== null, assigned: me?.table?.id, lastDay, hoursKept: me?.security.localHoursAfterClose };
+    const timeZone = me?.table ? me.table.timeZone : await this.db.getMeta<string>('timeZone');
+    const roll = { tableId: this.tableId, reached: reached && me !== null, assigned: me?.table?.id, lastDay, hoursKept: me?.security.localHoursAfterClose, timeZone, clockOffset: this.clockOffset };
     if (rollCanGo(roll)) await this.wipe();
   }
 
@@ -377,7 +378,7 @@ class AppState {
       await this.db.electors.clear();
       await this.db.operations.clear();
       await this.db.photos.clear();
-      await this.db.meta.bulkDelete(['cursor', 'tableId', 'lastDay']);
+      await this.db.meta.bulkDelete(['cursor', 'tableId', 'lastDay', 'timeZone']);
     });
     localStorage.removeItem(PREPARED_KEY);
     this.electors = [];
@@ -494,6 +495,7 @@ class AppState {
       await this.db.electors.bulkPut(electors);
       await this.db.setMeta('tableId', table.id);
       await this.db.setMeta('lastDay', table.days.at(-1));
+      await this.db.setMeta('timeZone', table.timeZone);
       await this.db.setMeta('rollRevision', revision);
       await this.db.setMeta('publicIds', true);
       const canary = await this.db.getMeta<Canary>('canary');
