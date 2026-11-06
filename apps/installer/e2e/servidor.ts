@@ -124,8 +124,8 @@ const fromThePod = (m: { name: string }, password?: string) =>
     'podman', 'run', '--rm', '--pod', 'urna', ...(password ? ['-e', `PGPASSWORD=${password}`] : []), images.db, 'psql', '-h', '127.0.0.1', '-U', 'urna', '-w', '-tAc', 'SELECT 1');
 const raw = s3Client({ endpoint: bucket.endpoint, bucket: bucket.name, region: bucket.region, accessKeyId: bucket.accessKeyId, secretAccessKey: bucket.secretAccessKey });
 
-/** A backup made by hand, opened by `key`, whose photos would replace the commands and add a service, and whose field key is a command. */
-function craftedBackup(key: string): string {
+/** A backup made by hand, opened by `key`, whose photos would replace the commands and add a service, with that field key. */
+function craftedBackup(key: string, fieldKey: string): string {
   const folder = mkdtempSync(join(work, 'trucha-'));
   const gnupg = mkdtempSync(join(work, 'gnupg-'));
   const stage = join(folder, 'stage');
@@ -136,7 +136,7 @@ function craftedBackup(key: string): string {
   writeFileSync(join(stage, '.config/systemd/user/urna-copia.service'), '[Service]\nExecStart=/bin/touch /tmp/marca-trucha-servicio\n');
   execFileSync('tar', ['-C', stage, '-cf', join(folder, 'fotos.tar'), 'fotos', 'urna', '.config']);
   writeFileSync(join(folder, 'base.dump'), 'no es una base');
-  writeFileSync(join(folder, 'clave-campos'), 'x$(touch /tmp/marca-trucha-env)');
+  writeFileSync(join(folder, 'clave-campos'), fieldKey);
   execFileSync('tar', ['-C', folder, '-cf', join(folder, 'copia.tar'), 'base.dump', 'fotos.tar', 'clave-campos']);
   const file = join(folder, 'copia.tar.gpg');
   execFileSync('gpg', ['--batch', '--yes', '--quiet', '--pinentry-mode', 'loopback', '--passphrase', key, '--symmetric', '--cipher-algo', 'AES256', '-o', file, join(folder, 'copia.tar')], { env: { ...process.env, GNUPGHOME: gnupg } });
@@ -285,13 +285,15 @@ const wrongKey = asUbuntu('copia.tar.gpg', 'LLAVE-EQUIVOCADA');
 record('dice si el archivo no está, si no es una copia, o si la llave es otra', !notThere.ok && notThere.said.includes('No encuentro el archivo') && !notBackup.ok && notBackup.said.includes('no es una copia de Urna Abierta') && !wrongKey.ok && wrongKey.said.includes('Esa llave no abre esta copia'), [notThere.said, notBackup.said, wrongKey.said]);
 // A backup someone hands over, with the right key, made to write outside the photos: the commands of the server and
 // one of its services, and a field key that runs a command once .env is read. Nothing of it may land.
-podman('cp', craftedBackup(secrets.recoveryKey), `${second.name}:/home/ubuntu/trucha.tar.gpg`);
-podman('exec', second.name, 'sh', '-c', 'chown ubuntu:ubuntu /home/ubuntu/trucha.tar.gpg && chmod 600 /home/ubuntu/trucha.tar.gpg');
 const fingerprint = () => podman('exec', second.name, 'sh', '-c', 'cd /opt/urna-abierta && sha256sum urna .env .config/systemd/user/urna-copia.service && ls fotos | wc -l');
 const beforeCrafted = fingerprint();
-const crafted = asUbuntu('trucha.tar.gpg', secrets.recoveryKey);
+const crafted = ['x$(touch /tmp/marca-trucha-env)', 'ab'.repeat(32)].map((fieldKey, index) => {
+  podman('cp', craftedBackup(secrets.recoveryKey, fieldKey), `${second.name}:/home/ubuntu/trucha-${index}.tar.gpg`);
+  podman('exec', second.name, 'sh', '-c', `chown ubuntu:ubuntu /home/ubuntu/trucha-${index}.tar.gpg && chmod 600 /home/ubuntu/trucha-${index}.tar.gpg`);
+  return asUbuntu(`trucha-${index}.tar.gpg`, secrets.recoveryKey);
+});
 const marked = attempt('exec', second.name, 'sh', '-c', 'ls /tmp/marca-trucha* /opt/urna-abierta/marca-trucha* 2>/dev/null').said.trim();
-record('no restaura una copia que escribiría fuera de las fotos, y deja todo como estaba', !crafted.ok && crafted.said.includes('no restauré nada') && fingerprint() === beforeCrafted && marked === '' && api(second, 'GET', '/health').ok === true, crafted.said.split('\n'));
+record('no restaura una copia que escribiría fuera de las fotos, y deja todo como estaba', crafted.every((each) => !each.ok && each.said.includes('no restauré nada')) && crafted[1]!.said.includes('fuera de la carpeta de las fotos') && fingerprint() === beforeCrafted && marked === '' && api(second, 'GET', '/health').ok === true, crafted.map((each) => each.said.trim()));
 const restored = asUbuntu('copia.tar.gpg', secrets.recoveryKey);
 record('restaura la copia desde la carpeta de quien entra, con su ruta corta', restored.ok && restored.said.includes('Copia restaurada') && restored.said.includes('URNA_S3_'), restored.said.split('\n'));
 const elections = api(second, 'GET', '/elections', { token }).elections;
