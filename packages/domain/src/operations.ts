@@ -3,6 +3,8 @@ import * as v from 'valibot';
 export const SCHEMA_VERSION = 1;
 /** Small batches: on a bad connection only short requests get through. */
 export const MAX_BATCH = 50;
+/** The largest photo of a tally sheet the server takes. */
+export const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 const uuid = v.pipe(v.string(), v.uuid());
 const shortId = v.pipe(v.string(), v.minLength(1), v.maxLength(64));
