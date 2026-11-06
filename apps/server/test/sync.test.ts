@@ -174,6 +174,37 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(names(await call('jefe', 'POST', `/api/elections/${demo.election}/invitations`))).toEqual(['Propia']);
       expect(names(await call('coordinacion', 'POST', `/api/elections/${demo.election}/invitations`))).toEqual(['Ajena', 'Propia']);
     });
+
+    it('a chief who invites a poll watcher of their table who also does something else gets no link for them', async () => {
+      const id = await newFiscal('Doble', table);
+      await call('coordinacion', 'POST', `/api/users/${id}/roles`, { role: 'semaforo' });
+      expect(names(await call('jefe', 'POST', `/api/elections/${demo.election}/invitations`))).toEqual([]);
+    });
+
+    it('without managing people, someone invites only a poll watcher of their tables, and never someone who can do more', async () => {
+      await twoDistricts();
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users as { id: string; name: string }[];
+      const idOf = (name: string) => users.find((user) => user.name === name)!.id;
+      const invite = (who: string, target: string) => call(who, 'POST', `/api/users/${target}/invitation`);
+      const links = async (target: string) => (await pool.query('SELECT count(*)::int AS n FROM invitations WHERE user_id = $1', [target])).rows[0].n as number;
+      const before = await links(idOf('Coordinación'));
+      for (const target of ['Coordinación', 'Juli', 'Ana', 'Fiscal 1']) expect((await invite('jefe', idOf(target))).json()).toEqual({ error: 'forbidden' });
+      expect(await links(idOf('Coordinación'))).toBe(before);
+      expect((await invite('jefe', idOf('Marta'))).statusCode).toBe(200);
+      // A poll watcher of their table who also notes the traffic light could do more than the chief.
+      await call('coordinacion', 'POST', `/api/users/${idOf('Marta')}/roles`, { role: 'semaforo' });
+      expect((await invite('jefe', idOf('Marta'))).statusCode).toBe(403);
+      // So could every poll watcher, once the party lets them do something the chief cannot.
+      expect((await invite('jefe', idOf('Laura'))).statusCode).toBe(200);
+      await call('coordinacion', 'PUT', '/api/roles/fiscal', { permissions: ['table.work', 'semaphore.read'] });
+      expect((await invite('jefe', idOf('Laura'))).statusCode).toBe(403);
+      await call('coordinacion', 'PUT', '/api/roles/fiscal', { permissions: null });
+      // Nobody gets a link for someone who is not there.
+      expect((await invite('coordinacion', randomUUID())).statusCode).toBe(404);
+      expect((await invite('coordinacion', 'no-es-un-id')).statusCode).toBe(404);
+      // Whoever manages people can already give anyone any role: they invite anyone.
+      for (const target of ['Coordinación', 'Juli', 'Fiscal 1']) expect((await invite('coordinacion', idOf(target))).statusCode).toBe(200);
+    });
   });
 
   describe('who sees what', () => {

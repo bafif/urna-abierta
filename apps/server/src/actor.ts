@@ -130,6 +130,32 @@ export async function canReachTable(pool: pg.Pool, actor: Actor, tableId: string
   return units.includes(table.rows[0]?.unit_id) || units.includes(null);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Whether this person may hand someone a new invitation, which gets whoever has it in as that someone. Null when
+ * there is no such person. Whoever manages people may, since they can already give anyone any role. Anyone else, a
+ * chief for instance, only for a poll watcher of tables they reach, who can do nothing they cannot: otherwise the
+ * link would let them in as someone who can do more.
+ */
+export async function mayInvite(pool: pg.Pool, actor: Actor, userId: string): Promise<boolean | null> {
+  if (!UUID.test(userId)) return null;
+  const found = await pool.query(
+    `SELECT a.role, a.table_id FROM users u LEFT JOIN role_assignments a ON a.user_id = u.id AND (a.expires_at IS NULL OR a.expires_at > now())
+     WHERE u.id = $1 AND u.removed_at IS NULL`,
+    [userId],
+  );
+  if (found.rowCount === 0) return null;
+  if (can(actor, 'users.manage')) return true;
+  const assignments = found.rows.filter((row) => row.role !== null) as { role: string; table_id: string | null }[];
+  if (assignments.length === 0 || assignments.some((a) => a.role !== 'fiscal' || !a.table_id)) return false;
+  edited ??= await getSetting<RoleOverrides>(pool, 'role_permissions', {});
+  // Their own table is what reaching it already gives.
+  if (permissionsOf(['fiscal'], edited).some((permission) => permission !== 'table.work' && !can(actor, permission))) return false;
+  for (const { table_id } of assignments) if (!(await canReachTable(pool, actor, table_id!))) return false;
+  return true;
+}
+
 /** The tables of an election this person looks after: all, if they run the election, or else those of their districts. */
 export async function tablesInScope(pool: pg.Pool, actor: Actor, election: string): Promise<string[]> {
   if (can(actor, 'election.manage')) {

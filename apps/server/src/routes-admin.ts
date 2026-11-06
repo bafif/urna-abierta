@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { DEFAULT_TIME_ZONE, foldText, isRole, isSecurityProfile, isTimeZone, storedPhone, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronElector, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, requires, rollKey, securityProfile, setSetting, tablesInScope, type Actor } from './actor.ts';
+import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, mayInvite, requires, rollKey, securityProfile, setSetting, tablesInScope, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -252,7 +252,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { ok: true };
   });
 
-  app.post<{ Params: { id: string } }>('/api/users/:id/invitation', { preHandler: requires(pool, 'team.invite') }, async (request) => {
+  app.post<{ Params: { id: string } }>('/api/users/:id/invitation', { preHandler: requires(pool, 'team.invite') }, async (request, reply) => {
+    const allowed = await mayInvite(pool, request.actor, request.params.id);
+    if (allowed === null) return reply.code(404).send({ error: 'not_found' });
+    if (!allowed) return reply.code(403).send({ error: 'forbidden' });
     await audit(pool, request.actor, 'invitation.created', request.params.id);
     return { invitation: await createInvitation(pool, request.params.id) };
   });
@@ -522,7 +525,11 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       [request.params.id, scope],
     );
     const invitations = [];
-    for (const row of pending.rows) invitations.push({ name: row.name, phone: row.phone, table: row.table_name, invitation: await createInvitation(pool, row.id) });
+    for (const row of pending.rows) {
+      // A poll watcher who also does more, or works a table this person does not reach, is someone else's to invite.
+      if (!(await mayInvite(pool, request.actor, row.id))) continue;
+      invitations.push({ name: row.name, phone: row.phone, table: row.table_name, invitation: await createInvitation(pool, row.id) });
+    }
     await audit(pool, request.actor, 'invitations.created', request.params.id, { people: invitations.length });
     return { invitations };
   });
