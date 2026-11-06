@@ -16,14 +16,14 @@ export interface FakeS3 {
   failNext(count: number, status?: number): void;
   /** Takes requests and never answers them. */
   hang(on: boolean): void;
-  /** A missing object gets 403 AccessDenied, as AWS answers when the key cannot list the bucket. */
+  /** A missing object gets 403 AccessDenied, as AWS answers when the key cannot list the bucket, and so does a list. */
   denyListing(on: boolean): void;
   close(): Promise<void>;
 }
 
 const xmlError = (code: string) => `<?xml version="1.0" encoding="UTF-8"?><Error><Code>${code}</Code><Message>${code}</Message></Error>`;
 
-export async function fakeS3(credentials: { region: string; accessKeyId: string; secretAccessKey: string }, buckets = ['fotos-prueba']): Promise<FakeS3> {
+export async function fakeS3(credentials: { region: string; accessKeyId: string; secretAccessKey: string }, buckets = ['fotos-prueba'], { pageSize = 1000 } = {}): Promise<FakeS3> {
   const objects = new Map<string, Buffer>();
   const requests: FakeS3['requests'] = [];
   let failures = 0;
@@ -68,6 +68,17 @@ export async function fakeS3(credentials: { region: string; accessKeyId: string;
 
     const bucket = url.pathname.split('/')[1] ?? '';
     if (!buckets.includes(bucket)) return answer(404, 'NoSuchBucket');
+    // ListObjectsV2, a page at a time, with a token that has to travel encoded.
+    if (method === 'GET' && url.searchParams.get('list-type') === '2') {
+      if (!listing) return answer(403, 'AccessDenied');
+      const prefix = `/${bucket}/${url.searchParams.get('prefix') ?? ''}`;
+      const names = [...objects.keys()].filter((name) => name.startsWith(prefix)).sort().map((name) => name.slice(bucket.length + 2));
+      const start = Number(/^desde&(\d+)$/.exec(url.searchParams.get('continuation-token') ?? '')?.[1] ?? 0);
+      const more = start + pageSize < names.length;
+      const xml = `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>${more}</IsTruncated>${names.slice(start, start + pageSize).map((name) => `<Contents><Key>${name}</Key></Contents>`).join('')}${more ? `<NextContinuationToken>desde&amp;${start + pageSize}</NextContinuationToken>` : ''}</ListBucketResult>`;
+      response.writeHead(200, { 'content-type': 'application/xml' });
+      return response.end(xml);
+    }
     const key = decodeURIComponent(url.pathname);
     if (method === 'PUT') {
       objects.set(key, body);

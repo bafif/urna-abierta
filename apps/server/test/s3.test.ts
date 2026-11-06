@@ -81,6 +81,21 @@ describe('the S3 client', () => {
     }
   });
 
+  it('lists every name under a prefix, page after page, signed', async () => {
+    const server = await fakeS3(credentials, ['fotos-prueba'], { pageSize: 2 });
+    try {
+      const client = s3Client({ ...credentials, endpoint: server.endpoint, bucket: 'fotos-prueba' }, { wait: async () => undefined });
+      for (const name of ['backups/c', 'backups/a', 'fotos/x', 'backups/b', 'backups/d', 'backups/e']) await client.put(name, Buffer.from(name));
+      expect(await client.list('backups/')).toEqual(['backups/a', 'backups/b', 'backups/c', 'backups/d', 'backups/e']);
+      expect(await client.list('nada/')).toEqual([]);
+      expect(server.badSignatures).toBe(0);
+      server.denyListing(true);
+      await expect(client.list('backups/')).rejects.toThrow(/LIST: 403 AccessDenied/);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('gives up after a few tries, and does not take a missing bucket for a missing photo', async () => {
     const server = await fakeS3(credentials);
     try {
