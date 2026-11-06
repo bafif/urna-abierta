@@ -1,15 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import pg from 'pg';
+import type pg from 'pg';
 import { writePadron } from '@urna-abierta/domain';
 import { buildApp, migrate, seedDemo } from '../src/app.ts';
+import { DATABASE_HOOK_TIMEOUT, ownDatabases } from './databases.ts';
 
 const url = process.env.TEST_DATABASE_URL;
 
 describe.skipIf(!url)('loading a roll, against a real Postgres', () => {
   // A database of its own, so that it can run next to the other server tests, which empty theirs.
-  const name = `urna_padron_${process.pid}_${Date.now()}`;
-  let admin: pg.Pool;
+  let databases: ReturnType<typeof ownDatabases>;
   let pool: pg.Pool;
   let app: FastifyInstance;
   let token: string;
@@ -22,24 +22,19 @@ describe.skipIf(!url)('loading a roll, against a real Postgres', () => {
     (await pool.query('SELECT id, full_name FROM electors WHERE election_id = $1 ORDER BY id', [election])).rows.map((row) => [row.id, row.full_name]);
 
   beforeAll(async () => {
-    admin = new pg.Pool({ connectionString: url, max: 1 });
-    await admin.query(`CREATE DATABASE ${name}`);
-    const own = new URL(url!);
-    own.pathname = `/${name}`;
-    pool = new pg.Pool({ connectionString: own.toString(), max: 4 });
+    databases = ownDatabases(url!, 'padron');
+    pool = await databases.create(4);
     await migrate(pool);
     process.env.URNA_FIELD_KEY = 'clave de prueba';
     app = buildApp(pool);
     await app.ready();
     const demo = await seedDemo(pool, { size: 5, tables: 1 });
     token = (await app.inject({ method: 'POST', url: '/api/auth/redeem', payload: { token: demo.links.coordinacion } })).json().token;
-  });
+  }, DATABASE_HOOK_TIMEOUT);
   afterAll(async () => {
     await app?.close();
-    await pool?.end();
-    await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-    await admin.end();
-  });
+    await databases?.dropAll();
+  }, DATABASE_HOOK_TIMEOUT);
 
   it('a .padron that repeats an id loads the same person once and another name as one more person, both for review', async () => {
     const election = await newElection();
