@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
 import { audit, can, canReachTable, requires, seal, unseal, type Actor } from './actor.ts';
+import { clock } from './clock.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
@@ -52,9 +53,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         `SELECT t.id, t.name, t.place, t.last_seq,
                 t.last_contact AS last_sync,
                 (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id
-                 WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR current_date = ANY(a.days)) DESC LIMIT 1) AS fiscal
-         FROM polling_tables t WHERE t.id = ANY($1) ORDER BY t.position`,
-        [scope],
+                 WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR ($2::timestamptz AT TIME ZONE e.time_zone)::date = ANY(a.days)) DESC LIMIT 1) AS fiscal
+         FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = ANY($1) ORDER BY t.position`,
+        [scope, clock.now()],
       ),
       pool.query('SELECT table_id, count(*)::int AS total FROM electors WHERE table_id = ANY($1) GROUP BY table_id', [scope]),
       votesPerTable(pool, scope),
@@ -101,12 +102,17 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     const info = await pool.query(
       `SELECT t.id, t.name, t.place, e.categories, (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total,
-              (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR current_date = ANY(a.days)) DESC LIMIT 1) AS fiscal
+              (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR ($2::timestamptz AT TIME ZONE e.time_zone)::date = ANY(a.days)) DESC LIMIT 1) AS fiscal
        FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1`,
-      [table],
+      [table, clock.now()],
     );
     if (!info.rows[0]) return reply.code(404).send({ error: 'not_found' });
-    const operations = await pool.query(`SELECT id, type, payload, device_time, author FROM operations WHERE table_id = $1 AND type IN ('incident.reported', 'envelopes.counted', 'tally.submitted', 'tally.photo') AND NOT quarantined ORDER BY seq`, [table]);
+    // An alert that came after the close shows too, said so, like in the district: otherwise nobody could ever resolve it.
+    const operations = await pool.query(
+      `SELECT id, type, payload, device_time, author, quarantined FROM operations
+       WHERE table_id = $1 AND type IN ('incident.reported', 'envelopes.counted', 'tally.submitted', 'tally.photo') AND (NOT quarantined OR type = 'incident.reported') ORDER BY seq`,
+      [table],
+    );
     const decisions = await pool.query('SELECT category, operation_id FROM tally_decisions WHERE table_id = $1', [table]);
     const states = await pool.query('SELECT operation_id FROM incident_states WHERE operation_id = ANY($1)', [operations.rows.filter((o) => o.type === 'incident.reported').map((o) => o.id)]);
     const resolved = new Set(states.rows.map((row) => row.operation_id));
@@ -120,7 +126,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     return {
       ...info.rows[0],
       voted: (await votesPerTable(pool, [table])).get(table) ?? 0,
-      incidents: operations.rows.filter((o) => o.type === 'incident.reported' && !resolved.has(o.id)).map((o) => ({ id: o.id, at: o.device_time, kind: o.payload.kind })),
+      incidents: operations.rows.filter((o) => o.type === 'incident.reported' && !resolved.has(o.id)).map((o) => ({ id: o.id, at: o.device_time, kind: o.payload.kind, late: o.quarantined })),
       envelopes: operations.rows.filter((o) => o.type === 'envelopes.counted').map((o) => ({ day: o.payload.day, envelopes: o.payload.envelopes, marked: o.payload.marked, matches: o.payload.envelopes === o.payload.marked })),
       photos: operations.rows.filter((o) => o.type === 'tally.photo').map((o) => o.payload.sha256),
       tallies: [...tallies.entries()].map(([category, versions]) => {
