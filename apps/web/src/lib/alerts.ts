@@ -5,24 +5,40 @@
  */
 const TITLE = 'Urna Abierta';
 
-class AlertWatch {
+export class AlertWatch {
   /** The alerts seen so far in each election. */
   private readonly seen = new Map<string, Set<string>>();
+  /** Each time the panel comes on screen it takes a new turn: what an earlier one reads after it left does not count. */
+  private turn = 0;
+
+  /** The panel is on screen: what it reads with this turn shows on the icon and the title. */
+  watch(): number {
+    this.turn += 1;
+    return this.turn;
+  }
 
   /** The alerts open now in an election. */
-  update(election: string, open: string[]): void {
+  update(turn: number, election: string, open: string[]): void {
+    if (turn !== this.turn) return;
     const known = this.seen.get(election);
     const fresh = known ? open.filter((id) => !known.has(id)) : [];
     this.seen.set(election, new Set([...(known ?? []), ...open]));
     document.title = open.length > 0 ? `(${open.length}) ${TITLE}` : TITLE;
-    if ('setAppBadge' in navigator) void (open.length > 0 ? navigator.setAppBadge(open.length) : navigator.clearAppBadge()).catch(() => undefined);
+    badge(open.length);
     if (fresh.length > 0) ring();
   }
 
-  /** When the panel is not on screen, its title does not stay behind. */
-  leave(): void {
+  /** When the panel is not on screen, nothing keeps the count up to date: neither the title nor the icon keep it. */
+  leave(turn: number): void {
+    if (turn !== this.turn) return;
+    this.turn += 1;
     document.title = TITLE;
+    badge(0);
   }
+}
+
+function badge(count: number): void {
+  if ('setAppBadge' in navigator) void (count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(() => undefined);
 }
 
 function ring(): void {
