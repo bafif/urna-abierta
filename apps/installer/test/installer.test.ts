@@ -31,6 +31,23 @@ describe('the script that installs a server', () => {
     expect(containerfile).toMatch(/^COPY deploy\/server\/urna urna$/m);
   });
 
+  it('asks the server by the address of its site, the one its certificate is for, also when nobody names it', () => {
+    const urna = readFileSync(new URL('../../../deploy/server/urna', import.meta.url), 'utf8');
+    const siteAddress = /^site_address\(\) \{.*\}$/m.exec(urna)?.[0] ?? '';
+    const address = (site: string) => execFileSync('sh', ['-c', `${siteAddress}\nsite_address`], { env: { URNA_SITE: site } }).toString();
+    expect(address('https://203.0.113.24')).toBe('203.0.113.24');
+    expect(address('urna.example.org')).toBe('urna.example.org');
+    expect(address('https://localhost')).toBe('localhost');
+    // Its health and «urna estado» ask this machine, but by that address: Caddy answers no other.
+    expect(urna).toMatch(/^health=\$\{URNA_HEALTH_URL:-https:\/\/\$\(site_address\)\/api\/health\}$/m);
+    expect(urna).toMatch(/^ask_here\(\) \{ curl -fsk --connect-to ::localhost: "\$@"; \}$/m);
+    expect(urna.match(/curl -fsk[^\n]*\$health/g)).toBeNull();
+    // A browser that opens a bare IP address sends no name: Caddy answers it as that address.
+    expect(urna).toContain('-e URNA_SNI="$(site_address)"');
+    const caddyfile = readFileSync(new URL('../../../deploy/Caddyfile', import.meta.url), 'utf8');
+    expect(caddyfile).toMatch(/^\tdefault_sni \{\$URNA_SNI:localhost\}$/m);
+  });
+
   it('leaves out comment lines, but keeps the top block and what goes inside files', () => {
     const script = withoutComments(['#!/bin/sh', '# help line', 'set -eu', '# a note', '  # an indented note', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays'].join('\n'));
     expect(script.split('\n')).toEqual(['#!/bin/sh', '# help line', 'set -eu', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays']);
