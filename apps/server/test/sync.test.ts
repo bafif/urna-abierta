@@ -637,14 +637,57 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('coordinacion', 'GET', `${base}/export`)).json().person.consent.means).toBe('firma');
       expect((await call('coordinacion', 'DELETE', base)).statusCode).toBe(200);
       expect((await call('coordinacion', 'GET', '/api/persons?q=borrado')).json().people).toEqual([]);
-      const erased = (await pool.query('SELECT full_name, document FROM electors WHERE id = $1', [found.id])).rows[0];
-      expect(erased).toEqual({ full_name: 'Borrado a pedido', document: null });
+      expect((await pool.query('SELECT 1 FROM electors WHERE id = $1', [found.id])).rowCount).toBe(0);
+      const erased = (await pool.query(`SELECT full_name, document FROM electors WHERE election_id = $1 AND id LIKE 'x-%'`, [found.election_id])).rows;
+      expect(erased).toEqual([{ full_name: 'Borrado a pedido', document: null }]);
 
       expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(409);
       for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
       expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(200);
       const left = await pool.query(`SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND (full_name <> '' OR document IS NOT NULL)`, [demo.election]);
       expect(left.rows[0].n).toBe(0);
+    });
+
+    it('erasing a person and purging the election leave no document behind, anywhere in the database', async () => {
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Con DNI', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+      const dnis = ['30111222', '30111333', '30111444'];
+      const file = writePadron({ electors: dnis.map((dni, i) => ({ id: `d-${dni}`, full_name: `Persona${i}, Ana`, identifiers: [{ type: 'DNI', value: dni }], table: '1' })) as never });
+      await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      const mesa = (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string;
+      const voted = (dni: string, seq: number) => ({ ...operation(mesa, seq), payload: { elector: `d-${dni}` } });
+      expect((await push('coordinacion', mesa, [voted(dnis[0]!, 1), voted(dnis[1]!, 2)])).statusCode).toBe(200);
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
+      const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      for (const dni of dnis) expect((await call('semaforo', 'PUT', `/api/elections/${id}/people/d-${dni}/semaphore`, { category: sensitive })).statusCode).toBe(200);
+      const base = `/api/persons/${id}/d-${dnis[0]}`;
+      await call('coordinacion', 'PUT', `${base}/consent`, { date: '2027-01-01', means: 'firma' });
+      await call('coordinacion', 'GET', `${base}/export`);
+      await call('coordinacion', 'PUT', `/api/elections/${id}/electors/d-${dnis[0]}`, { full_name: 'Persona0, Ana María', document: dnis[0] });
+      expect((await call('coordinacion', 'DELETE', base)).statusCode).toBe(200);
+      // A phone that never heard of the erasure marks the person under the old id.
+      expect((await push('coordinacion', mesa, [voted(dnis[0]!, 3)])).statusCode).toBe(200);
+
+      const everything = async () => {
+        const tables = await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`);
+        let dump = '';
+        for (const { table_name } of tables.rows) dump += (await pool.query(`SELECT coalesce(string_agg(row_to_json(t)::text, E'\\n'), '') AS rows FROM "${table_name}" t`)).rows[0].rows;
+        return dump;
+      };
+      expect(await everything()).not.toContain(dnis[0]);
+      expect(await everything()).toContain(dnis[1]);
+      // The erased person still counts as voted, once.
+      const totals = (await call('coordinacion', 'GET', `/api/elections/${id}/stats`)).json();
+      expect(totals.voted).toBe(2);
+
+      for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+      expect((await push('coordinacion', mesa, [voted(dnis[2]!, 4)])).statusCode).toBe(200);
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/purge`)).statusCode).toBe(200);
+      // And a phone that sends late after the purge is heard, and what it names is dropped.
+      const late = voted(dnis[2]!, 5);
+      expect((await push('coordinacion', mesa, [late])).json().acked).toEqual([late.id]);
+      const dump = await everything();
+      for (const dni of dnis) expect(dump).not.toContain(dni);
     });
 
     it('the audit log records who did what, and cannot be changed', async () => {
