@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation, type SecurityProfile } from '@urna-abierta/domain';
-import { audit, authenticated, can, canReachTable, getSetting, type Actor } from './actor.ts';
+import { audit, authenticated, can, canReachTable, erasedId, getSetting, type Actor } from './actor.ts';
 import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
 const MAX_PULL = 200;
@@ -47,6 +47,20 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
   } finally {
     client.release();
   }
+}
+
+/** A phone that has not heard someone was erased still names them by their old id: the mark counts, under the new one. */
+async function renameErased(pool: pg.Pool, table: string, operations: Operation[]): Promise<Operation[]> {
+  const named = [...new Set(operations.flatMap((o) => ('elector' in o.payload ? [o.payload.elector] : [])))];
+  if (named.length === 0) return operations;
+  const oldOf = new Map(named.map((id) => [erasedId(id), id]));
+  const found = await pool.query(
+    'SELECT x.id FROM electors x JOIN polling_tables t ON t.election_id = x.election_id WHERE t.id = $1 AND x.id = ANY($2)',
+    [table, [...oldOf.keys()]],
+  );
+  if (found.rowCount === 0) return operations;
+  const newOf = new Map(found.rows.map((row) => [oldOf.get(row.id)!, row.id as string]));
+  return operations.map((o) => ('elector' in o.payload && newOf.has(o.payload.elector) ? ({ ...o, payload: { ...o.payload, elector: newOf.get(o.payload.elector)! } } as Operation) : o));
 }
 
 /** A status only changes through one route of this same process, which clears this at that moment. */
@@ -124,7 +138,9 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     }
     // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
     const late = ['cerrada', 'purgada'].includes(status);
-    if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
+    // After the purge no one is named anymore: who voted is taken, so the phone stops sending it, and dropped.
+    const kept = status === 'purgada' ? valid.filter((o) => !('elector' in o.payload)) : await renameErased(pool, table, valid);
+    if (kept.length > 0) await storeBatch(pool, table, kept, request.actor.userId, late);
     else await heardFrom(pool, table);
     return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };
   });

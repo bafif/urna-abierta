@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS electors (
   consent jsonb,
   PRIMARY KEY (election_id, id)
 );
+-- What the audit log names a person by: never the roll id, which is often their DNI and outlives an erasure.
+ALTER TABLE electors ADD COLUMN IF NOT EXISTS ref uuid NOT NULL DEFAULT gen_random_uuid();
 CREATE INDEX IF NOT EXISTS electors_table ON electors (table_id, order_number);
 CREATE INDEX IF NOT EXISTS electors_document ON electors (document);
 

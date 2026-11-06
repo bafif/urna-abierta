@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, can, canReachTable, requires, seal, unseal, type Actor } from './actor.ts';
+import { audit, can, canReachTable, erasedId, isErasedId, requires, seal, unseal, type Actor } from './actor.ts';
+import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
@@ -20,6 +21,12 @@ async function votesPerTable(pool: pg.Pool, tables: string[]): Promise<Map<strin
     [tables],
   );
   return new Map(rows.rows.map((row) => [row.table_id, row.voted]));
+}
+
+/** How the audit log names a person: a random reference, never the roll id, which is often their DNI. */
+export async function refOf(pool: pg.Pool, election: string, id: string): Promise<string | null> {
+  const found = await pool.query('SELECT ref FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
+  return found.rows[0]?.ref ?? null;
 }
 
 export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
@@ -223,9 +230,11 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.put<{ Params: { id: string; elector: string }; Body: { category?: unknown } }>('/api/elections/:id/people/:elector/semaphore', { preHandler: writeLight }, async (request, reply) => {
     const { id, elector } = request.params;
     const { category } = request.body ?? {};
+    const ref = await refOf(pool, id, elector);
+    if (!ref) return reply.code(404).send({ error: 'not_found' });
     if (category === null) {
       await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
-      await audit(pool, request.actor, 'semaphore.cleared', elector);
+      await audit(pool, request.actor, 'semaphore.cleared', ref);
       return { ok: true };
     }
     if (typeof category !== 'string') return reply.code(400).send({ error: 'invalid_category' });
@@ -238,7 +247,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
        ON CONFLICT (election_id, elector_id) DO UPDATE SET category_id = $3, sealed = $4, noted_by = $5, noted_at = now()`,
       [id, elector, sensitive ? null : category, sensitive ? seal(category) : null, request.actor.userId],
     );
-    await audit(pool, request.actor, 'semaphore.noted', elector, { sensitive });
+    await audit(pool, request.actor, 'semaphore.noted', ref, { sensitive });
     return { ok: true };
   });
 
@@ -265,28 +274,58 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!person.rows[0]) return reply.code(404).send({ error: 'not_found' });
     const mark = await pool.query('SELECT category_id, sealed, noted_at FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
     const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, id]);
-    await audit(pool, request.actor, 'person.exported', id);
+    await audit(pool, request.actor, 'person.exported', person.rows[0].ref);
     const row = mark.rows[0];
     const category = row && (row.sealed ? unseal(row.sealed) : row.category_id);
     const name = category && (await pool.query('SELECT name FROM semaphore_categories WHERE id = $1', [category])).rows[0]?.name;
-    const { search: _search, ...data } = person.rows[0];
+    const { search: _search, ref: _ref, ...data } = person.rows[0];
     return { person: data, semaphore: name ?? null, markedVoted: voted.rows.map((r) => r.device_time) };
   });
 
   app.put<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {
     const { date, means } = request.body ?? {};
     if (typeof date !== 'string' || typeof means !== 'string') return reply.code(400).send({ error: 'invalid_request' });
-    await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
-    await audit(pool, request.actor, 'person.consent', request.params.id);
+    const saved = await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2 RETURNING ref', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
+    if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await audit(pool, request.actor, 'person.consent', saved.rows[0].ref);
     return { ok: true };
   });
 
-  /** The name and contact go; the row stays anonymous, so that a table's totals still add up. */
-  app.delete<{ Params: { election: string; id: string } }>('/api/persons/:election/:id', { preHandler: managePersons }, async (request) => {
+  /**
+   * The name, the contact and the roll id go; the row stays anonymous, so that a table's totals still add up.
+   * Who voted keeps counting, under the new id.
+   */
+  app.delete<{ Params: { election: string; id: string } }>('/api/persons/:election/:id', { preHandler: managePersons }, async (request, reply) => {
     const { election, id } = request.params;
-    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
-    await pool.query(`UPDATE electors SET full_name = 'Borrado a pedido', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1 AND id = $2`, [election, id]);
-    await audit(pool, request.actor, 'person.erased', id);
+    if (isErasedId(id)) return { ok: true };
+    const renamed = erasedId(id);
+    const client = await pool.connect();
+    let ref: string | undefined;
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
+      const erased = await client.query(
+        `UPDATE electors SET id = $3, full_name = 'Borrado a pedido', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', needs_review = false, review = NULL, consent = NULL
+         WHERE election_id = $1 AND id = $2 RETURNING ref`,
+        [election, id, renamed],
+      );
+      ref = erased.rows[0]?.ref;
+      if (ref) {
+        await client.query(
+          `UPDATE operations SET payload = jsonb_set(payload, '{elector}', to_jsonb($3::text))
+           WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND payload->>'elector' = $2`,
+          [election, id, renamed],
+        );
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (!ref) return reply.code(404).send({ error: 'not_found' });
+    await audit(pool, request.actor, 'person.erased', ref);
     return { ok: true };
   });
 
@@ -295,10 +334,26 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { id } = request.params;
     const status = await pool.query('SELECT status FROM elections WHERE id = $1', [id]);
     if (status.rows[0]?.status !== 'cerrada') return reply.code(409).send({ error: 'close_it_first' });
-    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
-    await pool.query(`UPDATE electors SET full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1`, [id]);
-    await pool.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
-    await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
+      // The roll ids go too: they are often the DNI.
+      await client.query(
+        `UPDATE electors SET id = 'x-' || replace(ref::text, '-', ''), full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', needs_review = false, review = NULL, consent = NULL
+         WHERE election_id = $1`,
+        [id],
+      );
+      await client.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
+      await client.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    forgetStatuses();
     await audit(pool, request.actor, 'election.purged', id);
     return { status: 'purgada' };
   });

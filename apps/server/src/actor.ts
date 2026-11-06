@@ -133,6 +133,17 @@ function sealingKey(): Buffer {
   return createHash('sha256').update(secret).digest();
 }
 
+/**
+ * What an erased person's row is called from then on, since a roll id is often the DNI. It cannot be turned back
+ * into that id without the field key, and it is always the same for the same id: a phone that still has the old
+ * id can still mark the person, and the same roll uploaded again knows they asked to be erased.
+ */
+export function erasedId(id: string): string {
+  return `x-${createHmac('sha256', sealingKey()).update(`erased:${id}`).digest('hex').slice(0, 32)}`;
+}
+
+export const isErasedId = (id: string) => id.startsWith('x-');
+
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 export function newTotpSecret(): string {

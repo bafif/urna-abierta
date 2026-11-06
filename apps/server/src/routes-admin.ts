@@ -320,8 +320,9 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const name = text(request.body?.full_name);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     const document = typeof request.body?.document === 'string' ? request.body.document.replace(/\D/g, '') || null : null;
-    await pool.query('UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5, needs_review = false WHERE election_id = $1 AND id = $2', [request.params.id, request.params.elector, name, document, foldText(`${name} ${document ?? ''}`)]);
-    await audit(pool, request.actor, 'elector.corrected', request.params.elector);
+    const corrected = await pool.query('UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5, needs_review = false WHERE election_id = $1 AND id = $2 RETURNING ref', [request.params.id, request.params.elector, name, document, foldText(`${name} ${document ?? ''}`)]);
+    if (!corrected.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await audit(pool, request.actor, 'elector.corrected', corrected.rows[0].ref);
     return { ok: true };
   });
 
