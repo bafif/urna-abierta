@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { groupProblems, MAX_ROLL_BYTES, readXlsxRoll, ROLL_READER_URL, ROLL_READER_URL_EN, writePadron, type PadronProblem } from '@urna-abierta/domain';
+  import { groupProblems, MAX_ROLL_BYTES, ROLL_READER_URL, ROLL_READER_URL_EN, type PadronProblem } from '@urna-abierta/domain';
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import { i18n, rollProblem, t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
+  import { readExcelRoll } from '../read-excel.ts';
   import { ApiError, session } from '../session.svelte.ts';
 
   interface Summary {
@@ -77,9 +78,9 @@
     if (picked.size > MAX_ROLL_BYTES) return refused('too_big');
     if (await otherSpreadsheet(picked)) return refused('other_spreadsheet');
     if (/\.xlsx$/i.test(picked.name)) {
-      const read = readXlsxRoll(new Uint8Array(await picked.arrayBuffer()));
+      const read = await readExcelRoll(picked);
       if (!read.padron) return { upload: null, problems: read.problems };
-      const body = new Blob([writePadron({ electors: read.padron.electors }) as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
+      const body = new Blob([read.padron as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
       return { upload: { body, type: 'application/zip' }, problems: read.problems };
     }
     return { upload: { body: picked, type: /\.(csv|txt)$/i.test(picked.name) ? 'text/csv' : 'application/zip' }, problems: [] };
