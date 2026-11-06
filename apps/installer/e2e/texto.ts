@@ -165,10 +165,38 @@ record('la app responde en esa dirección con un certificado válido para ella, 
 const { token } = browser('POST', '/setup', { code: result.setupCode, name: 'Laura', accepted: true });
 record('el código que mostró el instalador es el que deja entrar al primer administrador', Boolean(token));
 
-// Until the first backup, which the timer makes within six hours, it says that one is missing.
-console.log(`Recién instalado, «urna estado» dice:\n${attempt('exec', machine, 'urna', 'estado').said}`);
-attempt('exec', machine, 'urna', 'copia');
-const state = attempt('exec', machine, 'urna', 'estado').said;
-record('«urna estado» dice que está todo bien: responde, tiene certificado y la versión publicada', state.includes('Todo en orden') && state.includes('bien   el servidor responde') && state.includes('bien   certificado hasta:') && state.includes(`bien   versión: ${published.server.split(':').at(-1)}`), state.split('\n'));
+// The install makes the first backup in the background, once the server answers: in a few seconds it is all green.
+let state = '';
+for (let tries = 0; tries < 10 && !state.includes('Todo en orden'); tries += 1) {
+  if (tries) await sleep(3_000);
+  state = attempt('exec', machine, 'urna', 'estado').said;
+}
+record('recién instalado, «urna estado» dice que está todo bien: responde, tiene certificado, la versión publicada y ya una copia', state.includes('Todo en orden') && state.includes('bien   el servidor responde') && state.includes('bien   certificado hasta:') && state.includes('bien   hay una copia de las últimas 7 horas') && state.includes(`bien   versión: ${published.server.split(':').at(-1)}`), state.split('\n'));
+
+// A slow certificate, as while the cloud's firewall keeps 80 and 443 closed: Let's Encrypt is out of reach and the
+// certificate is gone. Starting through systemd must not wait for it, so that a slow start never makes systemd stop
+// the containers, and «urna estado» says what is missing. When Let's Encrypt is back, it goes on by itself.
+const asUrna = (...args: string[]) => attempt('exec', machine, 'sh', '-c', 'cd / && runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta "$@"', 'sh', ...args);
+podman('pause', `${name}-pebble`);
+asUrna('podman', 'rm', '-f', 'urna-web');
+asUrna('podman', 'volume', 'rm', 'urna-caddy-data');
+const restartFrom = Date.now();
+const restarted = asUrna('systemctl', '--user', 'restart', 'urna-abierta.service');
+const restartSeconds = Math.round((Date.now() - restartFrom) / 1_000);
+await sleep(20_000);
+const unit = asUrna('systemctl', '--user', 'is-active', 'urna-abierta.service').said.trim();
+const running = asUrna('podman', 'ps', '--format', '{{.Names}}').said.split('\n').filter((each) => /^urna-(db|server|web)$/.test(each)).length;
+const waiting = attempt('exec', machine, 'urna', 'estado').said;
+record('sin certificado, systemd arranca todo sin esperarlo y no frena nada, y «urna estado» dice que faltan los puertos 80 y 443',
+  restarted.ok && restartSeconds < 120 && unit === 'active' && running === 3 && waiting.includes('espera el servidor responde: sin certificado') && waiting.includes('FALLA  certificado: todavía no hay') && waiting.includes('puertos 80 y 443') && !waiting.includes('podman logs'),
+  { segundos: restartSeconds, unidad: unit, contenedores: running, estado: waiting.split('\n') });
+podman('unpause', `${name}-pebble`);
+let back: any = {};
+for (const until = Date.now() + 6 * 60_000; Date.now() < until && back.setupNeeded === undefined; ) {
+  await sleep(10_000);
+  back = browser('GET', '/public');
+}
+const after = attempt('exec', machine, 'urna', 'estado').said;
+record('cuando Let\'s Encrypt vuelve, llega el certificado solo y todo queda en orden', back.setupNeeded === false && after.includes('Todo en orden'), { minutos: Math.round((Date.now() - restartFrom) / 6_000) / 10, estado: after.split('\n') });
 
 finish(cleanup);
