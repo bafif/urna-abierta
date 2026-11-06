@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'" />
     <title>Urna Abierta: la app libre para organizar a los fiscales de tu partido</title>
     <meta name="description" content="Tus datos en tu servidor. Funciona sin señal. La puede usar cualquiera, desde la primera vez. Gratis y de código abierto." />
     <link rel="alternate" hreflang="en" href="en/" />
@@ -36,7 +36,7 @@
         <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg>
         <span>Urna Abierta</span>
       </a>
-      <a href="en/" lang="en">English</a>
+      <nav class="arriba-enlaces"><a href="#lector">Lector de padrones</a><a href="#temas">Temas</a><a href="en/" lang="en">English</a></nav>
     </header>
 
     <main>
@@ -47,8 +47,16 @@
           <a class="boton principal" href="https://github.com/bafif/urna-abierta/releases/latest">Bajar el instalador</a>
           <a class="boton otro" href="#instalar">Cómo se instala</a>
         </div>
+        <div class="probar-tema" role="group" aria-label="Probá un tema en esta página">
+          <span>Probá un tema:</span>
+          <button type="button" class="tema-boton" data-tema-elegir="aula" aria-pressed="true"><i></i>Aula</button>
+          <button type="button" class="tema-boton" data-tema-elegir="vidrio" aria-pressed="false"><i></i>Vidrio</button>
+          <button type="button" class="tema-boton" data-tema-elegir="feria" aria-pressed="false"><i></i>Feria</button>
+          <button type="button" class="tema-boton" data-tema-elegir="tablero" aria-pressed="false"><i></i>Tablero</button>
+          <button type="button" class="tema-boton" data-tema-elegir="mate" aria-pressed="false"><i></i>Mate</button>
+        </div>
         <p class="nota">Para Windows, macOS y Linux. Gratis. Está en desarrollo: su primera prueba real es en abril de 2027, así que antes de usarla hacé un <a href="https://github.com/bafif/urna-abierta/blob/main/docs/es/simulacro.md">simulacro</a>.</p>
-        <p class="nota cerca">Si tu padrón es un PDF escaneado, bajá también el <a href="https://github.com/bafif/urna-abierta-padrones#descargar">lector de padrones</a>: lo lee en tu computadora.</p>
+        <p class="nota cerca">Si tu padrón es un PDF o una foto, el <a href="#lector">lector de padrones</a> lo convierte en tu computadora.</p>
         <img src="img/portada.png" alt="Tres pantallas de la app de fiscales, en tres temas distintos" width="1600" />
       </div>
 
@@ -80,18 +88,55 @@
             <div class="tarjeta"><h3>Tus datos son tuyos</h3><p>Cada partido usa su propio servidor. El proyecto no aloja nada ni recibe nada: no hay servidor central ni telemetría.</p></div>
             <div class="tarjeta"><h3>Anda sin señal</h3><p>Muchas aulas no tienen conexión. Todo se guarda primero en el teléfono y se manda solo cuando vuelve.</p></div>
             <div class="tarjeta"><h3>Sin pagar servidor</h3><p>Apunta a los planes gratuitos: se midió con 1 GB de memoria y un cuarto de procesador.</p></div>
-            <div class="tarjeta"><h3>Lee tus padrones</h3><p>Lee un PDF escaneado con un modelo que corre en tu computadora, sin mandarle el padrón a nadie. Una planilla de Excel o CSV se carga directo.</p></div>
+            <div class="tarjeta"><h3>Lee tus padrones</h3><p>Una planilla de Excel o CSV se carga directo. Un PDF o una foto pasan antes por el <a href="#lector">lector de padrones</a>, que los lee en tu computadora sin mandárselos a nadie.</p></div>
             <div class="tarjeta"><h3>Con la ley en mente</h3><p>Trae permisos, registro y herramientas para atender pedidos de personas y borrar los datos al terminar. Cumplir sigue siendo responsabilidad del partido.</p></div>
             <div class="tarjeta"><h3>Libre</h3><p>Licencia AGPL. Podés leer el código, modificarlo y compartirlo.</p></div>
           </div>
         </div>
       </section>
 
-      <section>
+      <section id="lector">
+        <div class="envase">
+          <h2>El lector de padrones</h2>
+          <p class="subtitulo">Un programa aparte, para tu computadora. Convierte el padrón que te dieron en el archivo que carga la app.</p>
+          <p>Muchos padrones llegan como un PDF o una foto. El lector los lee en tu computadora, con un modelo de reconocimiento que viene adentro del programa: el padrón no sale de ahí y no hace falta internet. Lo que no quedó claro te lo muestra al lado de la imagen original, para que lo corrijas, y al final arma un archivo <code>.padron</code> para subir a Urna Abierta.</p>
+          <div class="lector-fila">
+            <ol class="pasos">
+              <li><div><h3>Elegís el padrón</h3><p>Arrastrás el PDF o la foto a la ventana, que se abre en tu navegador.</p></div></li>
+              <li><div><h3>Lo lee</h3><p>Página por página, diciendo por cuál va y cuántas personas encontró. Se puede cancelar.</p></div></li>
+              <li><div><h3>Revisás lo dudoso</h3><p>Fila por fila, con la imagen arriba y los datos abajo. Lo que no revises queda pendiente para la app.</p></div></li>
+              <li><div><h3>Lo subís a la app</h3><p>Guardás el archivo <code>.padron</code> y en Urna Abierta tocás «Subir el padrón».</p></div></li>
+            </ol>
+            <picture>
+              <source srcset="img/lector-revisar-oscuro.png" media="(prefers-color-scheme: dark)" />
+              <img src="img/lector-revisar.png" alt="El lector mostrando una fila dudosa: la imagen de la fila arriba y sus datos abajo, con el DNI marcado para corregir" width="1280" height="800" />
+            </picture>
+          </div>
+          <div class="rejilla">
+            <div class="tarjeta"><h3>Qué lee</h3><p>PDF escaneados o con texto, con las columnas que nombre su encabezado, como «Apellido y nombre» y «DNI», y las mesas si las trae. También fotos. Una planilla no lo necesita: se sube directo en la app.</p></div>
+            <div class="tarjeta"><h3>Privado</h3><p>Corre solo en tu computadora, sin cuenta. Guarda la copia del PDF en una carpeta que solo vos podés abrir, y la borra al cerrarse.</p></div>
+            <div class="tarjeta"><h3>Sirve solo</h3><p>El archivo que arma sigue un formato abierto y de dominio público: lo puede usar cualquier otra herramienta, sin Urna Abierta.</p></div>
+          </div>
+          <div class="acciones separado">
+            <a class="boton principal" href="https://github.com/bafif/urna-abierta-padrones#descargar">Bajar el lector</a>
+            <a class="boton otro" href="https://github.com/bafif/urna-abierta-padrones">Ver cómo funciona</a>
+          </div>
+          <p class="chico">Para Windows, macOS y Linux, gratis y con licencia AGPL. Si todavía no hay una versión para bajar, se usa desde una terminal: el README explica cómo.</p>
+        </div>
+      </section>
+
+      <section id="temas">
         <div class="envase">
           <h2>Con la cara que quieras</h2>
-          <p>Cinco temas, en claro y en oscuro. Se eligen con vista previa al instalarla, y cada persona lo puede cambiar en su teléfono. También podés hacer el tuyo.</p>
-          <img src="img/temas.png" alt="La misma pantalla en cinco temas: Aula, Vidrio, Feria, Tablero y Mate" width="1600" />
+          <p>Cinco temas, en claro y en oscuro. Se eligen con vista previa al instalarla, y cada persona lo puede cambiar en su teléfono. También podés hacer el tuyo. Tocá uno y mirá cómo cambia esta página.</p>
+          <div class="temas" role="group" aria-label="Los cinco temas">
+            <button type="button" class="tema-tarjeta" data-tema-elegir="aula" aria-pressed="true"><span class="muestras"><i></i><i></i><i></i></span><strong>Aula</strong><small>Un cuaderno rayado de día y un pizarrón de noche. La letra está hecha para quien ve poco. Es el que viene.</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="vidrio" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Vidrio</strong><small>Paneles que dejan pasar la luz, sobre celeste y blanco. El más vistoso.</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="feria" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Feria</strong><small>Un color por tarea, siempre el mismo. Sirve para explicar por teléfono: «tocá el verde».</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="tablero" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Tablero</strong><small>Sin adornos: el número manda, como en un tablero de resultados. Se lee incluso a pleno sol.</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="mate" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Mate</strong><small>El más tranquilo: verde yerba, formas redondas y mucho aire. Quien ya votó se aparta con un tilde.</small></button>
+          </div>
+          <img src="img/temas.png" alt="La misma pantalla de la app en cinco temas: Aula, Vidrio, Feria, Tablero y Mate" width="1600" />
         </div>
       </section>
 
@@ -106,7 +151,7 @@
           <h3 class="separado">Qué bajar</h3>
           <div class="rejilla descargas">
             <div class="tarjeta"><h3>El instalador</h3><p>Instala Urna Abierta en tu servidor. Es lo único que hace falta para empezar.</p><a class="boton principal" href="https://github.com/bafif/urna-abierta/releases/latest">Bajar el instalador</a></div>
-            <div class="tarjeta"><h3>El lector de padrones</h3><p>Solo si tu padrón es un PDF escaneado: lo lee en tu computadora, sin mandarlo a ningún lado, y arma el archivo para la app.</p><a class="boton otro" href="https://github.com/bafif/urna-abierta-padrones#descargar">Bajar el lector</a></div>
+            <div class="tarjeta"><h3>El lector de padrones</h3><p>Solo si tu padrón es un PDF o una foto: lo lee en tu computadora, sin mandarlo a ningún lado, y arma el archivo para la app. <a href="#lector">Más sobre el lector</a>.</p><a class="boton otro" href="https://github.com/bafif/urna-abierta-padrones#descargar">Bajar el lector</a></div>
           </div>
           <h3 class="separado">Dónde puede vivir</h3>
           <table>
@@ -133,8 +178,11 @@
     <footer>
       <div class="envase">
         <p>Lo hago yo, <strong>Bautista D. Fiori</strong>. <a href="https://www.linkedin.com/in/b-d-fiori/">LinkedIn</a> · <a href="https://github.com/bafif">GitHub</a> · <a href="https://github.com/bafif/urna-abierta">Código</a></p>
-        <p>Licencia AGPL-3.0-or-later. Esta página no mide nada, no tiene cookies y no carga nada de otros sitios.</p>
+        <p>Licencia AGPL-3.0-or-later. Esta página no mide nada, no tiene cookies y no carga nada de otros sitios. El tema que elijas queda guardado solo en tu navegador.</p>
       </div>
     </footer>
+    <script src="temas.js"></script>
+    <script src="aplicar-tema.js"></script>
+    <script src="tema-pagina.js"></script>
   </body>
 </html>

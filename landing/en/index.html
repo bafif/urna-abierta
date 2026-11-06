@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'" />
     <title>Urna Abierta: the free app to organize your party's poll watchers</title>
     <meta name="description" content="Your data on your server. Works with no signal. Anyone can use it, from the first time. Free and open source." />
     <link rel="alternate" hreflang="es" href="../" />
@@ -36,7 +36,7 @@
         <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg>
         <span>Urna Abierta</span>
       </a>
-      <a href="../" lang="es">Español</a>
+      <nav class="arriba-enlaces"><a href="#reader">Roll reader</a><a href="#themes">Themes</a><a href="../" lang="es">Español</a></nav>
     </header>
 
     <main>
@@ -47,8 +47,16 @@
           <a class="boton principal" href="https://github.com/bafif/urna-abierta/releases/latest">Download the installer</a>
           <a class="boton otro" href="#install">How to install it</a>
         </div>
+        <div class="probar-tema" role="group" aria-label="Try a theme on this page">
+          <span>Try a theme:</span>
+          <button type="button" class="tema-boton" data-tema-elegir="aula" aria-pressed="true"><i></i>Aula</button>
+          <button type="button" class="tema-boton" data-tema-elegir="vidrio" aria-pressed="false"><i></i>Vidrio</button>
+          <button type="button" class="tema-boton" data-tema-elegir="feria" aria-pressed="false"><i></i>Feria</button>
+          <button type="button" class="tema-boton" data-tema-elegir="tablero" aria-pressed="false"><i></i>Tablero</button>
+          <button type="button" class="tema-boton" data-tema-elegir="mate" aria-pressed="false"><i></i>Mate</button>
+        </div>
         <p class="nota">For Windows, macOS and Linux. Free. It is in development: its first real test is in April 2027, so before using it run a <a href="https://github.com/bafif/urna-abierta/blob/main/docs/en/drill.md">drill</a>.</p>
-        <p class="nota cerca">If your roll is a scanned PDF, also download the <a href="https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download">roll reader</a>: it reads it on your computer.</p>
+        <p class="nota cerca">If your roll is a PDF or a photo, the <a href="#reader">roll reader</a> converts it on your computer.</p>
         <img src="../img/portada-en.png" alt="Three screens of the poll watcher app, in three different themes" width="1600" />
       </div>
 
@@ -80,18 +88,55 @@
             <div class="tarjeta"><h3>Your data is yours</h3><p>Each party uses its own server. The project hosts nothing and receives nothing: no central server, no telemetry.</p></div>
             <div class="tarjeta"><h3>Works with no signal</h3><p>Many classrooms have no connection. Everything is saved on the phone first and sent when it returns.</p></div>
             <div class="tarjeta"><h3>No server bill</h3><p>It aims at free tiers: it was measured with 1 GB of memory and a quarter of a processor.</p></div>
-            <div class="tarjeta"><h3>Reads your rolls</h3><p>It reads a scanned PDF with a model that runs on your computer, without sending the roll to anyone. An Excel or CSV spreadsheet loads straight in.</p></div>
+            <div class="tarjeta"><h3>Reads your rolls</h3><p>An Excel or CSV spreadsheet loads straight in. A PDF or a photo first goes through the <a href="#reader">roll reader</a>, which reads it on your computer without sending it to anyone.</p></div>
             <div class="tarjeta"><h3>With the law in mind</h3><p>It brings permissions, a log and tools to handle requests from people and erase data at the end. Complying is still up to the party.</p></div>
             <div class="tarjeta"><h3>Free software</h3><p>AGPL license. You can read the code, modify it and share it.</p></div>
           </div>
         </div>
       </section>
 
-      <section>
+      <section id="reader">
+        <div class="envase">
+          <h2>The roll reader</h2>
+          <p class="subtitulo">A program of its own, for your computer. It turns the roll you were given into the file the app loads.</p>
+          <p>Many rolls arrive as a PDF or a photo. The reader reads them on your computer, with a recognition model that comes inside the program: the roll never leaves it and no internet is needed. Whatever was not clear it shows next to the original picture, for you to fix, and at the end it builds a <code>.padron</code> file to upload to Urna Abierta.</p>
+          <div class="lector-fila">
+            <ol class="pasos">
+              <li><div><h3>You choose the roll</h3><p>You drag the PDF or the photo to its window, which opens in your browser.</p></div></li>
+              <li><div><h3>It reads it</h3><p>Page by page, saying which one it is on and how many people it found. You can cancel.</p></div></li>
+              <li><div><h3>You check the doubtful rows</h3><p>Row by row, with the picture above and the data below. What you do not check stays pending for the app.</p></div></li>
+              <li><div><h3>You upload it to the app</h3><p>You save the <code>.padron</code> file and, in Urna Abierta, tap “Upload the roll”.</p></div></li>
+            </ol>
+            <picture>
+              <source srcset="../img/lector-revisar-oscuro.png" media="(prefers-color-scheme: dark)" />
+              <img src="../img/lector-revisar.png" alt="The reader showing a doubtful row: the picture of the row above and its data below, with the document marked to fix" width="1280" height="800" />
+            </picture>
+          </div>
+          <div class="rejilla">
+            <div class="tarjeta"><h3>What it reads</h3><p>Scanned PDFs or PDFs with text, with the columns their header names, such as “Apellido y nombre” and “DNI”, and the tables when it has them. Photos too. A spreadsheet does not need it: it goes straight into the app.</p></div>
+            <div class="tarjeta"><h3>Private</h3><p>It runs only on your computer, with no account. It keeps its copy of the PDF in a folder only you can open, and deletes it when it closes.</p></div>
+            <div class="tarjeta"><h3>Useful on its own</h3><p>The file it builds follows an open, public-domain format: any other tool can use it, without Urna Abierta.</p></div>
+          </div>
+          <div class="acciones separado">
+            <a class="boton principal" href="https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download">Download the reader</a>
+            <a class="boton otro" href="https://github.com/bafif/urna-abierta-padrones">See how it works</a>
+          </div>
+          <p class="chico">For Windows, macOS and Linux, free and AGPL licensed. If there is no version to download yet, it runs from a terminal: the README explains how.</p>
+        </div>
+      </section>
+
+      <section id="themes">
         <div class="envase">
           <h2>With the look you want</h2>
-          <p>Five themes, in light and dark. You choose with a preview when installing, and each person can change it on their phone. You can also make your own.</p>
-          <img src="../img/temas.png" alt="The same screen in five themes: Aula, Vidrio, Feria, Tablero and Mate" width="1600" />
+          <p>Five themes, in light and dark. You choose with a preview when installing, and each person can change it on their phone. You can also make your own. Tap one and watch this page change.</p>
+          <div class="temas" role="group" aria-label="The five themes">
+            <button type="button" class="tema-tarjeta" data-tema-elegir="aula" aria-pressed="true"><span class="muestras"><i></i><i></i><i></i></span><strong>Aula</strong><small>A lined notebook by day and a blackboard at night. Its typeface is made for people who see little. The default.</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="vidrio" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Vidrio</strong><small>Panels that let light through, over light blue and white. The showiest one.</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="feria" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Feria</strong><small>One colour per task, always the same. Handy to explain over the phone: “tap the green one”.</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="tablero" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Tablero</strong><small>No frills: the number rules, like a results board. Readable even in full sun.</small></button>
+            <button type="button" class="tema-tarjeta" data-tema-elegir="mate" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Mate</strong><small>The calmest: yerba green, round shapes and plenty of air. Whoever voted steps aside with a tick.</small></button>
+          </div>
+          <img src="../img/temas.png" alt="The same app screen in five themes: Aula, Vidrio, Feria, Tablero and Mate" width="1600" />
         </div>
       </section>
 
@@ -106,7 +151,7 @@
           <h3 class="separado">What to download</h3>
           <div class="rejilla descargas">
             <div class="tarjeta"><h3>The installer</h3><p>It installs Urna Abierta on your server. It is all you need to start.</p><a class="boton principal" href="https://github.com/bafif/urna-abierta/releases/latest">Download the installer</a></div>
-            <div class="tarjeta"><h3>The roll reader</h3><p>Only if your roll is a scanned PDF: it reads it on your computer, without sending it anywhere, and builds the file for the app.</p><a class="boton otro" href="https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download">Download the reader</a></div>
+            <div class="tarjeta"><h3>The roll reader</h3><p>Only if your roll is a PDF or a photo: it reads it on your computer, without sending it anywhere, and builds the file for the app. <a href="#reader">More about the reader</a>.</p><a class="boton otro" href="https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download">Download the reader</a></div>
           </div>
           <h3 class="separado">Where it can live</h3>
           <table>
@@ -133,8 +178,11 @@
     <footer>
       <div class="envase">
         <p>Made by me, <strong>Bautista D. Fiori</strong>. <a href="https://www.linkedin.com/in/b-d-fiori/">LinkedIn</a> · <a href="https://github.com/bafif">GitHub</a> · <a href="https://github.com/bafif/urna-abierta">Code</a></p>
-        <p>AGPL-3.0-or-later license. This page measures nothing, has no cookies and loads nothing from other sites.</p>
+        <p>AGPL-3.0-or-later license. This page measures nothing, has no cookies and loads nothing from other sites. The theme you pick is kept in your browser only.</p>
       </div>
     </footer>
+    <script src="../temas.js"></script>
+    <script src="../aplicar-tema.js"></script>
+    <script src="../tema-pagina.js"></script>
   </body>
 </html>
