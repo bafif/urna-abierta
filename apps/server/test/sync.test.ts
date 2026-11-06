@@ -401,6 +401,14 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('fiscal', 'GET', '/api/me')).json()).toMatchObject({ ended: true, table: null });
     });
 
+    it('a week after the close, someone without a table hears that they have none, not that the election ended', async () => {
+      for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
+      expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(200);
+      expect((await call('fiscal', 'GET', '/api/me')).json()).toMatchObject({ ended: true, table: null });
+      await pool.query(`UPDATE elections SET closed_at = now() - interval '8 days' WHERE id = $1`, [demo.election]);
+      expect((await call('fiscal', 'GET', '/api/me')).json()).toMatchObject({ ended: false, table: null });
+    });
+
     it('/me says when the roll of the table changed, with the same mark the roll itself carries', async () => {
       const me = async () => (await call('fiscal', 'GET', '/api/me')).json().table.rollRevision as string;
       const bundle = async () => (await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json();

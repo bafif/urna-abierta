@@ -208,10 +208,11 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       );
       contact = chief.rows[0] ?? null;
     } else {
-      // Whoever worked an election that already closed is told so, rather than that they have no table yet.
+      // Whoever worked an election that just closed is told so, rather than that they have no table yet.
+      // Only for a week: after that, someone from the primaries may be waiting for a table in the general election.
       const closed = await pool.query(
         `SELECT 1 FROM role_assignments a JOIN polling_tables t ON t.id = a.table_id JOIN elections e ON e.id = t.election_id
-         WHERE a.user_id = $1 AND a.role = 'fiscal' AND e.status IN ('cerrada', 'purgada') LIMIT 1`,
+         WHERE a.user_id = $1 AND a.role = 'fiscal' AND e.status IN ('cerrada', 'purgada') AND e.closed_at > now() - interval '7 days' LIMIT 1`,
         [actor.userId],
       );
       ended = closed.rowCount !== 0;

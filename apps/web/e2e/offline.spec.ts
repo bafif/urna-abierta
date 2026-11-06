@@ -185,6 +185,29 @@ test('a photo the server refuses does not hold anything back, and the phone asks
   await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 30_000 });
 });
 
+test('when the election closes with something still on the phone, it says to wait for it, and it can always check again', async ({ context, request }) => {
+  test.skip(onIphone(), UNROUTABLE);
+  const demo = await seed(request, { size: 10 });
+  const page = await prepared(context, demo.tables[0]!.invitations[0]!);
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+  await context.route('**/api/sync/push', (route) => route.abort());
+  await page.getByTestId('person').first().click();
+  await expect(page.getByTestId('sync-status')).toContainText('1 sin enviar', { timeout: 20_000 });
+  const { token } = await (await request.post('/api/auth/redeem', { data: { token: demo.links.coordinacion } })).json();
+  for (const status of ['escrutinio', 'cerrada']) {
+    expect((await request.post(`/api/elections/${demo.election}/status`, { headers: { authorization: `Bearer ${token}` }, data: { status } })).ok()).toBe(true);
+  }
+  await page.reload();
+  await expect(page.getByRole('heading')).toHaveText('La elección terminó. Gracias');
+  await expect(page.getByText('Queda algo por enviar. Dejá la app abierta un rato con señal.')).toBeVisible();
+  await expect(page.getByTestId('sync-status')).toContainText('1 sin enviar');
+  await expect(page.getByRole('button', { name: 'Fijarme de nuevo' })).toBeVisible();
+  await context.unrouteAll({ behavior: 'ignoreErrors' });
+  await backOnline(page);
+  await expect(page.getByText('Ya no tenés nada más que hacer acá.')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Fijarme de nuevo' })).toBeVisible();
+});
+
 test('a mark that could not be saved goes back to the list, and says so', async ({ context, request }) => {
   const demo = await seed(request);
   const page = await prepared(context, demo.tables[0]!.invitations[0]!);
