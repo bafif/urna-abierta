@@ -85,6 +85,35 @@ describe.skipIf(!url)('migrations, against a real Postgres', { timeout: 60_000 }
     expect((await pool.query('SELECT color FROM lugares')).rows).toEqual([{ color: 'rojo' }]);
   });
 
+  it('runs 0001 again when it changed while it is the last one the database ran, so that what was added to it arrives', async () => {
+    const pool = await database();
+    const before = { '0001-inicial.sql': 'CREATE TABLE IF NOT EXISTS uno (id int);' };
+    expect(await migrate(pool, await migrations(before))).toEqual([1]);
+    const added = await migrations({ '0001-inicial.sql': 'CREATE TABLE IF NOT EXISTS uno (id int);\nCREATE TABLE IF NOT EXISTS foo (id int);' });
+    expect(await migrate(pool, added)).toEqual([1]);
+    expect((await pool.query(`SELECT to_regclass('foo') AS found`)).rows[0].found).toBe('foo');
+    expect(await migrate(pool, added)).toEqual([]);
+    // A database migrated before the checksum was recorded runs it again too: it only creates what is missing.
+    await pool.query('UPDATE schema_migrations SET checksum = NULL');
+    expect(await migrate(pool, added)).toEqual([1]);
+    expect(await versions(pool)).toEqual([1]);
+  });
+
+  it('once a later migration ran, a file that changed stops it and says which, and nothing runs', async () => {
+    const pool = await database();
+    const files = { '0001-a.sql': 'CREATE TABLE IF NOT EXISTS uno (id int);', '0002-b.sql': 'CREATE TABLE dos (id int);' };
+    expect(await migrate(pool, await migrations(files))).toEqual([1, 2]);
+    const third = { '0003-c.sql': 'CREATE TABLE tres (id int);' };
+    await expect(migrate(pool, await migrations({ ...files, '0002-b.sql': 'CREATE TABLE dos (id int, otra text);', ...third }))).rejects.toThrow(/0002-b\.sql cambió/);
+    await expect(migrate(pool, await migrations({ ...files, '0001-a.sql': 'CREATE TABLE IF NOT EXISTS foo (id int);', ...third }))).rejects.toThrow(/0001-a\.sql cambió/);
+    expect(await versions(pool)).toEqual([1, 2]);
+    expect((await pool.query(`SELECT to_regclass('foo') AS foo, to_regclass('tres') AS tres`)).rows[0]).toEqual({ foo: null, tres: null });
+    // Recorded before there were checksums: taken as the file it has now, without running it again.
+    await pool.query('UPDATE schema_migrations SET checksum = NULL');
+    expect(await migrate(pool, await migrations({ ...files, ...third }))).toEqual([3]);
+    expect((await pool.query('SELECT count(*)::int AS n FROM schema_migrations WHERE checksum IS NULL')).rows[0].n).toBe(0);
+  });
+
   it('leaves the database as it was when a file fails halfway, and says which one', async () => {
     const pool = await database();
     const broken = await migrations({ '0001-lugares.sql': 'CREATE TABLE lugares (id int);', '0002-mal.sql': 'CREATE TABLE otra (id int); SELECT no_existe FROM lugares;' });

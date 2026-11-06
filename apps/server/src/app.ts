@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type pg from 'pg';
@@ -16,10 +16,11 @@ const MIGRATION_LOCK = 7_310_201;
 
 /**
  * Brings the database up to date. Each file `NNNN-name.sql` in migrations/ runs once, in the order of its
- * number, inside a transaction, and is recorded in schema_migrations. A change to the schema is a new file
- * with the next number: a file that a published version already ran is never edited, because servers that
- * ran it would not run it again. 0001 only creates what is missing, so it also takes a database made before
- * there were migrations. Returns the numbers it applied.
+ * number, inside a transaction, and is recorded in schema_migrations with its SHA-256. A change to the schema
+ * is a new file with the next number: a file that a published version already ran is never edited, because
+ * servers that ran it would not run it again. 0001 only creates what is missing, so it also takes a database
+ * made before there were migrations, and it runs again when it changed while it is the last one the database
+ * ran. Any other file that changed after it ran stops the server, saying which. Returns the numbers it applied.
  */
 export async function migrate(pool: pg.Pool, folder: URL = MIGRATIONS): Promise<number[]> {
   const migrations = (await readdir(folder))
@@ -36,21 +37,41 @@ export async function migrate(pool: pg.Pool, folder: URL = MIGRATIONS): Promise<
   const client = await pool.connect();
   try {
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK]);
-    await client.query('CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, name text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())');
-    const done = new Set<number>((await client.query('SELECT version FROM schema_migrations')).rows.map((row) => row.version));
+    await client.query('CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, name text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now(), checksum text)');
+    // Databases migrated before the checksum was recorded.
+    await client.query('ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum text');
+    const done = new Map<number, string | null>((await client.query('SELECT version, checksum FROM schema_migrations')).rows.map((row) => [row.version, row.checksum]));
     const known = new Set(migrations.map((item) => item.version));
-    const unknown = [...done].filter((version) => !known.has(version)).sort((a, b) => a - b);
+    const unknown = [...done.keys()].filter((version) => !known.has(version)).sort((a, b) => a - b);
     if (unknown.length) {
       throw new Error(`La base viene de una versión más nueva de Urna Abierta (tiene la migración ${unknown.at(-1)}, que este servidor no conoce). Volvé a esa versión, o restaurá una copia de antes de actualizar.`);
     }
+    const latest = Math.max(0, ...done.keys());
     const applied: number[] = [];
     for (const { version, name } of migrations) {
-      if (done.has(version)) continue;
       const sql = await readFile(new URL(name, folder), 'utf8');
+      const checksum = createHash('sha256').update(sql).digest('hex');
+      if (done.has(version)) {
+        const recorded = done.get(version);
+        if (recorded === checksum) continue;
+        const again = version === 1 && latest === 1;
+        if (!again && recorded === null) {
+          // Ran before checksums were recorded: what it ran is not known, so it is taken as this file.
+          await client.query('UPDATE schema_migrations SET checksum = $2 WHERE version = $1', [version, checksum]);
+          continue;
+        }
+        if (!again) {
+          throw new Error(`La migración ${name} cambió después de que esta base la aplicó, y no se vuelve a correr. Devolvela a como estaba y poné el cambio en una migración nueva, con el número siguiente al último.`);
+        }
+      }
       await client.query('BEGIN');
       try {
         await client.query(sql);
-        await client.query('INSERT INTO schema_migrations (version, name) VALUES ($1, $2)', [version, name]);
+        await client.query(
+          `INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)
+            ON CONFLICT (version) DO UPDATE SET name = excluded.name, checksum = excluded.checksum, applied_at = now()`,
+          [version, name, checksum],
+        );
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK');
