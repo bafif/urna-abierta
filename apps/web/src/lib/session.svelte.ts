@@ -41,7 +41,7 @@ export interface Me {
   secondFactorNeeded: boolean;
   party: { name: string; theme: string };
   /** The profile in force: the one chosen, or what an open election asks for, if that is more. */
-  security: { profile: string; chosen: boolean; minimum?: string | null; fiscalSeesSemaphore: boolean; fiscalView: boolean; localHoursAfterClose?: number };
+  security: { profile: string; chosen: boolean; choice?: string; minimum?: string | null; fiscalSeesSemaphore: boolean; fiscalView: boolean; localHoursAfterClose?: number };
   table: TableInfo | null;
   contact: { name: string; phone: string | null } | null;
 }

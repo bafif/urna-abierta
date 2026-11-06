@@ -131,13 +131,16 @@ describe.skipIf(!url)('against a real Postgres', () => {
       forgetActors();
       const me = (await call('jefe', 'GET', '/api/me')).json();
       expect(me.secondFactorNeeded).toBe(true);
-      expect(me.security).toMatchObject({ profile: 'nacional', minimum: 'nacional' });
+      expect(me.security).toMatchObject({ profile: 'nacional', minimum: 'nacional', choice: 'estudiantil' });
       expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json().electors[0].documentSuffix).toHaveLength(3);
       expect((await call('coordinacion', 'PUT', '/api/semaphore/fiscal-view', { enabled: true })).statusCode).toBe(409);
       // Nobody lowers it while that election is open, not even whoever looks after the system.
-      const lower = await call('sistema', 'PUT', '/api/security', { profile: 'estudiantil' });
+      const lower = await call('sistema', 'PUT', '/api/security', { profile: 'local' });
       expect(lower.statusCode).toBe(409);
       expect(lower.json()).toEqual({ error: 'election_needs_more', minimum: 'nacional' });
+      // Keeping what the party had chosen lowers nothing, and does not turn the election's level into the party's choice.
+      expect((await call('sistema', 'PUT', '/api/security', { profile: 'estudiantil' })).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', '/api/me')).json().security).toMatchObject({ profile: 'nacional', choice: 'estudiantil' });
       for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
       expect((await call('sistema', 'PUT', '/api/security', { profile: 'estudiantil' })).statusCode).toBe(200);
       expect((await call('jefe', 'GET', '/api/me')).json().secondFactorNeeded).toBe(false);

@@ -172,7 +172,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get('/api/me', { preHandler: beforeSecondFactor }, async (request) => {
     const { actor } = request;
     await pool.query('UPDATE devices SET last_seen_at = now() WHERE id = $1', [actor.deviceId]);
-    const { profile, minimum } = await securityProfile(pool);
+    const { profile, chosen, minimum } = await securityProfile(pool);
     const tableIds = actor.assignments.filter((a) => a.role === 'fiscal' && a.table_id).map((a) => a.table_id);
     const tables = await pool.query(
       `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories,
@@ -212,6 +212,8 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       security: {
         profile,
         chosen: (await pool.query(`SELECT 1 FROM settings WHERE key = 'security_profile'`)).rowCount === 1,
+        // What the party chose, which is what the Security screen starts from: the profile above may be an election's.
+        choice: chosen,
         minimum,
         fiscalView: await getSetting(pool, 'fiscal_semaphore', false),
         ...SECURITY_PROFILES[profile],
