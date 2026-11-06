@@ -26,7 +26,7 @@ You need Node 24. The browser tests also need Podman.
 ```sh
 corepack pnpm install
 corepack pnpm test                                   # the unit tests of the whole repository
-corepack pnpm --filter @urna-abierta/web run check   # the app's types
+corepack pnpm check                                  # the types of every package, its tests included
 node design/verificar-contraste.mjs                  # that every theme can be read
 ```
 

@@ -26,7 +26,7 @@ Hace falta Node 24. Las pruebas del navegador necesitan además Podman.
 ```sh
 corepack pnpm install
 corepack pnpm test                                   # las pruebas unitarias de todo el repo
-corepack pnpm --filter @urna-abierta/web run check   # los tipos de la app
+corepack pnpm check                                  # los tipos de cada paquete, con sus pruebas
 node design/verificar-contraste.mjs                  # que todos los temas se puedan leer
 ```
 
