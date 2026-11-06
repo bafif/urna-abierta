@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { fakeRoll } from '@urna-abierta/domain';
@@ -10,9 +10,59 @@ import { authRoutes, createInvitation } from './routes-auth.ts';
 import { syncRoutes } from './routes-sync.ts';
 import { workRoutes } from './routes-work.ts';
 
-export async function migrate(pool: pg.Pool): Promise<void> {
-  const sql = await readFile(new URL('./schema.sql', import.meta.url), 'utf8');
-  await pool.query(sql);
+const MIGRATIONS = new URL('./migrations/', import.meta.url);
+/** Any number, the same for every server: it only has to keep two of them from migrating at once. */
+const MIGRATION_LOCK = 7_310_201;
+
+/**
+ * Brings the database up to date. Each file `NNNN-name.sql` in migrations/ runs once, in the order of its
+ * number, inside a transaction, and is recorded in schema_migrations. A change to the schema is a new file
+ * with the next number: a file that a published version already ran is never edited, because servers that
+ * ran it would not run it again. 0001 only creates what is missing, so it also takes a database made before
+ * there were migrations. Returns the numbers it applied.
+ */
+export async function migrate(pool: pg.Pool, folder: URL = MIGRATIONS): Promise<number[]> {
+  const migrations = (await readdir(folder))
+    .filter((name) => name.endsWith('.sql'))
+    .map((name) => {
+      const match = /^(\d{4})-[\w-]+\.sql$/.exec(name);
+      if (!match) throw new Error(`La migración ${name} no tiene un nombre como 0002-que-cambia.sql.`);
+      return { version: Number(match[1]), name };
+    })
+    .sort((a, b) => a.version - b.version);
+  const repeated = migrations.find((item, index) => index > 0 && item.version === migrations[index - 1]!.version);
+  if (repeated) throw new Error(`Hay dos migraciones con el número ${repeated.version}.`);
+
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK]);
+    await client.query('CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, name text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())');
+    const done = new Set<number>((await client.query('SELECT version FROM schema_migrations')).rows.map((row) => row.version));
+    const known = new Set(migrations.map((item) => item.version));
+    const unknown = [...done].filter((version) => !known.has(version)).sort((a, b) => a - b);
+    if (unknown.length) {
+      throw new Error(`La base viene de una versión más nueva de Urna Abierta (tiene la migración ${unknown.at(-1)}, que este servidor no conoce). Volvé a esa versión, o restaurá una copia de antes de actualizar.`);
+    }
+    const applied: number[] = [];
+    for (const { version, name } of migrations) {
+      if (done.has(version)) continue;
+      const sql = await readFile(new URL(name, folder), 'utf8');
+      await client.query('BEGIN');
+      try {
+        await client.query(sql);
+        await client.query('INSERT INTO schema_migrations (version, name) VALUES ($1, $2)', [version, name]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw new Error(`No se pudo aplicar la migración ${name}, y la base quedó como estaba: ${(error as Error).message}`);
+      }
+      applied.push(version);
+    }
+    return applied;
+  } finally {
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK]).catch(() => undefined);
+    client.release();
+  }
 }
 
 /** An election with invented people and one person per role, for tests and for trying the app. */
