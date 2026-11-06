@@ -274,12 +274,24 @@ test('the chief gets the alert, sees who is silent, and two different counts wai
   await enter(page, demo.links.jefe!);
   await expect(page.getByRole('heading')).toHaveText('2 mesas te necesitan');
   await expect(page.locator('.tarjeta.alerta')).toContainText('Mesa 12: aviso urgente');
+  await expect(page).toHaveTitle('(1) Urna Abierta');
   await expect(page.getByTestId('needs').nth(1)).toContainText('Mesa 13: sin datos');
   await page.locator('.tarjeta.alerta').click();
   await expect(page.getByRole('heading')).toHaveText('Marta avisó que algo anda mal');
   await expect(page.getByRole('link', { name: 'Llamar a Marta' })).toHaveAttribute('href', /^tel:/);
   await page.getByTestId('resolve').click();
   await expect(page.getByTestId('resolve')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await expect(page.locator('.tarjeta.alerta')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page).toHaveTitle('Urna Abierta');
+  // The one already on screen made no noise. A new one, with the panel open, does.
+  expect(await page.evaluate(() => (window as unknown as { rung: number[][] }).rung)).toEqual([]);
+  await fiscal.getByTestId('report').click();
+  await expect(page.locator('.tarjeta.alerta')).toContainText('Mesa 12: aviso urgente', { timeout: 40_000 });
+  await expect(page).toHaveTitle('(1) Urna Abierta');
+  expect(await page.evaluate(() => (window as unknown as { rung: number[][] }).rung)).toHaveLength(1);
+  await page.locator('.tarjeta.alerta').click();
+  await page.getByTestId('resolve').click();
   await page.getByRole('button', { name: 'Volver' }).click();
   await expect(page.locator('.tarjeta.alerta')).toHaveCount(0, { timeout: 15_000 });
 

@@ -203,6 +203,7 @@ const es = {
 
   'table.urgent': '{name} avisó que algo anda mal',
   'table.urgentCard': 'Aviso urgente',
+  'table.urgentLate': 'Llegó después de que se cerró la elección.',
   'table.resolved': 'Ya está resuelto',
   'table.voted': 'votaron',
   'table.left': 'faltan',
@@ -854,6 +855,7 @@ const en: Record<MessageKey, string> = {
 
   'table.urgent': '{name} said something is wrong',
   'table.urgentCard': 'Urgent alert',
+  'table.urgentLate': 'It arrived after the election was closed.',
   'table.resolved': 'It is resolved',
   'table.voted': 'voted',
   'table.left': 'left',
