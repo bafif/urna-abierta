@@ -46,6 +46,9 @@ pero conviene conocerlos:
   Estados Unidos, Brasil y Chile no figuran en la lista de países adecuados de la Disposición 60-E/2016.
 - La base de datos puede tener que inscribirse en el registro de la AAIP.
 
+Cómo inscribirla, cómo atender cada pedido y qué guardan las copias de seguridad está en la
+[guía de datos personales](docs/es/datos-personales.md).
+
 ## Herramientas para cumplir
 
 La app trae herramientas opcionales. Usarlas es decisión de cada partido, y tenerlas no garantiza cumplir la ley:
