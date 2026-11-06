@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, auditView, can, canReachTable, erasedId, getSetting, isErasedId, requires, seal, unseal, type Actor } from './actor.ts';
+import { audit, auditView, can, canReachTable, erasedId, getSetting, requires, seal, unseal, type Actor } from './actor.ts';
 import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
 
@@ -28,6 +28,52 @@ async function votesPerTable(pool: pg.Pool, tables: string[]): Promise<Map<strin
 export async function refOf(pool: pg.Pool, election: string, id: string): Promise<string | null> {
   const found = await pool.query('SELECT ref FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
   return found.rows[0]?.ref ?? null;
+}
+
+/** The rows a phone's push locks, all of an election and always in the same order, so that two of these never wait on each other. */
+export async function lockTables(client: pg.PoolClient, election: string): Promise<void> {
+  await client.query('SELECT id FROM polling_tables WHERE election_id = $1 ORDER BY id FOR UPDATE', [election]);
+}
+
+/**
+ * Erases a person: name, contact, roll id and reference go. The new reference keeps what the audit log said about
+ * them, a sensitive mark included, from leading back to their table and order. Null when there is no such person,
+ * 'already' when they were erased before.
+ */
+export async function eraseElector(pool: pg.Pool, election: string, id: string): Promise<{ ref: string } | 'already' | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // A mark a phone sends meanwhile is either stored before, and renamed here, or after, and renamed on the way in.
+    await lockTables(client, election);
+    const found = await client.query('SELECT ref, erased_at IS NOT NULL AS erased FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
+    const row = found.rows[0];
+    if (!row || row.erased) {
+      await client.query('ROLLBACK');
+      return row ? 'already' : null;
+    }
+    const renamed = erasedId(id);
+    await client.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
+    await client.query(
+      `UPDATE electors SET id = $3, ref = gen_random_uuid(), erased_at = now(), full_name = 'Borrado a pedido', search = '', document = NULL, file_number = NULL, address = NULL,
+         extra = '{}', needs_review = false, review = NULL, consent = NULL
+       WHERE election_id = $1 AND id = $2`,
+      [election, id, renamed],
+    );
+    await client.query(
+      `UPDATE operations SET payload = jsonb_set(payload, '{elector}', to_jsonb($3::text))
+       WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND payload->>'elector' = $2`,
+      [election, id, renamed],
+    );
+    await client.query('COMMIT');
+    // The old reference: what the log already said about them, and nothing that points at the row.
+    return { ref: row.ref };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
@@ -322,7 +368,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.put<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {
     const { date, means } = request.body ?? {};
     if (typeof date !== 'string' || typeof means !== 'string') return reply.code(400).send({ error: 'invalid_request' });
-    const saved = await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2 RETURNING ref', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
+    const saved = await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2 AND erased_at IS NULL RETURNING ref', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
     if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
     await audit(pool, request.actor, 'person.consent', saved.rows[0].ref);
     return { ok: true };
@@ -333,51 +379,31 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
    * Who voted keeps counting, under the new id.
    */
   app.delete<{ Params: { election: string; id: string } }>('/api/persons/:election/:id', { preHandler: managePersons }, async (request, reply) => {
-    const { election, id } = request.params;
-    if (isErasedId(id)) return { ok: true };
-    const renamed = erasedId(id);
-    const client = await pool.connect();
-    let ref: string | undefined;
-    try {
-      await client.query('BEGIN');
-      await client.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
-      const erased = await client.query(
-        `UPDATE electors SET id = $3, full_name = 'Borrado a pedido', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', needs_review = false, review = NULL, consent = NULL
-         WHERE election_id = $1 AND id = $2 RETURNING ref`,
-        [election, id, renamed],
-      );
-      ref = erased.rows[0]?.ref;
-      if (ref) {
-        await client.query(
-          `UPDATE operations SET payload = jsonb_set(payload, '{elector}', to_jsonb($3::text))
-           WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND payload->>'elector' = $2`,
-          [election, id, renamed],
-        );
-      }
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-    if (!ref) return reply.code(404).send({ error: 'not_found' });
-    await audit(pool, request.actor, 'person.erased', ref);
+    const erased = await eraseElector(pool, request.params.election, request.params.id);
+    if (erased === null) return reply.code(404).send({ error: 'not_found' });
+    if (erased !== 'already') await audit(pool, request.actor, 'person.erased', erased.ref);
     return { ok: true };
   });
 
   /** After the election: no names remain. Only totals per table are kept. */
   app.post<{ Params: { id: string } }>('/api/elections/:id/purge', { preHandler: requires(pool, 'election.manage') }, async (request, reply) => {
     const { id } = request.params;
-    const status = await pool.query('SELECT status FROM elections WHERE id = $1', [id]);
-    if (status.rows[0]?.status !== 'cerrada') return reply.code(409).send({ error: 'close_it_first' });
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // The same lock a phone's push takes: what it sends meanwhile is stored before, and goes with the rest, or after, and is dropped.
+      await lockTables(client, id);
+      const status = await client.query('SELECT status FROM elections WHERE id = $1 FOR UPDATE', [id]);
+      if (status.rows[0]?.status !== 'cerrada') {
+        await client.query('ROLLBACK');
+        return reply.code(409).send({ error: 'close_it_first' });
+      }
       await client.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
-      // The roll ids go too: they are often the DNI.
+      // The roll ids go too, since they are often the DNI, and so do the references and the order in the table:
+      // the audit log names people by reference, and a table and an order, with the roll at hand, name them again.
       await client.query(
-        `UPDATE electors SET id = 'x-' || replace(ref::text, '-', ''), full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', needs_review = false, review = NULL, consent = NULL
+        `UPDATE electors SET id = 'x-' || replace(gen_random_uuid()::text, '-', ''), ref = gen_random_uuid(), order_number = NULL,
+           full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', needs_review = false, review = NULL, consent = NULL
          WHERE election_id = $1`,
         [id],
       );

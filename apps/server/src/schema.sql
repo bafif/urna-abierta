@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS electors (
 ALTER TABLE electors ADD COLUMN IF NOT EXISTS ref uuid NOT NULL DEFAULT gen_random_uuid();
 -- A name or document someone corrected: uploading the roll again does not undo it.
 ALTER TABLE electors ADD COLUMN IF NOT EXISTS corrected_at timestamptz;
+-- Someone who asked to be erased: the row stays, with nothing of them, so that the totals of the table still add up.
+ALTER TABLE electors ADD COLUMN IF NOT EXISTS erased_at timestamptz;
 CREATE INDEX IF NOT EXISTS electors_table ON electors (table_id, order_number);
 CREATE INDEX IF NOT EXISTS electors_document ON electors (document);
 

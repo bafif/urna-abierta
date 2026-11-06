@@ -808,6 +808,72 @@ describe.skipIf(!url)('against a real Postgres', () => {
       for (const dni of dnis) expect(dump).not.toContain(dni);
     });
 
+    it('after an erasure, and after the purge, nothing in the audit log leads back to the table and order of anyone', async () => {
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
+      const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const [erased, kept] = (await pool.query('SELECT id FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 2', [table])).rows.map((row) => row.id as string);
+      for (const person of [erased!, kept!]) expect((await call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${person}/semaphore`, { category: sensitive })).statusCode).toBe(200);
+      const since = Number((await pool.query('SELECT coalesce(max(id), 0) AS n FROM audit_log')).rows[0].n);
+      const linked = async () =>
+        (await pool.query(`SELECT DISTINCT x.order_number FROM audit_log a JOIN electors x ON x.ref::text = a.target OR a.detail->'people' ? x.ref::text WHERE a.action LIKE 'semaphore.%'`)).rows.map((row) => row.order_number);
+      expect(await linked()).toHaveLength(2);
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${demo.election}/${erased}`)).statusCode).toBe(200);
+      // Erasing again is not an error, and does not erase anyone else.
+      const renamed = (await pool.query(`SELECT id FROM electors WHERE election_id = $1 AND erased_at IS NOT NULL`, [demo.election])).rows[0].id;
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${demo.election}/${renamed}`)).statusCode).toBe(200);
+      expect(await linked()).toHaveLength(1);
+      expect((await pool.query(`SELECT target FROM audit_log WHERE action = 'person.erased' AND id > $1`, [since])).rowCount).toBe(1);
+      for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
+      expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(200);
+      expect(await linked()).toEqual([]);
+      expect((await pool.query('SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND order_number IS NOT NULL', [demo.election])).rows[0].n).toBe(0);
+    });
+
+    it('a mark that arrives while someone is erased, or while the election is purged, does not keep their roll id', async () => {
+      const load = async (dni: string) => {
+        const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Carrera', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+        const file = writePadron({ electors: [{ id: `d-${dni}`, full_name: 'Persona, Ana', identifiers: [{ type: 'DNI', value: dni }], table: '1' }] as never });
+        await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+        return { id, mesa: (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string };
+      };
+      const left = async (mesa: string, dni: string) => (await pool.query(`SELECT count(*)::int AS n FROM operations WHERE table_id = $1 AND payload::text LIKE '%' || $2 || '%'`, [mesa, dni])).rows[0].n;
+      for (let round = 0; round < 8; round += 1) {
+        const dni = `9930${String(round).padStart(4, '0')}`;
+        const { id, mesa } = await load(dni);
+        await Promise.all([push('coordinacion', mesa, [{ ...operation(mesa, round + 1), payload: { elector: `d-${dni}` } }]), call('coordinacion', 'DELETE', `/api/persons/${id}/d-${dni}`)]);
+        expect(await left(mesa, dni), `erasure, round ${round}`).toBe(0);
+        // The mark counts once, under the new id, whichever came first.
+        expect((await pool.query(`SELECT count(*)::int AS n FROM operations o JOIN electors x ON x.id = o.payload->>'elector' WHERE o.table_id = $1`, [mesa])).rows[0].n).toBe(1);
+      }
+      for (let round = 0; round < 8; round += 1) {
+        const dni = `9931${String(round).padStart(4, '0')}`;
+        const { id, mesa } = await load(dni);
+        for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+        const [late, purged] = await Promise.all([push('coordinacion', mesa, [{ ...operation(mesa, round + 1), payload: { elector: `d-${dni}` } }]), call('coordinacion', 'POST', `/api/elections/${id}/purge`)]);
+        expect([late.statusCode, purged.statusCode]).toEqual([200, 200]);
+        expect(await left(mesa, dni), `purge, round ${round}`).toBe(0);
+      }
+    });
+
+    it('any roll id can be erased, even one that looks like an erased one, and it is not counted as new afterwards', async () => {
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Equis', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+      const file = writePadron({ electors: [{ id: 'x-ana', full_name: 'Equis, Ana', identifiers: [{ type: 'DNI', value: '99123456' }] }, { id: 'x-eva', full_name: 'Equis, Eva' }] as never });
+      const upload = (preview = false) =>
+        app.inject({ method: 'POST', url: `/api/elections/${id}/roll${preview ? '?preview=1' : ''}`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      await upload();
+      expect((await upload(true)).json()).toMatchObject({ added: 0, kept: 2 });
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${id}/x-ana`)).statusCode).toBe(200);
+      const rows = (await pool.query('SELECT id, full_name, document FROM electors WHERE election_id = $1 ORDER BY full_name', [id])).rows;
+      expect(rows.map((row) => row.full_name)).toEqual(['Borrado a pedido', 'Equis, Eva']);
+      expect(rows.some((row) => row.id === 'x-ana' || row.document)).toBe(false);
+      expect((await upload(true)).json()).toMatchObject({ people: 1, added: 0, kept: 1, erased: 1 });
+      // An erased row cannot get a name or a consent back.
+      const erased = rows[0]!.id;
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/${erased}`, { full_name: 'Otra, Vez' })).statusCode).toBe(404);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/${erased}/consent`, { date: '2027-01-01', means: 'firma' })).statusCode).toBe(404);
+    });
+
     it('the audit log records who saw whom, by reference, and each panel once every few minutes', async () => {
       const since = Number((await pool.query('SELECT coalesce(max(id), 0) AS n FROM audit_log')).rows[0].n);
       const logged = async () => (await pool.query('SELECT action, target, detail FROM audit_log WHERE id > $1 ORDER BY id', [since])).rows;
