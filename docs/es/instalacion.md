@@ -94,13 +94,22 @@ Dos cosas importan más que el proveedor:
 - **Los servidores gratuitos suelen estar fuera de Argentina.** Eso tiene consecuencias legales, que corren por cuenta del partido.
   Están en la [información legal](../../LEGAL.md).
 
-## Los avisos del sistema
+## Bajarlo y abrirlo
 
-El instalador puede estar sin firmar, así que tu computadora te va a avisar. Es esperable:
+En la [página de releases](https://github.com/bafif/urna-abierta/releases/latest), bajá el de tu computadora. El instalador puede estar
+sin firmar, así que tu computadora te va a avisar. Es esperable:
 
-- **Windows:** tocá «Más información» y después «Ejecutar de todas formas».
-- **macOS:** lo bloquea la primera vez. Andá a Ajustes, Privacidad y seguridad, y tocá «Abrir igual».
-- **Linux:** no hay aviso.
+| Tu computadora | El archivo | Cómo abrirlo |
+|---|---|---|
+| Windows | `urna-abierta-instalador-windows.exe` | Doble clic. Si aparece «Windows protegió tu PC», tocá «Más información» y después «Ejecutar de todas formas» |
+| Mac con chip Apple | `urna-abierta-instalador-mac-apple.zip` | Doble clic en el `.zip`, y después en `urna-abierta-instalador`. La primera vez macOS lo bloquea: andá a Ajustes, Privacidad y seguridad, y tocá «Abrir igual» |
+| Mac con Intel | `urna-abierta-instalador-mac-intel.zip` | Igual que en una Mac con chip Apple |
+| Linux | `urna-abierta-instalador-linux.tar.gz` | Descomprimilo y, en una terminal abierta en esa carpeta, corré `./urna-abierta-instalador`. No hay aviso |
+
+Para saber qué Mac tenés: menú Apple, «Acerca de esta Mac». Dice «Chip Apple M…» o «Procesador Intel».
+
+Junto con el navegador se abre una ventana con letras sobre fondo negro. **Dejala abierta hasta terminar:** si la cerrás, el instalador
+se frena.
 
 Bajalo solamente de la página de releases, y comprobá que su SHA-256 sea el publicado. Un instalador falso es la forma más fácil de
 robarle los datos a un partido.

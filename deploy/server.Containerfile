@@ -1,4 +1,8 @@
 FROM docker.io/library/node:24-alpine
+# Ties the published image to the repository on GitHub.
+LABEL org.opencontainers.image.source="https://github.com/bafif/urna-abierta" \
+      org.opencontainers.image.description="Urna Abierta: the server" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

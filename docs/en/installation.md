@@ -92,13 +92,22 @@ Two things matter more than the provider:
 - **Free servers are usually outside Argentina.** That has legal consequences, which are up to the party. They are in the
   [legal information](../../LEGAL.en.md).
 
-## System warnings
+## Downloading and opening it
 
-The installer may be unsigned, so your computer will warn you. That is expected:
+On the [releases page](https://github.com/bafif/urna-abierta/releases/latest), download the one for your computer. The installer may be
+unsigned, so your computer will warn you. That is expected:
 
-- **Windows:** tap “More info”, then “Run anyway”.
-- **macOS:** it blocks it the first time. Go to Settings, Privacy & Security, and tap “Open Anyway”.
-- **Linux:** no warning.
+| Your computer | The file | How to open it |
+|---|---|---|
+| Windows | `urna-abierta-instalador-windows.exe` | Double-click. If “Windows protected your PC” shows up, tap “More info”, then “Run anyway” |
+| Mac with an Apple chip | `urna-abierta-instalador-mac-apple.zip` | Double-click the `.zip`, then `urna-abierta-instalador`. The first time macOS blocks it: go to Settings, Privacy & Security, and tap “Open Anyway” |
+| Mac with Intel | `urna-abierta-instalador-mac-intel.zip` | Same as on a Mac with an Apple chip |
+| Linux | `urna-abierta-instalador-linux.tar.gz` | Unpack it and, in a terminal open in that folder, run `./urna-abierta-instalador`. No warning |
+
+To know which Mac you have: Apple menu, “About This Mac”. It says “Chip Apple M…” or “Processor Intel”.
+
+Along with the browser, a window with text on a black background opens. **Leave it open until it finishes:** if you close it, the
+installer stops.
 
 Download it only from the releases page, and check that its SHA-256 matches the published one. A fake installer is the easiest way to
 steal a party's data.
