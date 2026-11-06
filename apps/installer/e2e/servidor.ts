@@ -17,31 +17,13 @@ import { join } from 'node:path';
 import { EMPTY_SHA256, amzDate, s3Client, signS3 } from '../../server/src/s3.ts';
 import { newSecrets, renderScript, type Secrets } from '../src/settings.ts';
 import { checkSsh, runScript, type SshTarget } from '../src/ssh.ts';
+import { attempt, buildImages, finish, podman, record, sleep } from './maquinas.ts';
 
-const root = new URL('../../../', import.meta.url).pathname;
 const work = mkdtempSync(join(tmpdir(), 'urna-servidor-'));
 const name = process.env.URNA_E2E_NAME ?? 'urna-maquina';
 const port = Number(process.env.URNA_E2E_PORT ?? 2221);
 const IMAGE = `localhost/${name}-prueba`;
 const network = `${name}-red`;
-const results: { step: string; ok: boolean; detail?: unknown }[] = [];
-
-const podman = (...args: string[]) => execFileSync('podman', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
-/** For what has to fail: whether it did, and everything it said. */
-function attempt(...args: string[]): { ok: boolean; said: string } {
-  try {
-    return { ok: true, said: execFileSync('podman', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
-  } catch (error) {
-    const { stdout = '', stderr = '' } = error as { stdout?: string; stderr?: string };
-    return { ok: false, said: `${stdout}${stderr}` };
-  }
-}
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function record(step: string, ok: boolean, detail?: unknown): void {
-  results.push({ step, ok, detail });
-  console.log(`${ok ? 'ok   ' : 'FALLA'} ${step}${detail === undefined ? '' : ` ${JSON.stringify(detail)}`}`);
-}
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs1', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
 function opensshPublic(pem: string): string {
@@ -149,7 +131,7 @@ function cleanup(): void {
 }
 
 console.log('Armando las imágenes y la máquina…');
-execFileSync('bash', ['-c', `podman build -q -t ${images.server} -f deploy/server.Containerfile . >/dev/null && podman build -q -t ${images.web} -f deploy/web.Containerfile . >/dev/null && podman build -q -t ${IMAGE} -f deploy/maquina-prueba.Containerfile deploy >/dev/null`], { cwd: root, stdio: 'inherit' });
+buildImages({ server: images.server, web: images.web, machine: IMAGE });
 const nextBuild = mkdtempSync(join(work, 'nueva-'));
 writeFileSync(join(nextBuild, 'Containerfile'), [
   `FROM ${images.server}`,
@@ -329,7 +311,4 @@ for (let attempt = 0; attempt < 60 && !back; attempt += 1) {
 }
 record('después de reiniciar la máquina vuelve sola', back && attempt('exec', first.name, 'urna', 'estado').said.includes('versión: nueva'));
 
-if (!process.env.URNA_DEJAR_MAQUINAS) cleanup();
-const failed = results.filter((item) => !item.ok);
-console.log(failed.length ? `Fallaron ${failed.length} de ${results.length}.` : `Pasaron las ${results.length}.`);
-process.exit(failed.length ? 1 : 0);
+finish(cleanup);
