@@ -1,5 +1,6 @@
 import { strFromU8, strToU8, zipSync } from 'fflate';
 import * as v from 'valibot';
+import { foldText } from './text.ts';
 import { MAX_UNZIPPED_BYTES, readFirstSheet, unzipSome, type SheetRow } from './xlsx.ts';
 
 export { MAX_UNZIPPED_BYTES };
@@ -12,6 +13,9 @@ export const PADRON_FORMAT = 'padron-abierto';
 export const PADRON_MAJOR = 0;
 
 const text = (max: number) => v.pipe(v.string(), v.minLength(1), v.maxLength(max));
+
+/** The longest id a person can have. */
+const MAX_ID = 64;
 
 export const manifestSchema = v.looseObject({
   format: v.literal(PADRON_FORMAT),
@@ -36,7 +40,7 @@ export const unitSchema = v.looseObject({
 });
 
 export const electorSchema = v.looseObject({
-  id: text(64),
+  id: text(MAX_ID),
   full_name: text(200),
   table: v.optional(v.nullable(text(64))),
   order: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1)))),
@@ -99,6 +103,43 @@ function readLines<T>(file: string, content: string, schema: v.GenericSchema<unk
 const refused = (where: string, problem: string): PadronRead => ({ padron: null, problems: [{ where, problem }] });
 
 /**
+ * A name as two rows are compared: without case, accents or marks, and with its words in order, so «Prueba, Ana» and «ANA PRUEBA» are
+ * one. Empty when it has no letter or digit, and then it matches nobody.
+ */
+const nameKey = (name: string) => foldText(name).replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').sort().join(' ');
+
+type Repeat = 'same_person' | 'same_document_other_name';
+
+/**
+ * What becomes of rows that share an id, in file order. The same person twice is loaded once, where the file lists them first: a
+ * student enrolled in two programs comes once per program but votes once, at the table of the first row, and on paper the repeats are
+ * crossed out. It is the same person only when the name is the same once case, accents, marks and the order of its words are left
+ * aside. Any other name, even a close one such as Juan and Juana, is another person, most likely with a document typed wrong: both are
+ * loaded and left for review, and the later one gets the id `fallback` gives it. At worst someone shows up twice, marked for review;
+ * nobody is ever left out. A fallback is never an id the file already has, and it depends only on the file, so loading the same file
+ * again gives the same ids. The result has, for each row, its id (null when it is left out) and the repeat it is part of, if any.
+ */
+function sortOutRepeats(rows: readonly { id: string; name: string }[], fallback: (index: number, nth: number, taken: ReadonlySet<string>) => string): { id: string | null; repeat?: Repeat }[] {
+  const taken = new Set(rows.map((row) => row.id));
+  const people = new Map<string, { names: Set<string>; rows: number[]; marked: boolean }>();
+  const fates: { id: string | null; repeat?: Repeat }[] = rows.map((row) => ({ id: row.id }));
+  rows.forEach((row, index) => {
+    const name = nameKey(row.name);
+    const kept = people.get(row.id);
+    if (!kept) { people.set(row.id, { names: new Set([name]), rows: [index], marked: false }); return; }
+    if (name && kept.names.has(name)) { fates[index] = { id: null, repeat: 'same_person' }; return; }
+    const id = fallback(index, kept.rows.length + 1, taken);
+    taken.add(id);
+    // The rows already kept are marked once, on the first clash, so many rows with one id still take linear time.
+    if (!kept.marked) { for (const other of kept.rows) fates[other]!.repeat = 'same_document_other_name'; kept.marked = true; }
+    fates[index] = { id, repeat: 'same_document_other_name' };
+    kept.rows.push(index);
+    kept.names.add(name);
+  });
+  return fates;
+}
+
+/**
  * Reads and checks a .padron file. An unknown major version is refused; unknown fields are ignored.
  * Only the manifest and the files it names are unpacked, and never more than MAX_UNZIPPED_BYTES.
  */
@@ -131,19 +172,26 @@ export function readPadron(bytes: Uint8Array): PadronRead {
   if (rows.length + problems.filter((p) => p.where.startsWith('electors')).length !== manifest.files.electors.count) {
     problems.push({ where: 'manifest.json', problem: 'count_mismatch' });
   }
-  const seen = new Set<string>();
   const unitIds = new Set(units.map((unit) => unit.id));
   const electors: PadronElector[] = [];
-  for (const { row: elector, line } of rows) {
-    // Two rows with one id cannot both be loaded: the first one stays, as in a spreadsheet, and the repeat is pointed out.
-    if (seen.has(elector.id)) {
-      problems.push({ where: `electors:${line}`, problem: 'repeated_id' });
-      continue;
+  // Another person with an id already used gets the same id with «~2», «~3»… after it, cut so that it still fits.
+  const fates = sortOutRepeats(rows.map(({ row }) => ({ id: row.id, name: row.full_name })), (index, nth, taken) => {
+    for (let n = nth; ; n += 1) {
+      const suffix = `~${n}`;
+      // Cut by whole characters: half of one would be stored as another and break loading the same file again.
+      const cut = rows[index]!.row.id.slice(0, MAX_ID - suffix.length).replace(/[\uD800-\uDBFF]$/, '');
+      const id = cut + suffix;
+      if (!taken.has(id)) return id;
     }
-    seen.add(elector.id);
+  });
+  rows.forEach(({ row, line }, index) => {
+    const { id, repeat } = fates[index]!;
+    if (repeat) problems.push({ where: `electors:${line}`, problem: repeat });
+    if (id === null) return;
+    const elector = repeat ? { ...row, id, review: { ...row.review, status: 'pending' as const } } : row;
     if (elector.table && unitIds.size > 0 && !unitIds.has(elector.table)) problems.push({ where: `electors:${line}`, problem: 'unknown_table' });
     electors.push(elector);
-  }
+  });
   return { padron: { manifest, units, electors }, problems };
 }
 
@@ -217,8 +265,10 @@ function columnsOf(cells: string[]): Columns | null {
  * A roll from the rows of a simple table, the same for a CSV and for a spreadsheet. A row with nothing in it is skipped: Excel
  * writes the empty rows inside a sheet as «;;» in a CSV. Unknown columns are ignored, so nothing else the sheet keeps gets in.
  * Ids are the scanner's, so that loading a corrected file again keeps each person where they were: d-<DNI>; without a DNI,
- * l-<legajo>; with neither, f-<position after the header>. Each person is checked with the same rules as a .padron, so what the
- * server would drop is pointed out here, by the row the spreadsheet shows.
+ * l-<legajo>; with neither, f-<position after the header>. A row with the id of an earlier one is the same person when the name
+ * matches, and is loaded once; with another name it is another person, who gets l-<legajo> if that id is free, else f-<position>.
+ * Each person is checked with the same rules as a .padron, so what the server would drop is pointed out here, by the row the
+ * spreadsheet shows.
  */
 function readTableRoll(allRows: SheetRow[], path: string): PadronRead {
   const rows = allRows.filter((row) => row.cells.some((cell) => cell.trim() !== ''));
@@ -226,25 +276,20 @@ function readTableRoll(allRows: SheetRow[], path: string): PadronRead {
   const header = rows.slice(0, HEADER_SEARCH).findIndex((row) => columnsOf(row.cells));
   if (header < 0) return refused(`line ${rows[0]!.line}`, 'no_name_column');
   const columns = columnsOf(rows[header]!.cells)!;
-  const problems: PadronProblem[] = [];
-  const electors: PadronElector[] = [];
-  const seen = new Set<string>();
+  const found: { line: number; problem: string }[] = [];
+  const people: { line: number; position: number; fileNumber: string | undefined; odd: boolean; elector: PadronElector }[] = [];
   rows.slice(header + 1).forEach(({ line, cells }, index) => {
-    const where = `line ${line}`;
     const cell = (name: string) => { const at = columns[name]!; return at >= 0 ? cells[at]?.trim() || undefined : undefined; };
     const family = cell('family');
     const given = cell('given');
     const fullName = cell('full_name') ?? [family, given].filter(Boolean).join(', ');
-    if (!fullName) { problems.push({ where, problem: 'no_name' }); return; }
+    if (!fullName) { found.push({ line, problem: 'no_name' }); return; }
     const digits = cell('document')?.replace(/\D/g, '') || undefined;
     const document = digits && DOCUMENT.test(digits) ? digits : undefined;
     const fileNumber = fileNumberOf(cell('file_number'));
     const order = Number(cell('order'));
-    const id = document ? `d-${document}` : fileNumber ? `l-${fileNumber}` : `f-${index + 1}`;
-    // Two rows with one id cannot both be loaded: the first one stays, and the repeat is pointed out.
-    if (seen.has(id)) { problems.push({ where, problem: 'repeated_id' }); return; }
     const checked = v.safeParse(electorSchema, {
-      id,
+      id: document ? `d-${document}` : fileNumber ? `l-${fileNumber}` : `f-${index + 1}`,
       full_name: fullName,
       table: cell('table') ?? null,
       order: Number.isInteger(order) && order > 0 ? order : null,
@@ -253,14 +298,25 @@ function readTableRoll(allRows: SheetRow[], path: string): PadronRead {
       // A document of another length goes in as it is, marked for review, and is not used as the id.
       review: { status: digits && !document ? 'pending' : 'ok' },
     });
-    if (!checked.success) { problems.push({ where, problem: problemOf(checked.issues) }); return; }
-    seen.add(id);
-    if (digits && !document) problems.push({ where, problem: 'odd_document' });
-    electors.push(checked.output);
+    if (!checked.success) { found.push({ line, problem: problemOf(checked.issues) }); return; }
+    people.push({ line, position: index + 1, fileNumber, odd: Boolean(digits && !document), elector: checked.output });
+  });
+  const fates = sortOutRepeats(people.map(({ elector }) => ({ id: elector.id, name: elector.full_name })), (index, _nth, taken) => {
+    const { fileNumber, position } = people[index]!;
+    return fileNumber && !taken.has(`l-${fileNumber}`) ? `l-${fileNumber}` : `f-${position}`;
+  });
+  const electors: PadronElector[] = [];
+  people.forEach(({ line, odd, elector }, index) => {
+    const { id, repeat } = fates[index]!;
+    if (repeat) found.push({ line, problem: repeat });
+    if (id === null) return;
+    if (odd) found.push({ line, problem: 'odd_document' });
+    electors.push(repeat ? { ...elector, id, review: { status: 'pending' } } : elector);
   });
   return {
     padron: { manifest: { format: PADRON_FORMAT, format_version: '0.1.0', files: { electors: { path, count: electors.length } } }, units: [], electors },
-    problems,
+    // In the order of the rows, as the spreadsheet shows them.
+    problems: found.sort((a, b) => a.line - b.line).map(({ line, problem }) => ({ where: `line ${line}`, problem })),
   };
 }
 

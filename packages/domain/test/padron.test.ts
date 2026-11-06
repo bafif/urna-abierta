@@ -30,18 +30,83 @@ describe('.padron files', () => {
     expect(JSON.stringify(problems)).not.toContain('Prueba');
   });
 
-  it('notices a repeated id and a table that does not exist', () => {
+  it('notices the same person twice and a table that does not exist', () => {
     const file = writePadron({ units: [{ id: 'm-1', name: 'Mesa 1' }], electors: [person('a', { table: 'm-9' }), person('a')] });
-    const kinds = readPadron(file).problems.map((p) => p.problem);
-    expect(kinds).toEqual(expect.arrayContaining(['repeated_id', 'unknown_table']));
+    expect(readPadron(file).problems).toEqual([{ where: 'electors:1', problem: 'unknown_table' }, { where: 'electors:2', problem: 'same_person' }]);
   });
 
-  it('keeps the first of two rows with one id, so that what it shows is what gets loaded', () => {
-    const file = writePadron({ electors: [person('a'), person('b'), { ...person('a'), full_name: 'Prueba, Otra' }] });
+  it('loads the same person once when the name only changes case, marks or order; any other spelling is one more person', () => {
+    const file = writePadron({ electors: [person('a', { full_name: 'Prueba, Ana' }), person('b'), person('a', { full_name: 'PRUEBA ANA' }), person('a', { full_name: 'Prueba, Ana B.' })] });
     const { padron, problems } = readPadron(file);
-    expect(padron?.electors.map((elector) => [elector.id, elector.full_name])).toEqual([['a', 'Prueba, Persona a'], ['b', 'Prueba, Persona b']]);
-    // The count still matches: the file has three rows, and the third one is pointed out.
-    expect(problems).toEqual([{ where: 'electors:3', problem: 'repeated_id' }]);
+    expect(padron?.electors.map((elector) => [elector.id, elector.full_name, elector.review?.status])).toEqual([
+      ['a', 'Prueba, Ana', 'pending'],
+      ['b', 'Prueba, Persona b', undefined],
+      ['a~2', 'Prueba, Ana B.', 'pending'],
+    ]);
+    expect(groupProblems(problems)).toEqual([
+      { place: 'electors', problem: 'same_document_other_name', lines: [1, 4] },
+      { place: 'electors', problem: 'same_person', lines: [3] },
+    ]);
+  });
+
+  it('never takes two close names for one person: Juan and Juana with one document are two people', () => {
+    const pairs = [['Prueba, Juan', 'Prueba, Juana'], ['Gómez, Mariano', 'Gómez, Mariana'], ['Fernández Ruiz, Ana Laura', 'Fernández Ruiz, Ana Paula']];
+    for (const [one, other] of pairs) {
+      const { padron } = readPadron(writePadron({ electors: [person('a', { full_name: one }), person('a', { full_name: other })] }));
+      expect(padron?.electors.map((elector) => elector.review?.status)).toEqual(['pending', 'pending']);
+    }
+    // A name without letters or digits matches nobody.
+    expect(readPadron(writePadron({ electors: [person('a', { full_name: '-' }), person('a', { full_name: '?' })] })).padron?.electors).toHaveLength(2);
+  });
+
+  it('reads many rows with one id in linear time', () => {
+    const electors = Array.from({ length: 4000 }, (_, i) => person('a', { full_name: `Prueba, Persona ${i}` }));
+    const started = performance.now();
+    const { padron } = readPadron(writePadron({ electors }));
+    expect(padron?.electors).toHaveLength(4000);
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  it('keeps another name with the same id as one more person, both for review, with the same ids every time', () => {
+    const file = writePadron({
+      electors: [
+        person('a', { full_name: 'Prueba, Ana', review: { status: 'ok', note: 'x' } }),
+        person('b'),
+        person('a', { full_name: 'Ejemplo, Luis' }),
+        person('a', { full_name: 'Ejemplo Luis' }),
+        person('a', { full_name: 'Muestra, Sol' }),
+        // An id like the ones given to the others is never taken from the line that has it.
+        person('a~3', { full_name: 'Prueba, Eva' }),
+      ],
+    });
+    const first = readPadron(file);
+    expect(first.padron?.electors.map((elector) => [elector.id, elector.full_name, elector.review?.status])).toEqual([
+      ['a', 'Prueba, Ana', 'pending'],
+      ['b', 'Prueba, Persona b', undefined],
+      ['a~2', 'Ejemplo, Luis', 'pending'],
+      ['a~4', 'Muestra, Sol', 'pending'],
+      ['a~3', 'Prueba, Eva', undefined],
+    ]);
+    expect(first.padron?.electors[0]?.review).toEqual({ status: 'pending', note: 'x' });
+    expect(groupProblems(first.problems)).toEqual([
+      { place: 'electors', problem: 'same_document_other_name', lines: [1, 3, 5] },
+      { place: 'electors', problem: 'same_person', lines: [4] },
+    ]);
+    expect(readPadron(file)).toEqual(first);
+    // What it loads has no repeats left.
+    expect(readPadron(writePadron({ electors: first.padron!.electors })).problems).toEqual([]);
+  });
+
+  it('cuts a long id so that it still fits with its number', () => {
+    const long = 'x'.repeat(64);
+    const { padron } = readPadron(writePadron({ electors: [person(long, { full_name: 'Prueba, Ana' }), person(long, { full_name: 'Ejemplo, Luis' })] }));
+    expect(padron?.electors.map((elector) => elector.id)).toEqual([long, `${'x'.repeat(62)}~2`]);
+    expect(readPadron(writePadron({ electors: padron!.electors })).problems).toEqual([]);
+    // Never through the middle of a character.
+    // A character outside the basic plane takes two units, like U+1D400 here.
+    const wide = `${'x'.repeat(61)}\u{1D400}z`;
+    const cut = readPadron(writePadron({ electors: [person(wide, { full_name: 'Prueba, Ana' }), person(wide, { full_name: 'Ejemplo, Luis' })] }));
+    expect(cut.padron?.electors[1]?.id).toBe(`${'x'.repeat(61)}~2`);
   });
 
   it('says which field is too long, as the browser does with a spreadsheet', () => {
@@ -94,10 +159,46 @@ describe('simple spreadsheets', () => {
     expect(problems).toEqual([{ where: 'line 5', problem: 'no_name' }]);
   });
 
-  it('keeps one person per document, and says which line repeats it', () => {
-    const { padron, problems } = readCsvRoll('nombre\tdni\nPrueba, Ana\t99000020\nPrueba, Ana B.\t99.000.020\n');
-    expect(padron?.electors.map((elector) => elector.full_name)).toEqual(['Prueba, Ana']);
-    expect(problems).toEqual([{ where: 'line 3', problem: 'repeated_id' }]);
+  it('keeps a person enrolled twice once, at the first row, and says which rows repeat them', () => {
+    const { padron, problems } = readCsvRoll('nombre\tdni\tlegajo\tmesa\nPrueba, Ana\t99000020\tA-1/1\t2\nPRUEBA ANA\t99.000.020\tA-7/7\t5\nAna Prueba\t99000020\t\t7\n');
+    expect(padron?.electors.map((elector) => [elector.id, elector.full_name, elector.table, elector.review?.status])).toEqual([['d-99000020', 'Prueba, Ana', '2', 'ok']]);
+    expect(problems).toEqual([{ where: 'line 3', problem: 'same_person' }, { where: 'line 4', problem: 'same_person' }]);
+  });
+
+  it('keeps another name with the same document as one more person, both for review, with the same ids every time', () => {
+    const csv = [
+      'nombre;dni;legajo',
+      'Prueba, Ana;99000030;A-1/1',
+      'Ejemplo, Luis;99000030;A-2/2',
+      'Muestra, Sol;99000030;',
+      'Ejemplo Luis;99.000.030;A-2/9',
+      'Prueba, Eva;99000040;A-3/3',
+      ';;',
+      // The legajo of the next row is the id of a row further down, so it gets its position.
+      'Prueba, Juan;99000040;A-4/4',
+      'Otro, Leo;;A-4/4',
+      'Ejemplo, Sol;;A-4/4',
+      'Prueba, Lía;990000400;A-5/5',
+    ].join('\n');
+    const first = readCsvRoll(csv);
+    expect(first.padron?.electors.map((elector) => [elector.id, elector.full_name, elector.review?.status])).toEqual([
+      ['d-99000030', 'Prueba, Ana', 'pending'],
+      ['l-A-2/2', 'Ejemplo, Luis', 'pending'],
+      ['f-3', 'Muestra, Sol', 'pending'],
+      ['d-99000040', 'Prueba, Eva', 'pending'],
+      ['f-6', 'Prueba, Juan', 'pending'],
+      ['l-A-4/4', 'Otro, Leo', 'pending'],
+      ['f-8', 'Ejemplo, Sol', 'pending'],
+      ['l-A-5/5', 'Prueba, Lía', 'pending'],
+    ]);
+    expect(first.padron?.electors[1]?.identifiers).toEqual([{ type: 'DNI', value: '99000030' }, { type: 'legajo', value: 'A-2/2' }]);
+    expect(groupProblems(first.problems)).toEqual([
+      { place: 'line', problem: 'same_document_other_name', lines: [2, 3, 4, 6, 8, 9, 10] },
+      { place: 'line', problem: 'same_person', lines: [5] },
+      { place: 'line', problem: 'odd_document', lines: [11] },
+    ]);
+    expect(readCsvRoll(csv)).toEqual(first);
+    expect(readPadron(writePadron({ electors: first.padron!.electors })).problems).toEqual([]);
   });
 
   it('says an empty file is empty', () => {
@@ -154,7 +255,7 @@ describe('the list of problems', () => {
   it('puts problems of one kind together, with their rows in order', () => {
     const groups = groupProblems([
       { where: 'line 3', problem: 'no_name' },
-      { where: 'line 4', problem: 'repeated_id' },
+      { where: 'line 4', problem: 'same_person' },
       { where: 'line 9', problem: 'no_name' },
       { where: 'electors:2', problem: 'no_name' },
       { where: 'file', problem: 'too_big' },
@@ -162,7 +263,7 @@ describe('the list of problems', () => {
     ]);
     expect(groups).toEqual([
       { place: 'line', problem: 'no_name', lines: [3, 9, 12] },
-      { place: 'line', problem: 'repeated_id', lines: [4] },
+      { place: 'line', problem: 'same_person', lines: [4] },
       { place: 'electors', problem: 'no_name', lines: [2] },
       { place: 'file', problem: 'too_big', lines: [] },
     ]);

@@ -129,15 +129,17 @@ test('what cannot be read says why and where, in a short list without the conten
   await expect(page.getByRole('alert')).toHaveText('No es una planilla de Excel que se pueda abrir. Guardala de nuevo como .xlsx o como CSV.');
   await expect(page.getByTestId('roll-problems')).toHaveCount(0);
 
-  // Many rows without a name are one line, with the first rows and how many more.
-  const rows = ['nombre,dni', 'Prueba Ana,99000500', ...Array.from({ length: 25 }, (_, i) => `,${99000600 + i}`), ',,', 'Prueba Ana B.,99.000.500', 'Prueba Luis,9900070000'];
+  // Many rows without a name are one line, with the first rows and how many more. The same person twice is loaded once, at the first
+  // row; another name with the same DNI is one more person, and both are left for review.
+  const rows = ['nombre,dni', 'Prueba Ana,99000500', ...Array.from({ length: 25 }, (_, i) => `,${99000600 + i}`), ',,', 'PRUEBA ANA,99.000.500', 'Prueba Luis,9900070000', 'Ejemplo Sol,99000500'];
   await file.setInputFiles({ name: 'padron.csv', mimeType: 'text/csv', buffer: Buffer.from(`${rows.join('\n')}\n`) });
-  await expect(page.getByTestId('roll-summary')).toContainText('2 personas');
-  await expect(page.getByTestId('roll-summary')).toContainText('1 fila queda para que la mires.');
+  await expect(page.getByTestId('roll-summary')).toContainText('3 personas');
+  await expect(page.getByTestId('roll-summary')).toContainText('3 filas quedan para que las mires.');
   const list = page.getByTestId('roll-problems');
   await expect(list.locator('li')).toHaveText([
+    'Filas 2 y 31: tienen el mismo DNI o legajo que otra fila, pero el nombre es otro o está escrito distinto. Se cargan igual y quedan para que las revises.',
     'Filas 3, 4, 5 y 22 más: no tienen nombre, así que quedaron afuera.',
-    'Fila 29: quedó afuera porque su DNI o su legajo ya está en una fila anterior.',
+    'Fila 29: es la misma persona que en una fila anterior (mismo DNI o legajo y mismo nombre, seguramente en otra carrera). Vota una sola vez, en la mesa de la primera fila, así que queda solo ahí.',
     'Fila 30: el documento no tiene 7 u 8 números. Se carga igual y queda para que lo revises.',
   ]);
   await expect(list).not.toContainText('990006');
@@ -146,7 +148,8 @@ test('what cannot be read says why and where, in a short list without the conten
 test('a long list of problems shows twenty kinds and counts the rest', async ({ page, request }) => {
   await toUpload(page, request);
   await page.getByTestId('roll-file').setInputFiles({ name: 'roto.padron', mimeType: 'application/octet-stream', buffer: brokenPadron() });
-  await expect(page.getByTestId('roll-summary')).toContainText('2 personas');
+  // Two people with one id and different names are both loaded.
+  await expect(page.getByTestId('roll-summary')).toContainText('3 personas');
   const list = page.getByTestId('roll-problems');
   await expect(list.locator('li')).toHaveCount(20);
   await expect(list.locator('li').first()).toHaveText('Mesas, línea 2: no se entiende la identificación, así que quedó afuera.');
