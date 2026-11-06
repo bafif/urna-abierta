@@ -1,0 +1,26 @@
+name: Podman
+description: Podman without root, as the end to end tests run on a person's computer. GitHub's Ubuntu brings it installed.
+
+inputs:
+  room:
+    description: Clears what GitHub's machine brings for other languages, for the tests that build Ubuntu machines.
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        # Ubuntu 24.04 can stop a user without root from making the namespaces that rootless Podman needs.
+        sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        # The ids that the containers get. The test machines need the usual 65536: their users run Podman inside.
+        if ! grep -q "^$(id -un):" /etc/subuid || ! grep -q "^$(id -un):" /etc/subgid; then
+          sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$(id -un)"
+          podman system migrate
+        fi
+        podman info --format 'Podman {{.Version.Version}}, rootless: {{.Host.Security.Rootless}}, {{.Store.GraphDriverName}}'
+    - if: inputs.room == 'true'
+      shell: bash
+      run: |
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+        df -h / | tail -n 1

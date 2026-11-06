@@ -38,16 +38,20 @@ podman run -d --name urna-prueba-db -p 5432:5432 -e POSTGRES_USER=urna -e POSTGR
 TEST_DATABASE_URL=postgres://urna:prueba@localhost:5432/urna corepack pnpm test
 ```
 
-Las pruebas de punta a punta arman los contenedores y manejan un navegador:
+Las pruebas de punta a punta arman los contenedores con Podman y manejan un navegador o una máquina Ubuntu:
 
 | Comando | Qué prueba |
 |---|---|
 | `deploy/e2e.sh` | La app entera, contra Postgres, el servidor y Caddy de verdad |
 | `deploy/e2e-instalador.sh` | El instalador, pantalla por pantalla, hasta la primera cuenta |
+| `node apps/installer/e2e/texto.ts` | El bloque para pegar, tal como lo da el instalador, corrido por cloud-init como root en el primer arranque de un Ubuntu, hasta que la app responde en su dirección con certificado y `urna estado` dice que está todo bien |
+| `node apps/installer/e2e/servidor.ts` | La instalación por SSH en dos Ubuntu: la copia cifrada, actualizar, volver de una versión que no arranca, restaurar en otro servidor y reiniciar |
 | `deploy/e2e-lector.sh` | El lector de padrones, con el repo `urna-abierta-padrones` al lado de este |
 
-Cada pull request corre las pruebas unitarias en GitHub, con la misma Postgres. Las de punta a punta, todavía no: si tu cambio toca lo que
-prueban, corrélas vos y contalo en el pull request.
+Cada pull request corre en GitHub, cada una por su lado para que una que falla no tape a las otras: las unitarias, las del servidor con
+la misma Postgres, las dos de navegador y la del bloque para pegar. La de SSH tarda bastante más, así que corre en `main`, una vez por
+semana y antes de cada versión: si tu cambio toca `deploy/server/` o el instalador, corréla vos y contalo en el pull request. La del lector
+necesita el otro repo y no corre en GitHub.
 
 ## Los idiomas
 

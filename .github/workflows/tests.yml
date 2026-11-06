@@ -1,3 +1,5 @@
+# Every suite in a job of its own, so that one that fails does not hide the others. The end to end ones build
+# the real containers with Podman without root, as on a person's computer. CONTRIBUTING.md says how to run each.
 name: Tests
 
 on:
@@ -6,10 +8,43 @@ on:
   pull_request:
   # The release runs these first, and builds nothing if they fail.
   workflow_call:
+  workflow_dispatch:
+  # Once a week, also what does not run on each pull request, against what Ubuntu and the base images are by then.
+  schedule:
+    - cron: '23 6 * * 1'
+
+# A new push to a pull request leaves the run of the previous one with nothing to say.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
-  tests:
+  unit:
+    name: Unit tests and types
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      # Each step runs even if one before it failed: they are independent.
+      - if: ${{ !cancelled() }}
+        run: pnpm --filter @urna-abierta/domain exec vitest run
+      - if: ${{ !cancelled() }}
+        run: pnpm --filter @urna-abierta/web run check
+      - if: ${{ !cancelled() }}
+        run: pnpm --filter @urna-abierta/web exec vitest run
+      - if: ${{ !cancelled() }}
+        run: pnpm --filter @urna-abierta/installer exec vitest run
+      - if: ${{ !cancelled() }}
+        run: node design/verificar-contraste.mjs
+
+  server:
+    name: Server against Postgres
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:18-alpine
@@ -23,14 +58,57 @@ jobs:
       TEST_DATABASE_URL: postgres://urna:prueba@localhost:5432/urna
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: corepack enable
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @urna-abierta/domain exec vitest run
+      - uses: ./.github/actions/setup
       - run: pnpm --filter @urna-abierta/server exec vitest run
-      - run: pnpm --filter @urna-abierta/web run check
-      - run: pnpm --filter @urna-abierta/web exec vitest run
-      - run: pnpm --filter @urna-abierta/installer exec vitest run
-      - run: node design/verificar-contraste.mjs
+
+  # The Playwright report and the trace of each failure stay in the runner's temporary folder.
+  app:
+    name: The app in a browser (deploy/e2e.sh)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/podman
+      - run: deploy/e2e.sh
+        env:
+          URNA_E2E_INFORME: ${{ runner.temp }}/informe
+
+  installer:
+    name: The installer in a browser (deploy/e2e-instalador.sh)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/podman
+      - run: bash deploy/e2e-instalador.sh
+        env:
+          URNA_E2E_INFORME: ${{ runner.temp }}/informe
+
+  pasted:
+    name: The pasted text, as a cloud runs it (apps/installer/e2e/texto.ts)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/podman
+        with:
+          room: 'true'
+      - run: node apps/installer/e2e/texto.ts
+
+  # The longest by far: two machines, an update, a failed one, a restore and a reboot. On main, once a week and
+  # before each release; a pull request that touches the server's scripts says in its description that it ran it.
+  ssh:
+    name: Installing over SSH (apps/installer/e2e/servidor.ts)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/podman
+        with:
+          room: 'true'
+      - run: node apps/installer/e2e/servidor.ts
