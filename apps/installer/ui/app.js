@@ -235,7 +235,10 @@
     },
   };
 
-  const GUIDE = 'https://github.com/bafif/urna-abierta/blob/main/docs/es/servidores.md';
+  const GUIDE = {
+    es: 'https://github.com/bafif/urna-abierta/blob/main/docs/es/servidores.md',
+    en: 'https://github.com/bafif/urna-abierta/blob/main/docs/en/servers.md',
+  };
   const READER = {
     es: 'https://github.com/bafif/urna-abierta-padrones#descargar',
     en: 'https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download',
@@ -324,7 +327,7 @@
         eyebrow: t('step1'), title: t('cloud.title'),
         body: `<div class="opciones" role="radiogroup">${['oracle', 'aws', 'google'].map((id) => option(id, t(`cloud.${id}`), t(`cloud.${id}.text`), state.provider, 'provider')).join('')}</div>
           <div class="campos">${forms[state.provider]}</div>
-          <p class="aclara">${t('cloud.note')} <a class="enlace ayuda-enlace" href="${GUIDE}" target="_blank" rel="noreferrer">${t('cloud.guide')}</a></p>`,
+          <p class="aclara">${t('cloud.note')} <a class="enlace ayuda-enlace" href="${GUIDE[state.language]}" target="_blank" rel="noreferrer">${t('cloud.guide')}</a></p>`,
         next: ['next', 'cloudNext'], back: 'where',
       };
     },
