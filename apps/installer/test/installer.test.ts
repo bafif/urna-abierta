@@ -287,7 +287,19 @@ describe('when creating a server fails, nothing is left charging', () => {
     const refused = fakeCloud(() => new Failure(400, { error: 'invalid_grant', error_description: 'Invalid JWT Signature.' }));
     const login = await failure(createInCloud(googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, refused.request, noWait), secrets, 'aula', () => undefined));
     expect(login.message).toMatch(/^google_login/);
-    expect(login.left).toEqual([]);
+    // Null, not empty: the failure screen says that what was created got deleted only when something was.
+    expect(login.left).toBeNull();
+    expect(refused.calls.filter((call) => call.method === 'DELETE')).toEqual([]);
+  });
+
+  it('wrong keys create nothing, so there is nothing to delete or to report', async () => {
+    const refused = fakeCloud(() => new Failure(401, { code: 'NotAuthenticated', message: 'The required information to complete authentication was not provided.' }));
+    const lines: string[] = [];
+    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, refused.request, noWait);
+    const error = await failure(createInCloud(cloud, secrets, 'aula', (line) => lines.push(line)));
+    expect(error.message).toMatch(/NotAuthenticated/);
+    expect(error.left).toBeNull();
+    expect(lines).not.toContain('cleanup');
     expect(refused.calls.filter((call) => call.method === 'DELETE')).toEqual([]);
   });
 });
