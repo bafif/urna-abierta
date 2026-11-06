@@ -879,6 +879,34 @@ describe.skipIf(!url)('against a real Postgres', () => {
       }
     });
 
+    it('erasures and purges made before the roll id went too are done again when the server starts', async () => {
+      const load = async (dnis: string[]) => {
+        const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Vieja', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
+        const file = writePadron({ electors: dnis.map((dni, i) => ({ id: `d-${dni}`, full_name: `Vieja${i}, Ana`, identifiers: [{ type: 'DNI', value: dni }], table: '1' })) as never });
+        await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+        return { id, file, mesa: (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string };
+      };
+      const open = await load(['99320001', '99320002']);
+      expect((await push('coordinacion', open.mesa, [{ ...operation(open.mesa, 1), payload: { elector: 'd-99320001' } }])).statusCode).toBe(200);
+      // As erasing and purging left them before: the name gone, the roll id still there.
+      await pool.query(`UPDATE electors SET full_name = 'Borrado a pedido', search = '', document = NULL WHERE id = 'd-99320001'`);
+      const closed = await load(['99320003']);
+      await pool.query(`UPDATE electors SET full_name = '', search = '', document = NULL WHERE election_id = $1`, [closed.id]);
+      await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [closed.id]);
+
+      await migrate(pool);
+      await migrate(pool);
+      let dump = '';
+      for (const name of ['electors', 'operations']) dump += (await pool.query(`SELECT coalesce(string_agg(row_to_json(t)::text, E'\\n'), '') AS rows FROM ${name} t`)).rows[0].rows;
+      expect(dump).not.toContain('99320001');
+      expect(dump).not.toContain('99320003');
+      expect(dump).toContain('99320002');
+      // Now it is an erasure like any other: the same roll does not bring the person back, and their vote still counts.
+      const preview = await app.inject({ method: 'POST', url: `/api/elections/${open.id}/roll?preview=1`, payload: Buffer.from(open.file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      expect(preview.json()).toMatchObject({ people: 1, erased: 1, added: 0 });
+      expect((await call('coordinacion', 'GET', `/api/elections/${open.id}/stats`)).json().voted).toBe(1);
+    });
+
     it('any roll id can be erased, even one that looks like an erased one, and it is not counted as new afterwards', async () => {
       const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Equis', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
       const file = writePadron({ electors: [{ id: 'x-ana', full_name: 'Equis, Ana', identifiers: [{ type: 'DNI', value: '99123456' }] }, { id: 'x-eva', full_name: 'Equis, Eva' }] as never });
