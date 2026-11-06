@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { backOnline, enter, expectLeft, pendingOperations, PHOTO, prepared, reopen, seed, typeNumber } from './helpers.ts';
+import { backOnline, enter, expectLeft, onIphone, pendingOperations, PHOTO, prepared, reopen, seed, typeNumber } from './helpers.ts';
 
 test('opens without signal, keeps what was marked and sends it when signal returns', async ({ context, request }) => {
   const demo = await seed(request);
@@ -70,7 +70,10 @@ test('the urgent alert offers a call, WhatsApp and SMS when it cannot go out', a
   await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
 });
 
+const UNROUTABLE = 'WebKit does not let a test stop the requests of a page that a service worker controls.';
+
 test('the urgent alert goes out at once, even with a send of marks stuck in front of it', async ({ context, request }) => {
+  test.skip(onIphone(), UNROUTABLE);
   const demo = await seed(request);
   const page = await prepared(context, demo.tables[0]!.invitations[0]!);
   await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
@@ -158,6 +161,7 @@ test('a phone prepared before the random ids changes to them once nothing is lef
 });
 
 test('a photo the server refuses does not hold anything back, and the phone asks for it again', async ({ context, request }) => {
+  test.skip(onIphone(), UNROUTABLE);
   const demo = await seed(request, { size: 10, startsInDays: 0 });
   const page = await prepared(context, demo.tables[0]!.invitations[0]!);
   await page.getByRole('button', { name: 'Volver' }).click();
