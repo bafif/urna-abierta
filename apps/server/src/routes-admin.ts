@@ -126,9 +126,9 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.put<{ Body: { profile?: unknown } }>('/api/security', { preHandler: requires(pool, 'security.manage') }, async (request, reply) => {
     const { profile } = request.body ?? {};
     if (!isSecurityProfile(profile)) return reply.code(400).send({ error: 'invalid_profile' });
-    // An open election holds the level its kind asks for, whoever wants to lower it.
-    const { minimum } = await securityProfile(pool);
-    if (stricterProfile(profile, minimum) !== profile) return reply.code(409).send({ error: 'election_needs_more', minimum });
+    // An open election holds the level its kind asks for, whoever wants to lower it. Keeping what the party had chosen lowers nothing.
+    const { chosen, minimum } = await securityProfile(pool);
+    if (profile !== chosen && stricterProfile(profile, minimum) !== profile) return reply.code(409).send({ error: 'election_needs_more', minimum });
     await setSetting(pool, 'security_profile', profile);
     // Going to a stricter profile takes away what it does not allow.
     if (!SECURITY_PROFILES[profile].fiscalSeesSemaphore) await setSetting(pool, 'fiscal_semaphore', false);
