@@ -173,7 +173,7 @@ Se nota porque nadie puede entrar, los teléfonos juntan cosas «sin enviar» y 
    | `FALLA  copias: no hay una reciente` | `sudo urna copia` |
    | `FALLA  copias en el bucket` | `sudo urna copia`, y fijate qué dice. Lo explica [Copias fuera del servidor](servidores.md#copias-fuera-del-servidor) |
    | `FALLA  hora` | `sudo timedatectl set-ntp true`. Sin la hora bien, fallan el certificado y los códigos |
-   | `FALLA  certificado`, y `espera el servidor responde: sin certificado` | Abrí los puertos 80 y 443 en la nube, como dice la [guía de servidores](servidores.md#sin-darle-ninguna-clave-al-instalador). Todo sigue andando, y el certificado llega solo en unos minutos |
+   | `FALLA  certificado`, y `espera el servidor responde: sin certificado` | Abrí los puertos 80 y 443 en la nube, como dice la [guía de servidores](servidores.md#sin-darle-ninguna-clave-al-instalador). Todo sigue andando, y el certificado llega solo; si los puertos estuvieron cerrados mucho tiempo puede tardar horas, y «urna reiniciar» lo pide de nuevo enseguida |
    | `FALLA  fotos` | Lo explica [Fotos en un almacenamiento S3](servidores.md#fotos-en-un-almacenamiento-s3) |
 
    Para ver lo último que dijo el servidor:
