@@ -178,7 +178,8 @@ fixed list; roles are editable combinations. The server checks every request and
   and a phone prepared before the random identifiers, know it: whoever has that key, which backups carry, can try every
   DNI until theirs matches, in minutes. The purge replaces those ids and the random identifiers with new random ones and
   clears the order numbers.
-- The audit log cannot be edited.
+- The audit log cannot be edited. The one change made to it is the update that replaces the roll ids the first versions
+  wrote in it with random references, one per person, and the log records that it was done.
 - Each person gets in with a single-use invitation, which becomes a credential for that device. The municipal and national profiles
   also ask for a TOTP code on each device, except for poll watchers, who only see their table.
 - On iPhone, the installed app starts with its own empty storage: it gets in with an 8-digit number, single-use and valid for 15 minutes.

@@ -97,8 +97,26 @@ describe.skipIf(!url)('migrations, against a real Postgres', { timeout: 60_000 }
       pool.query(`INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload) VALUES ($1, 'mesa-a', $2, 'voter.marked', 'tel', $2, now(), $3)`, [id, seq, { elector }]);
     await mark('0190f3a0-0000-7000-8000-0000000000a1', 1, 'd-99550001');
     await mark('0190f3a0-0000-7000-8000-0000000000a2', 2, 'd-99550002');
+    // Its audit log named people by the roll id: the erased one twice, the one of the purged election, and one still there.
+    const already = '0190f3a0-0000-7000-8000-0000000000b1';
+    await pool.query(
+      `INSERT INTO audit_log (action, target, detail) VALUES ('semaphore.noted', 'd-99550002', '{"sensitive":true}'), ('person.erased', 'd-99550002', '{}'),
+         ('person.exported', 'd-99550003', '{}'), ('elector.corrected', 'd-99550001', '{}'), ('roll.downloaded', 'mesa-a', '{"people":2}'), ('person.consent', $1, '{}')`,
+      [already],
+    );
 
     expect(await migrate(pool)).toEqual(all);
+    // Each person is a random reference, the same in all their entries, and the rest of the log stays as it was.
+    const log = (await pool.query('SELECT action, target, detail FROM audit_log ORDER BY id')).rows;
+    expect(JSON.stringify(log)).not.toMatch(/9955000[123]/);
+    expect(log.map((row) => row.action)).toEqual(['semaphore.noted', 'person.erased', 'person.exported', 'elector.corrected', 'roll.downloaded', 'person.consent', 'audit.ids_replaced']);
+    const references = log.slice(0, 4).map((row) => row.target);
+    expect(references.every((target) => /^[0-9a-f-]{36}$/.test(target))).toBe(true);
+    expect(new Set(references).size).toBe(3);
+    expect(references[0]).toBe(references[1]);
+    expect(log[0].detail).toEqual({ sensitive: true });
+    expect(log.slice(4).map((row) => [row.target, row.detail])).toEqual([['mesa-a', { people: 2 }], [already, {}], [null, { entries: 4 }]]);
+    await expect(pool.query(`UPDATE audit_log SET target = 'd-99550001'`)).rejects.toThrow();
     const people = (await pool.query('SELECT id, public_id, erased_at IS NOT NULL AS erased, election_id = $1 AS open FROM electors ORDER BY open DESC, erased', [open])).rows;
     expect(people.map((row) => row.public_id)).toEqual([expect.stringMatching(/^[\w-]{16}$/), expect.stringMatching(/^[\w-]{16}$/), expect.stringMatching(/^[\w-]{16}$/)]);
     expect(people.map((row) => [row.id.startsWith('x-'), row.erased])).toEqual([[false, false], [true, true], [true, false]]);
