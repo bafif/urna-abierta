@@ -618,6 +618,21 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(detail.tallies[0]).toMatchObject({ disagree: false, chosen: two.id });
     });
 
+    it('a correction after the choice asks the chief again, unless it says the same as the chosen one', async () => {
+      const tally = (azul: number, seq: number) => ({ ...operation(table, seq), type: 'tally.submitted', payload: { category: 'cat-1', results: { l1: azul, l2: 10 } } });
+      const [one, two] = [tally(100, 1), tally(101, 2)];
+      await push('fiscal', table, [one, two]);
+      expect((await call('jefe', 'POST', `/api/tables/${table}/tally/decide`, { category: 'cat-1', operation: two.id })).statusCode).toBe(200);
+      const detail = async () => (await call('jefe', 'GET', `/api/tables/${table}/detail`)).json();
+      await push('fiscal', table, [tally(101, 3)]);
+      expect((await detail()).tallies[0]).toMatchObject({ disagree: false, chosen: two.id });
+      const fixed = tally(99, 4);
+      await push('fiscal', table, [fixed]);
+      expect((await detail()).tallies[0]).toMatchObject({ disagree: true, chosen: null });
+      expect((await call('jefe', 'POST', `/api/tables/${table}/tally/decide`, { category: 'cat-1', operation: fixed.id })).statusCode).toBe(200);
+      expect((await detail()).tallies[0]).toMatchObject({ disagree: false, chosen: fixed.id });
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');
