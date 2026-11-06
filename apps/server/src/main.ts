@@ -48,7 +48,14 @@ async function waitForDatabase(): Promise<void> {
 }
 
 await waitForDatabase();
-await migrate(pool);
+try {
+  const migrated = await migrate(pool);
+  if (migrated.length) console.log(`base: migraciones aplicadas ${migrated.join(', ')}`);
+} catch (error) {
+  // «urna estado» and «urna actualizar» show the last lines of the log: this one has to say it plainly.
+  console.error((error as Error).message);
+  process.exit(1);
+}
 const app = buildApp(pool, { testMode, photos });
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 3000) });
 console.log('servidor listo');
