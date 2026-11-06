@@ -20,6 +20,8 @@ export interface Actor {
   assignments: Assignment[];
   /** This device already proved the second step. */
   verified: boolean;
+  /** This device may set up the second step of a person who never did: see invitations.may_enroll. */
+  mayEnroll: boolean;
 }
 
 export const newToken = () => randomBytes(32).toString('base64url');
@@ -43,7 +45,7 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
   const known = actors.get(key);
   if (known && known.until > Date.now()) return known.actor;
   const found = await pool.query(
-    `SELECT d.id AS device_id, d.second_factor_at, u.id AS user_id, u.name
+    `SELECT d.id AS device_id, d.second_factor_at, d.may_enroll, u.id AS user_id, u.name
      FROM devices d JOIN users u ON u.id = d.user_id
      WHERE d.token_hash = $1 AND d.revoked_at IS NULL AND u.removed_at IS NULL`,
     [hashToken(token)],
@@ -59,7 +61,7 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
   const unique = [...new Set(assignments.map((a) => a.role))];
   edited ??= await getSetting<RoleOverrides>(pool, 'role_permissions', {});
   const permissions = permissionsOf(unique, edited);
-  const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, assignments, roles: unique, permissions };
+  const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, mayEnroll: row.may_enroll, assignments, roles: unique, permissions };
   if (actors.size > 5_000) actors.clear();
   actors.set(key, { until: Date.now() + ACTOR_MEMORY_MS, actor });
   return actor;

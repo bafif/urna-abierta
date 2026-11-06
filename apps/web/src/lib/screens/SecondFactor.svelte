@@ -11,10 +11,17 @@
   let code = $state('');
   let problem = $state('');
   let showing = $state(true);
+  /** This phone came from a link that cannot set it up: the person needs a new one from whoever manages the team. */
+  let refused = $state(false);
 
   onMount(async () => {
-    enrolment = await session.api('/auth/second-factor/start', { method: 'POST' });
-    showing = !enrolment?.enrolled;
+    try {
+      enrolment = await session.api('/auth/second-factor/start', { method: 'POST' });
+      showing = !enrolment?.enrolled;
+    } catch (error) {
+      if (!(error instanceof ApiError && error.code === 'needs_new_invitation')) throw error;
+      refused = true;
+    }
   });
 
   async function verify() {
@@ -29,7 +36,11 @@
   }
 </script>
 
-{#if enrolment && showing && enrolment.url}
+{#if refused}
+  <Pantalla accion="seguridad" titulo={t('second.setup.title')}>
+    <p class="problema" role="alert">{t('second.newInvitation')}</p>
+  </Pantalla>
+{:else if enrolment && showing && enrolment.url}
   <Pantalla accion="seguridad" titulo={t('second.setup.title')} bajada={t('second.setup.text')} desliza>
     <Qr text={enrolment.url} />
     <p class="aclara centrado">{t('second.setup.manual')}</p>

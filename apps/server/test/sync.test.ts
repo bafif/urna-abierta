@@ -205,6 +205,29 @@ describe.skipIf(!url)('against a real Postgres', () => {
       // Whoever manages people can already give anyone any role: they invite anyone.
       for (const target of ['Coordinación', 'Juli', 'Fiscal 1']) expect((await invite('coordinacion', idOf(target))).statusCode).toBe(200);
     });
+
+    it('a device from the link of someone who does not manage people cannot set up the second step of whoever never did', async () => {
+      const marta = ((await call('coordinacion', 'GET', '/api/users')).json().users as { id: string; name: string }[]).find((user) => user.name === 'Marta')!.id;
+      // The chief's link for a poll watcher of their table, who later gets a role that asks for the second step.
+      tokens.copia = await redeem((await call('jefe', 'POST', `/api/users/${marta}/invitation`)).json().invitation);
+      const fromCoordination = (await call('coordinacion', 'POST', `/api/users/${marta}/invitation`)).json().invitation as string;
+      await call('coordinacion', 'POST', `/api/users/${marta}/roles`, { role: 'semaforo' });
+      await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"local"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
+      expect((await call('copia', 'GET', '/api/me')).json().secondFactorNeeded).toBe(true);
+      const start = await call('copia', 'POST', '/api/auth/second-factor/start');
+      expect([start.statusCode, start.json()]).toEqual([403, { error: 'needs_new_invitation' }]);
+      expect((await call('copia', 'POST', '/api/auth/second-factor/verify', { code: '123456' })).json()).toEqual({ error: 'needs_new_invitation' });
+      // Nor does a code it makes for an installed app.
+      tokens.instalada = await redeem((await call('copia', 'POST', '/api/auth/handoff')).json().code);
+      expect((await call('instalada', 'POST', '/api/auth/second-factor/start')).json()).toEqual({ error: 'needs_new_invitation' });
+      // With a link from whoever manages people, the person sets it up, and from then on any phone of theirs proves it with the code.
+      tokens.nueva = await redeem(fromCoordination);
+      const { secret } = (await call('nueva', 'POST', '/api/auth/second-factor/start')).json();
+      const code = () => totpCode(secret, Math.floor(Date.now() / 30_000));
+      expect((await call('nueva', 'POST', '/api/auth/second-factor/verify', { code: code() })).statusCode).toBe(200);
+      expect((await call('copia', 'POST', '/api/auth/second-factor/start')).json()).toEqual({ enrolled: true });
+      expect((await call('copia', 'POST', '/api/auth/second-factor/verify', { code: code() })).statusCode).toBe(200);
+    });
   });
 
   describe('who sees what', () => {

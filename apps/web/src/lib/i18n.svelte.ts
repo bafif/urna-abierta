@@ -182,6 +182,7 @@ const es = {
   'second.text': 'Son los seis números que muestra tu app de códigos.',
   'second.confirm': 'Confirmar',
   'second.wrong': 'Ese código no es. Fijate el que aparece ahora y probá de nuevo.',
+  'second.newInvitation': 'Este teléfono entró con un link que no alcanza para activar el paso de seguridad. Pedile un link nuevo a quien maneja el equipo y entrá con ese.',
 
   'district.noElection': 'No hay ninguna elección en curso',
   'district.allGood': 'Todo en orden',
@@ -889,6 +890,7 @@ const en: Record<MessageKey, string> = {
   'second.text': 'The six digits your code app shows.',
   'second.confirm': 'Confirm',
   'second.wrong': 'That code is not right. Look at the one showing now and try again.',
+  'second.newInvitation': 'This phone came in with a link that cannot turn on the security step. Ask whoever manages the team for a new link, and come in with that one.',
 
   'district.noElection': 'No election is running',
   'district.allGood': 'All is well',
