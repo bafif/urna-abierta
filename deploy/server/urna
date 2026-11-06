@@ -184,27 +184,30 @@ restore() {
   while IFS= read -r name; do
     case "$name" in base.dump | fotos.tar | clave-campos) ;; *) strange 'un archivo de más' ;; esac
   done <"$work/nombres"
+  [ -z "$(sort "$work/nombres" | uniq -d)" ] || strange 'un archivo repetido'
+  [ "$(wc -l <"$work/nombres")" -eq 3 ] || incomplete
   # A link or anything else that is not a plain file.
   tar -tvf "$work/copia.tar" | grep -qv '^-' && strange 'un enlace'
-  mkdir "$work/copia"
-  tar -C "$work/copia" -xf "$work/copia.tar" --no-same-owner base.dump fotos.tar clave-campos 2>/dev/null || incomplete
-  [ -s "$work/copia/base.dump" ] && [ -f "$work/copia/clave-campos" ] && [ -f "$work/copia/fotos.tar" ] || incomplete
-  field_key=$(cat "$work/copia/clave-campos")
+  # Each file is read out of the backup when it is needed, never copied next to it: besides the photos, which have to
+  # land somewhere, restoring takes no more room than the backup itself, where /tmp may be a small part of the memory.
+  member() { tar -xOf "$work/copia.tar" "$1"; }
+  [ "$(member base.dump | head -c 1 | wc -c)" -eq 1 ] || incomplete
+  field_key=$(member clave-campos)
   case "$field_key" in *[!0-9a-f]*) strange 'una clave de campos rara' ;; esac
   [ "${#field_key}" -eq 64 ] || strange 'una clave de campos rara'
-  tar -tf "$work/copia/fotos.tar" >"$work/fotos" 2>/dev/null || incomplete
+  member fotos.tar | tar -tf - >"$work/fotos" 2>/dev/null || incomplete
   grep -Evx 'fotos(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*/?' "$work/fotos" >/dev/null && strange 'archivos fuera de la carpeta de las fotos'
-  tar -tvf "$work/copia/fotos.tar" | grep -Eqv '^[-d]' && strange 'un enlace entre las fotos'
+  member fotos.tar | tar -tvf - | grep -Eqv '^[-d]' && strange 'un enlace entre las fotos'
   # Next to where they go, so that putting them in place is only a rename.
   staging=$(mktemp -d "$home/.restaurando.XXXXXX")
-  if [ -s "$work/fotos" ]; then tar -C "$staging" -xf "$work/copia/fotos.tar" --no-same-owner fotos; fi
+  if [ -s "$work/fotos" ]; then member fotos.tar | tar -C "$staging" -xf - --no-same-owner fotos; fi
   mkdir -p "$staging/fotos"
 
   sed -i "s|^URNA_FIELD_KEY=.*|URNA_FIELD_KEY=$field_key|" "$home/.env"
   URNA_FIELD_KEY=$field_key
   podman rm -f "$pod-server" >/dev/null 2>&1 || true
   podman exec "$pod-db" psql -q -U urna -d urna -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null 2>&1
-  podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner <"$work/copia/base.dump"
+  member base.dump | podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner
   podman unshare rm -rf "$home/fotos"
   mv "$staging/fotos" "$home/fotos"
   start
