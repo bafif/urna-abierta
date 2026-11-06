@@ -1172,6 +1172,22 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await mark(`d-${documents[0]}`, open)).statusCode).toBe(404);
     });
 
+    it('the traffic light finds a document only whole, and its search takes no wildcards', async () => {
+      const [person] = (await pool.query('SELECT public_id, full_name, document FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 1', [table])).rows;
+      const found = async (q: string) => ((await call('semaforo', 'GET', `/api/elections/${demo.election}/people?q=${encodeURIComponent(q)}`)).json().people as { id: string }[]).map((p) => p.id).sort();
+      // The demo has some people in more than one row.
+      const same = (await pool.query('SELECT public_id FROM electors WHERE election_id = $1 AND document = $2', [demo.election, person.document])).rows.map((row) => row.public_id).sort();
+      expect(same).toContain(person.public_id);
+      expect(await found(person.document)).toEqual(same);
+      expect(await found(`${person.full_name} ${person.document}`)).toEqual(same);
+      expect(await found(`${person.document.slice(0, 2)}.${person.document.slice(2)}`)).toEqual(same);
+      // Part of it, alone or after the name, finds no one: otherwise it could be read a digit at a time.
+      for (const part of [person.document.slice(0, 3), person.document.slice(-3), `${person.full_name} ${person.document.slice(0, 1)}`, `${person.full_name} ${person.document.slice(0, -1)}`]) expect(await found(part)).toEqual([]);
+      for (const wildcard of ['__', '%%', `${person.full_name.slice(0, 2)}%`]) expect(await found(wildcard)).toEqual([]);
+      // A name is still found by any part of it.
+      expect(await found(person.full_name.slice(1, 5))).toContain(person.public_id);
+    });
+
     it('whoever cannot see sensitive marks cannot tell who has one by how a change is answered, nor touch it', async () => {
       const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
       const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;

@@ -182,6 +182,7 @@ fixed list; roles are editable combinations. The server checks every request and
   permission notes only a plain category, which stays under the sensitive one: they never change or clear it, and get the
   same answer whether the person has one or not. The encryption protects a dump of the database taken without the `.env`. It does not protect a copy of the whole disk or the backups, which carry
   the key, nor a running server.
+- The traffic light search finds a document only whole: with part of one, it could be read a digit at a time.
 - Erasing a person or purging an election also replaces their roll id, which is often the DNI. The audit log names each
   person by a random reference, never by that id, and that reference is replaced too on erasing or purging: what the log
   already said, a sensitive mark included, does not lead to the row. Until the purge, the erased row stays at its table

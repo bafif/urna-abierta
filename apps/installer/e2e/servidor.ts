@@ -210,7 +210,7 @@ writeFileSync(roll, `nombre,dni\n${Array.from({ length: 30 }, (_, i) => `Inventa
 podman('cp', roll, `${first.name}:/tmp/padron.csv`);
 podman('exec', first.name, 'curl', '-sk', '-X', 'POST', '-H', `authorization: Bearer ${token}`, '-H', 'content-type: text/csv', '--data-binary', '@/tmp/padron.csv', `https://localhost/api/elections/${election}/roll`);
 const proposed = api(first, 'POST', `/elections/${election}/tables/propose`, { token, body: { size: 10 } });
-const people = api(first, 'GET', `/elections/${election}/people?q=inventada%201`, { token }).people;
+const people = api(first, 'GET', `/elections/${election}/people?q=90000001`, { token }).people;
 // A sensitive category needs its own permission, which not even whoever coordinates has by default.
 const me = api(first, 'GET', '/me', { token });
 api(first, 'POST', `/users/${me.user.id}/roles`, { token, body: { role: 'semaforo_sensible' } });
@@ -298,7 +298,7 @@ const restored = asUbuntu('copia.tar.gpg', secrets.recoveryKey);
 record('restaura la copia desde la carpeta de quien entra, con su ruta corta', restored.ok && restored.said.includes('Copia restaurada') && restored.said.includes('URNA_S3_'), restored.said.split('\n'));
 const elections = api(second, 'GET', '/elections', { token }).elections;
 record('en el otro servidor está todo, y las mismas sesiones siguen valiendo', elections?.[0]?.name === 'Simulacro' && elections[0].people === 30 && elections[0].tables === 3, elections?.[0]);
-const again = api(second, 'GET', `/elections/${election}/people?q=inventada%201`, { token }).people.find((item: { id: string }) => item.id === people[0].id);
+const again = api(second, 'GET', `/elections/${election}/people?q=90000001`, { token }).people.find((item: { id: string }) => item.id === people[0].id);
 record('las categorías sensibles se pueden leer después de restaurar', again?.category === category.id);
 urna(second, 'copia');
 const alone = attempt('exec', second.name, 'urna', 'estado').said;

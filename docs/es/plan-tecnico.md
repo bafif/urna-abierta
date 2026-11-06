@@ -179,6 +179,7 @@ puede ver.
   solo una categoría común, que queda debajo de la sensible: nunca la cambia ni la saca, y le contestan lo mismo tenga la
   persona una sensible o no. El cifrado protege un volcado de la base que salga sin el `.env`. No protege una copia del disco entero ni los backups, que llevan la clave, ni a un
   servidor en marcha.
+- La búsqueda del semáforo encuentra un documento solo entero: con una parte se podría leer de a una cifra.
 - Al borrar a una persona o purgar una elección, también se reemplaza su id del padrón, que suele ser el DNI. El
   registro nombra a cada persona por una referencia al azar, nunca por ese id, y esa referencia también se cambia al
   borrar o purgar: lo que el registro ya decía, una marca sensible incluida, no lleva a la fila. Hasta la purga, la fila
