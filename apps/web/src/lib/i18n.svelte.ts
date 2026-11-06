@@ -685,6 +685,7 @@ const es = {
   'elections.preparing': 'En preparación',
   'numbers.pick': '¿Qué elección querés ver?',
   'light.pick': '¿En qué elección vas a anotar?',
+  'roll.problem.other_sheets': 'La planilla tiene otras hojas con algo escrito, y solo se lee la primera. Si el padrón sigue en otra hoja, pasalo todo a la primera y subila de nuevo.',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1376,6 +1377,7 @@ const en: Record<MessageKey, string> = {
   'elections.preparing': 'Being prepared',
   'numbers.pick': 'Which election do you want to see?',
   'light.pick': 'Which election will you note in?',
+  'roll.problem.other_sheets': 'The spreadsheet has other sheets with something written, and only the first one is read. If the roll goes on in another sheet, move it all to the first one and upload it again.',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;
