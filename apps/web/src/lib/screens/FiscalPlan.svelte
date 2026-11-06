@@ -82,9 +82,15 @@
 {#if !app.ready}
   <Pantalla />
 {:else if !table && session.me?.ended}
-  <Pantalla titulo={t('plan.ended.title')} bajada={t('plan.ended.text')}>
+  <!-- What is still on the phone goes out after the close too, so the person is told to wait for it. -->
+  <Pantalla titulo={t('plan.ended.title')} bajada={pending > 0 ? t('plan.finished.pending') : t('plan.ended.text')}>
+    {#if pending > 0}<SyncLine />{/if}
     {#snippet pie()}
-      <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+      <div class="pila">
+        <!-- Someone who worked an earlier election may be waiting for a table in the next one. -->
+        <button class="boton secundario" onclick={() => session.refresh()}>{t('plan.noTable.check')}</button>
+        <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+      </div>
     {/snippet}
   </Pantalla>
 {:else if !table}
