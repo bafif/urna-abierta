@@ -119,6 +119,31 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('jefe', 'POST', '/api/auth/second-factor/start')).json().enrolled).toBe(true);
     });
 
+    it('an open election holds the security level of its kind, on the server and for everyone', async () => {
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Sistemas', role: 'sistema' })).json();
+      tokens.sistema = await redeem(invitation);
+      expect((await call('jefe', 'GET', '/api/me')).json().secondFactorNeeded).toBe(false);
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Nacional', kind: 'nacional', days: ['2027-10-24'] })).json().id;
+      // From here on administrators need the second step too: this test gives it to all but the chief.
+      expect((await call('coordinacion', 'GET', '/api/users')).json().error).toBe('second_factor_needed');
+      const jefe = (await pool.query(`SELECT id FROM users WHERE name = 'Rubén'`)).rows[0].id;
+      await pool.query('UPDATE devices SET second_factor_at = now() WHERE user_id <> $1', [jefe]);
+      forgetActors();
+      const me = (await call('jefe', 'GET', '/api/me')).json();
+      expect(me.secondFactorNeeded).toBe(true);
+      expect(me.security).toMatchObject({ profile: 'nacional', minimum: 'nacional' });
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json().electors[0].documentSuffix).toHaveLength(3);
+      expect((await call('coordinacion', 'PUT', '/api/semaphore/fiscal-view', { enabled: true })).statusCode).toBe(409);
+      // Nobody lowers it while that election is open, not even whoever looks after the system.
+      const lower = await call('sistema', 'PUT', '/api/security', { profile: 'estudiantil' });
+      expect(lower.statusCode).toBe(409);
+      expect(lower.json()).toEqual({ error: 'election_needs_more', minimum: 'nacional' });
+      for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+      expect((await call('sistema', 'PUT', '/api/security', { profile: 'estudiantil' })).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', '/api/me')).json().secondFactorNeeded).toBe(false);
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json().electors[0].documentSuffix).toHaveLength(8);
+    });
+
     it('removing someone stops their phone', async () => {
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       const marta = users.find((u: { name: string }) => u.name === 'Marta');

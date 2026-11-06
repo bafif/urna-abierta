@@ -37,7 +37,8 @@ export interface Me {
   main: string | null;
   secondFactorNeeded: boolean;
   party: { name: string; theme: string };
-  security: { profile: string; chosen: boolean; fiscalSeesSemaphore: boolean; fiscalView: boolean; localHoursAfterClose?: number };
+  /** The profile in force: the one chosen, or what an open election asks for, if that is more. */
+  security: { profile: string; chosen: boolean; minimum?: string | null; fiscalSeesSemaphore: boolean; fiscalView: boolean; localHoursAfterClose?: number };
   table: TableInfo | null;
   contact: { name: string; phone: string | null } | null;
 }

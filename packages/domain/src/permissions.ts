@@ -60,6 +60,11 @@ export const SECURITY_PROFILES = {
 
 export type SecurityProfile = keyof typeof SECURITY_PROFILES;
 
+/** From the least to the most careful. */
+const STRICTNESS = Object.keys(SECURITY_PROFILES) as SecurityProfile[];
+
+export const stricterProfile = (a: SecurityProfile, b: SecurityProfile | null): SecurityProfile => (b && STRICTNESS.indexOf(b) > STRICTNESS.indexOf(a) ? b : a);
+
 export const isSecurityProfile = (value: unknown): value is SecurityProfile => typeof value === 'string' && value in SECURITY_PROFILES;
 
 /** The roles a party edited. A role that is not here has the recommended permissions. */

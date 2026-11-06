@@ -267,7 +267,7 @@ const es = {
   'invite.message': 'Hola {name}, te sumo a {party} en Urna Abierta. Entrá desde tu teléfono con este link, que es solo para vos: {link}',
 
   'security.title': '¿Qué tan delicada es tu elección?',
-  'security.text': 'Podés cambiarlo cuando quieras.',
+  'security.text': 'Podés cambiarlo cuando quieras. Una elección abierta pide por lo menos el nivel de su tipo.',
   'security.student.title': 'Facultad o centro de estudiantes',
   'security.student.detail': 'Lo básico, sin complicarle la vida a nadie.',
   'security.local.title': 'Municipal o provincial',
@@ -639,6 +639,7 @@ const es = {
   'roll.upload.corrected.one': 'La corrección que ya hiciste queda como está.',
   'roll.upload.closed': 'Esta elección ya cerró: su padrón no se puede cambiar.',
   'light.sensitiveMark': 'Ya tiene una categoría sensible, que ve solo quien tiene ese permiso. No la podés cambiar ni sacar.',
+  'security.held': 'Hay una elección abierta que pide más cuidado. Vas a poder bajarlo cuando cierre.',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -912,7 +913,7 @@ const en: Record<MessageKey, string> = {
   'invite.message': 'Hi {name}, I am adding you to {party} on Urna Abierta. Get in from your phone with this link, which is just for you: {link}',
 
   'security.title': 'How delicate is your election?',
-  'security.text': 'You can change it whenever you want.',
+  'security.text': 'You can change it whenever you want. An open election asks for at least the level of its kind.',
   'security.student.title': 'University or student union',
   'security.student.detail': 'The basics, without making anyone’s life harder.',
   'security.local.title': 'Municipal or provincial',
@@ -1284,6 +1285,7 @@ const en: Record<MessageKey, string> = {
   'roll.upload.corrected.one': 'The correction you already made stays as it is.',
   'roll.upload.closed': 'This election is closed: its roll cannot be changed.',
   'light.sensitiveMark': 'They already have a sensitive category, which only people with that permission can see. You cannot change it or remove it.',
+  'security.held': 'An open election asks for more care. You will be able to lower it once it closes.',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;

@@ -4,10 +4,10 @@
   import Pantalla from '../components/Pantalla.svelte';
   import { t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
-  import { session } from '../session.svelte.ts';
+  import { ApiError, session } from '../session.svelte.ts';
 
   let profile = $state<string | null>(session.me?.security.profile ?? 'estudiantil');
-  let failed = $state(false);
+  let failed = $state<'signal' | 'held' | null>(null);
 
   const items = $derived([
     { id: 'estudiantil', title: t('security.student.title'), detail: t('security.student.detail') },
@@ -16,20 +16,20 @@
   ]);
 
   async function save() {
-    failed = false;
+    failed = null;
     try {
       await session.api('/security', { method: 'PUT', body: { profile } });
       await session.refresh();
       nav.back();
-    } catch {
-      failed = true;
+    } catch (error) {
+      failed = error instanceof ApiError && error.code === 'election_needs_more' ? 'held' : 'signal';
     }
   }
 </script>
 
 <Pantalla accion="seguridad" volver titulo={t('security.title')} bajada={t('security.text')}>
   <Options {items} bind:value={profile} />
-  {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
+  {#if failed}<p class="problema" role="alert">{t(failed === 'held' ? 'security.held' : 'error.tryAgain')}</p>{/if}
   {#snippet pie()}
     <button class="boton primario" onclick={save}><Ic name="flecha" /><span>{t('next')}</span></button>
   {/snippet}
