@@ -27,6 +27,7 @@
 <Pantalla accion="partido" titulo={t('setup.title')} bajada={t('setup.text')} desliza>
   <label class="campo"><span>{t('setup.name')}</span><input bind:value={name} autocomplete="name" data-testid="setup-name" /></label>
   <label class="campo"><span>{t('setup.phone')}</span><input bind:value={phone} type="tel" autocomplete="tel" /></label>
+  <p class="aclara">{t('person.phone.hint')}</p>
   {#if !fromLink}
     <label class="campo"><span>{t('setup.code')}</span><input bind:value={code} autocomplete="off" data-testid="setup-code" /></label>
   {/if}

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { fakeRoll } from '@urna-abierta/domain';
+import { DEFAULT_TIME_ZONE, fakeRoll } from '@urna-abierta/domain';
 import { setSetting } from './actor.ts';
 import { photoStoreFromEnv, type PhotoStore } from './photo-store.ts';
 import { adminRoutes } from './routes-admin.ts';
@@ -19,13 +19,14 @@ export async function migrate(pool: pg.Pool): Promise<void> {
 export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 'Demo', startsInDays, tablesPerChief, fresh = false }: { size?: number; tables?: number; label?: string; startsInDays?: number; tablesPerChief?: number; fresh?: boolean } = {}) {
   if (fresh) await pool.query('TRUNCATE settings, users, elections, invitations, devices, role_assignments CASCADE');
   const election = randomUUID();
-  // From yesterday, so that today is a voting day whatever the time zone of the phone.
+  // From yesterday, so that today is a voting day whatever the time zone of the phone. Today where the election is.
   const offsets = startsInDays === undefined ? [-1, 0, 1, 2] : [startsInDays];
-  await pool.query(`INSERT INTO elections (id, name, kind, days, status, categories) VALUES ($1, $2, 'estudiantil', (SELECT array_agg(current_date + o) FROM unnest($4::int[]) AS o), 'jornada', $3)`, [
+  await pool.query(`INSERT INTO elections (id, name, kind, days, status, categories) VALUES ($1, $2, 'estudiantil', (SELECT array_agg((now() AT TIME ZONE $5)::date + o) FROM unnest($4::int[]) AS o), 'jornada', $3)`, [
     election,
     `Elección de prueba ${label}`,
     JSON.stringify([{ id: 'cat-1', name: 'Consejo Directivo', lists: [{ id: 'l1', name: 'Lista Azul' }, { id: 'l2', name: 'Lista Verde' }, { id: 'blanco', name: 'En blanco' }, { id: 'nulo', name: 'Nulos' }] }]),
     offsets,
+    DEFAULT_TIME_ZONE,
   ]);
   const unit = randomUUID();
   await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [unit, election, 'Distrito de prueba']);

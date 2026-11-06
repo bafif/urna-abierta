@@ -190,8 +190,9 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   expect(left).toBe(0);
 
   // And the phone lets go of the roll as soon as it hears the election closed.
+  // It says the election ended, not that there is no table yet.
   await fiscal.reload();
-  await expect(fiscal.getByRole('heading')).toHaveText('Todavía no tenés mesa');
+  await expect(fiscal.getByRole('heading')).toHaveText('La elección terminó. Gracias');
   await expect.poll(() => fiscal.evaluate(() => new Promise<number>((resolve) => {
     const open = indexedDB.open('urna-abierta');
     open.onsuccess = () => {
@@ -262,17 +263,35 @@ test('the chief gets the alert, sees who is silent, and two different counts wai
   const fiscal = await prepared(phone, demo.tables[0]!.invitations[0]!);
   await fiscal.getByRole('button', { name: 'Algo anda mal' }).click();
   await fiscal.getByTestId('report').click();
-  await expect(fiscal.getByText('Le llegó el aviso a Rubén.')).toBeVisible({ timeout: 20_000 });
+  // It only says what is true: the alert reached the system, not that the chief saw it.
+  await expect(fiscal.getByText('Tu aviso ya está en el sistema. Si es urgente, llamá a Rubén.')).toBeVisible({ timeout: 20_000 });
 
+  await page.addInitScript(() => {
+    const rung: number[][] = [];
+    (window as unknown as { rung: number[][] }).rung = rung;
+    navigator.vibrate = (pattern: VibratePattern) => rung.push([pattern].flat()) > 0;
+  });
   await enter(page, demo.links.jefe!);
   await expect(page.getByRole('heading')).toHaveText('2 mesas te necesitan');
   await expect(page.locator('.tarjeta.alerta')).toContainText('Mesa 12: aviso urgente');
+  await expect(page).toHaveTitle('(1) Urna Abierta');
   await expect(page.getByTestId('needs').nth(1)).toContainText('Mesa 13: sin datos');
   await page.locator('.tarjeta.alerta').click();
   await expect(page.getByRole('heading')).toHaveText('Marta avisó que algo anda mal');
   await expect(page.getByRole('link', { name: 'Llamar a Marta' })).toHaveAttribute('href', /^tel:/);
   await page.getByTestId('resolve').click();
   await expect(page.getByTestId('resolve')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await expect(page.locator('.tarjeta.alerta')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page).toHaveTitle('Urna Abierta');
+  // The one already on screen made no noise. A new one, with the panel open, does.
+  expect(await page.evaluate(() => (window as unknown as { rung: number[][] }).rung)).toEqual([]);
+  await fiscal.getByTestId('report').click();
+  await expect(page.locator('.tarjeta.alerta')).toContainText('Mesa 12: aviso urgente', { timeout: 40_000 });
+  await expect(page).toHaveTitle('(1) Urna Abierta');
+  expect(await page.evaluate(() => (window as unknown as { rung: number[][] }).rung)).toHaveLength(1);
+  await page.locator('.tarjeta.alerta').click();
+  await page.getByTestId('resolve').click();
   await page.getByRole('button', { name: 'Volver' }).click();
   await expect(page.locator('.tarjeta.alerta')).toHaveCount(0, { timeout: 15_000 });
 

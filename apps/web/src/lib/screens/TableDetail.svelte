@@ -12,7 +12,7 @@
     voted: number;
     fiscal: { name: string; phone: string | null } | null;
     categories: { id: string; name: string; lists: { id: string; name: string }[] }[];
-    incidents: { id: string; at: string; kind: string }[];
+    incidents: { id: string; at: string; kind: string; late?: boolean }[];
     envelopes: { day: string; envelopes: number; marked: number; matches: boolean }[];
     photos: string[];
     tallies: { category: string; disagree: boolean; chosen: string | null; versions: { id: string; results: Record<string, number>; at: string }[] }[];
@@ -73,6 +73,7 @@
     {#each detail.incidents as incident (incident.id)}
       <div class="tarjeta alerta">
         <strong>{t('table.urgentCard')}</strong><span>{timeAgo(incident.at)}</span>
+        {#if incident.late}<span data-testid="late">{t('table.urgentLate')}</span>{/if}
         <button class="enlace" data-testid="resolve" onclick={() => resolve(incident.id)}>{t('table.resolved')}</button>
       </div>
     {/each}

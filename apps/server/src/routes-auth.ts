@@ -1,8 +1,10 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { mainRole, SECURITY_PROFILES, themeProblems, type SecurityProfile } from '@urna-abierta/domain';
+import { dayIn, mainRole, SECURITY_PROFILES, storedPhone, themeProblems, type SecurityProfile } from '@urna-abierta/domain';
 import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, setSetting, totpMatches, unseal } from './actor.ts';
+import { clock } from './clock.ts';
+import { rollRevision, tableRoll } from './routes-sync.ts';
 
 /** The theme chosen when installing is the one everyone sees until the party says otherwise. */
 const defaultParty = () => ({ name: '', theme: process.env.URNA_TEMA ?? 'aula' });
@@ -79,7 +81,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (typeof name !== 'string' || !name.trim() || name.length > 120) return reply.code(400).send({ error: 'invalid_name' });
     if (accepted !== true) return reply.code(400).send({ error: 'must_accept_responsibility' });
     const userId = randomUUID();
-    await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name.trim(), typeof phone === 'string' ? phone : null]);
+    await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name.trim(), storedPhone(phone)]);
     for (const role of ['sistema', 'coordinacion']) {
       await pool.query('INSERT INTO role_assignments (id, user_id, role) VALUES ($1, $2, $3)', [randomUUID(), userId, role]);
     }
@@ -175,7 +177,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
     const tableIds = actor.assignments.filter((a) => a.role === 'fiscal' && a.table_id).map((a) => a.table_id);
     const tables = await pool.query(
-      `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories,
+      `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories, e.time_zone,
               (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total
        FROM polling_tables t JOIN elections e ON e.id = t.election_id
        WHERE t.id = ANY($1) AND e.status NOT IN ('cerrada', 'purgada')
@@ -183,23 +185,37 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       [tableIds],
     );
     const iso = (day: Date) => day.toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+    const now = clock.now();
     const shiftOf = (id: string) => actor.assignments.find((a) => a.role === 'fiscal' && a.table_id === id)?.days?.map(iso) ?? null;
-    // Someone may have a different table each day: the one of today, or else the next one.
-    const rank = (row: { id: string; days: Date[] }) => {
+    // Someone may have a different table each day: the one of today, or else the next one. Today where the election is.
+    const rank = (row: { id: string; days: Date[]; time_zone: string }) => {
       const days = shiftOf(row.id) ?? row.days.map(iso);
+      const today = dayIn(row.time_zone, now);
       return days.includes(today) ? 0 : days.some((day) => day > today) ? 1 : 2;
     };
     const table = [...tables.rows].sort((a, b) => rank(a) - rank(b))[0] ?? null;
     let contact = null;
+    let ended = false;
     if (table) {
+      // Someone with a phone, or the plan B has nothing to call: the chief of the table, one of the whole election, coordination.
       const chief = await pool.query(
         `SELECT u.name, u.phone FROM role_assignments a JOIN users u ON u.id = a.user_id
-         WHERE u.removed_at IS NULL AND ((a.role = 'jefe' AND a.unit_id = $1) OR a.role = 'coordinacion')
-         ORDER BY (a.role = 'jefe') DESC LIMIT 1`,
-        [table.unit_id],
+         WHERE u.removed_at IS NULL AND (a.expires_at IS NULL OR a.expires_at > now())
+           AND ((a.role = 'jefe' AND (a.unit_id = $1 OR (a.unit_id IS NULL AND (a.election_id IS NULL OR a.election_id = $2)))) OR a.role = 'coordinacion')
+         ORDER BY (btrim(coalesce(u.phone, '')) <> '') DESC, coalesce(a.role = 'jefe' AND a.unit_id = $1, false) DESC, (a.role = 'jefe') DESC, u.created_at
+         LIMIT 1`,
+        [table.unit_id, table.election_id],
       );
       contact = chief.rows[0] ?? null;
+    } else {
+      // Whoever worked an election that just closed is told so, rather than that they have no table yet.
+      // Only for a week: after that, someone from the primaries may be waiting for a table in the general election.
+      const closed = await pool.query(
+        `SELECT 1 FROM role_assignments a JOIN polling_tables t ON t.id = a.table_id JOIN elections e ON e.id = t.election_id
+         WHERE a.user_id = $1 AND a.role = 'fiscal' AND e.status IN ('cerrada', 'purgada') AND e.closed_at > now() - interval '7 days' LIMIT 1`,
+        [actor.userId],
+      );
+      ended = closed.rowCount !== 0;
     }
     return {
       user: { id: actor.userId, name: actor.name },
@@ -224,8 +240,11 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
         shift: shiftOf(table.id),
         categories: table.categories,
         total: table.total,
+        timeZone: table.time_zone,
+        rollRevision: rollRevision(await tableRoll(pool, table.id)),
       },
       contact,
+      ended,
     };
   });
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_BATCH, uuidv7, type Operation } from '@urna-abierta/domain';
-import { retryDelay, syncOnce, type SyncStore } from '../src/lib/sync.ts';
+import { photoTimeout, pullAll, pushNow, retryDelay, sendPhoto, syncOnce, type SyncStore } from '../src/lib/sync.ts';
 
 function makeOperation(seq: number): Operation {
   return {
@@ -116,6 +116,97 @@ describe('syncOnce', () => {
     const silent = (async () => json({ acked: [], rejected: [] })) as typeof fetch;
     expect(await syncOnce(store, 'm-1', '/api', silent)).toBe('failed');
     expect(state.queue).toHaveLength(1);
+  });
+});
+
+/** A connection that takes a request and never answers, until the phone gives up on it. */
+const hanging = (async (_url: string, init?: RequestInit) =>
+  new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal!.reason)))) as typeof fetch;
+
+describe('the clock of the server', () => {
+  it('says how far ahead the server is, against the middle of the request', async () => {
+    const { store } = memoryStore([makeOperation(1)]);
+    const offsets: number[] = [];
+    store.serverTime = (offset) => offsets.push(offset);
+    const ahead = 3 * 3_600_000;
+    const request = (async (url: string, init?: RequestInit) => {
+      const server_time = new Date(Date.now() + ahead).toISOString();
+      if (String(url).includes('/sync/push')) return json({ acked: JSON.parse(String(init?.body)).operations.map((o: Operation) => o.id), rejected: [], server_time });
+      return json({ operations: [], next: 1, more: false, server_time });
+    }) as typeof fetch;
+    expect(await syncOnce(store, 'm-1', '/api', request)).toBe('done');
+    expect(offsets).toHaveLength(2);
+    for (const offset of offsets) expect(Math.abs(offset - ahead)).toBeLessThan(1_000);
+  });
+});
+
+describe('pushNow, for an urgent alert', () => {
+  it('sends only that operation, not the marks queued before it', async () => {
+    const marks = Array.from({ length: 120 }, (_, i) => makeOperation(i));
+    const alert = { ...makeOperation(999), type: 'incident.reported', payload: { kind: 'urgent' } } as Operation;
+    const { store, state } = memoryStore([...marks, alert]);
+    const { received, request } = server();
+    expect(await pushNow(store, 'm-1', [alert], '/api', request, 8_000)).toBe(true);
+    expect(received).toEqual([[alert]]);
+    expect(state.queue).toHaveLength(120);
+  });
+
+  it('gives up in the time it was given, so that the plan B shows at once', async () => {
+    const alert = makeOperation(1);
+    const { store, state } = memoryStore([alert]);
+    const started = Date.now();
+    expect(await pushNow(store, 'm-1', [alert], '/api', hanging, 200)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(state.queue).toEqual([alert]);
+  });
+
+  it('is not sent if the server refuses it or fails', async () => {
+    const alert = makeOperation(1);
+    const { store } = memoryStore([alert]);
+    expect(await pushNow(store, 'm-1', [alert], '/api', server({ rejectIds: [alert.id] }).request)).toBe(false);
+    expect(await pushNow(store, 'm-1', [alert], '/api', (async () => json({ error: 'boom' }, 500)) as typeof fetch)).toBe(false);
+  });
+});
+
+describe('sendPhoto', () => {
+  const bytes = new Uint8Array(1000).buffer;
+
+  it('tells a photo the server will never take from one that has to go again', async () => {
+    const answer = (status: number) => (async () => json({}, status)) as typeof fetch;
+    expect(await sendPhoto('/p', bytes, answer(200))).toBe('sent');
+    expect(await sendPhoto('/p', bytes, answer(413))).toBe('refused');
+    expect(await sendPhoto('/p', bytes, answer(400))).toBe('refused');
+    expect(await sendPhoto('/p', bytes, answer(503))).toBe('failed');
+    expect(await sendPhoto('/p', bytes, (async () => { throw new TypeError('network'); }) as typeof fetch)).toBe('failed');
+  });
+
+  it('never waits forever on a stalled upload, which would hold back everything after it', async () => {
+    const started = Date.now();
+    expect(await sendPhoto('/p', bytes, hanging, 200)).toBe('failed');
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  it('gives a heavier photo more time, up to a ceiling', () => {
+    expect(photoTimeout(300_000)).toBe(45_000);
+    expect(photoTimeout(2_000_000)).toBe(130_000);
+    expect(photoTimeout(8_000_000)).toBe(180_000);
+  });
+});
+
+describe('pullAll', () => {
+  it('brings everything from the start, page by page, or nothing if a page fails', async () => {
+    const pages = [makeOperation(1), makeOperation(2), makeOperation(3)];
+    const asked: string[] = [];
+    const request = (async (url: string) => {
+      asked.push(String(url));
+      const since = Number(new URL(String(url), 'http://x').searchParams.get('since'));
+      return json({ operations: pages.slice(since, since + 2), next: Math.min(since + 2, 3), more: since + 2 < 3 });
+    }) as typeof fetch;
+    expect(await pullAll('m-1', '/api', request)).toEqual({ operations: pages, next: 3 });
+    expect(asked).toHaveLength(2);
+    let calls = 0;
+    const dropping = (async (url: string) => (calls++ === 0 ? request(url) : Promise.reject(new TypeError('dropped')))) as typeof fetch;
+    expect(await pullAll('m-1', '/api', dropping)).toBeNull();
   });
 });
 
