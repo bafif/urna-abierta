@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <style>.m { color: #1e5a44 } @media (prefers-color-scheme: dark) { .m { color: #f5d768 } }</style>
+  <g class="m">
+    <path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+    <rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/>
+  </g>
+</svg>
