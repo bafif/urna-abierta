@@ -175,7 +175,8 @@ puede ver.
   cargado de nuevo, y un teléfono preparado antes de los identificadores al azar, la reconozcan: quien tenga esa clave,
   que va en los backups, puede probar todos los DNI hasta dar con el suyo en minutos. La purga cambia esos ids y los
   identificadores al azar por otros nuevos y borra los números de orden.
-- El registro de auditoría no se puede editar.
+- El registro de auditoría no se puede editar. El único cambio que se le hace es la actualización que reemplaza los ids
+  del padrón que escribían las primeras versiones por referencias al azar, una por persona, y el registro anota que se hizo.
 - Cada persona entra con una invitación de un solo uso, que se convierte en una credencial de ese dispositivo. Los perfiles municipal
   y nacional piden además un código TOTP en cada dispositivo, salvo al fiscal, que solo ve su mesa.
 - En iPhone, la app instalada arranca con su propio almacenamiento vacío: entra con un número de 8 cifras, de un solo uso y 15 minutos.

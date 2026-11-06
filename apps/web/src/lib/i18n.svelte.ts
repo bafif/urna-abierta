@@ -546,6 +546,7 @@ const es = {
   'action.person.exported': 'Bajó los datos de una persona',
   'action.person.consent': 'Anotó un consentimiento',
   'action.person.erased': 'Borró los datos de una persona',
+  'action.audit.ids_replaced': 'Cambió por referencias al azar los identificadores del padrón que nombraba el registro',
 
   'settings.look': 'Cómo se ve',
   'settings.language': 'Idioma',
@@ -1252,6 +1253,7 @@ const en: Record<MessageKey, string> = {
   'action.person.exported': 'Downloaded the data of a person',
   'action.person.consent': 'Recorded a consent',
   'action.person.erased': 'Erased the data of a person',
+  'action.audit.ids_replaced': 'Replaced the roll ids the log named people by with random references',
 
   'settings.look': 'How it looks',
   'settings.language': 'Language',
