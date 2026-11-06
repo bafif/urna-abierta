@@ -75,14 +75,14 @@ Mi nombre puede figurar en una firma. Lo que no puede salir es mi dirección ni 
 | Sistema | Qué se publica | Qué ve quien instala |
 |---|---|---|
 | Windows | Sin firmar. Cuando haya un release, se pide la firma gratuita de SignPath Foundation, cuyo certificado va a nombre de la fundación y no lleva datos míos | SmartScreen avisa hasta que haya firma: «Más información» y «Ejecutar de todas formas» |
-| macOS | Firma ad-hoc, que no identifica a nadie. Si hace falta evitar el aviso: Developer ID y notarización, por USD 99 al año | macOS lo bloquea la primera vez: Ajustes, Privacidad y seguridad, «Abrir igual» |
-| Linux | Un ejecutable | Sin aviso |
+| macOS | En un `.zip`, que conserva el permiso de ejecutarlo. Firma ad-hoc, que no identifica a nadie. Si hace falta evitar el aviso: Developer ID y notarización, por USD 99 al año | macOS lo bloquea la primera vez: Ajustes, Privacidad y seguridad, «Abrir igual» |
+| Linux | Un ejecutable en un `.tar.gz`, que conserva el permiso de ejecutarlo | Sin aviso |
 
 Descarto el certificado de código abierto de Certum, porque publica la ciudad y la provincia, y Microsoft Artifact Signing, que
 para personas solo está disponible en Estados Unidos y Canadá.
 
 Como un instalador sin firmar es fácil de falsificar, cada release publica su SHA-256 y una atestación de GitHub, que lo ata al
-repo y al proceso de compilación. La guía explica cada aviso, con capturas, para que nadie los salte a ciegas.
+repo y al proceso de compilación. La guía explica cada aviso, con capturas, para que nadie los salte a ciegas. Cómo se publica una versión, en [Publicar una versión](publicar.md).
 
 ## Diseño
 

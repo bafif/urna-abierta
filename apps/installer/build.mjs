@@ -1,9 +1,9 @@
-// Builds the installer as a single executable for the platform it runs on.
-//   URNA_VERSION=0.1.0 node build.mjs
+// Builds the installer as a single executable for the platform it runs on, packed the way it gets published.
+//   URNA_VERSION=v0.1.0 node build.mjs
 // Files that it carries inside are declared in src/assets.ts.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { build } from 'esbuild';
 import { assetFiles } from './src/assets.ts';
@@ -11,7 +11,14 @@ import { assetFiles } from './src/assets.ts';
 const version = process.env.URNA_VERSION ?? 'latest';
 const platform = `${process.platform}-${process.arch}`;
 const windows = process.platform === 'win32';
-const output = `dist/urna-abierta-instalador-${platform}${windows ? '.exe' : ''}`;
+const mac = process.platform === 'darwin';
+/** Names a person recognizes on the releases page. */
+const FRIENDLY = { 'win32-x64': 'windows', 'darwin-arm64': 'mac-apple', 'darwin-x64': 'mac-intel', 'linux-x64': 'linux', 'linux-arm64': 'linux-arm' };
+const name = `urna-abierta-instalador-${FRIENDLY[platform] ?? platform}`;
+// Browsers drop the permission to run a bare file, and archives keep it. Windows does not need it.
+const published = `dist/${name}${windows ? '.exe' : mac ? '.zip' : '.tar.gz'}`;
+const output = windows ? published : 'dist/urna-abierta-instalador';
+rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist', { recursive: true });
 
 await build({
@@ -38,11 +45,13 @@ writeFileSync('dist/sea.json', JSON.stringify({
 execFileSync(process.execPath, ['--experimental-sea-config', 'dist/sea.json'], { stdio: 'inherit' });
 
 copyFileSync(process.execPath, output);
-if (process.platform === 'darwin') execFileSync('codesign', ['--remove-signature', output]);
-execFileSync('npx', ['postject', output, 'NODE_SEA_BLOB', 'dist/instalador.blob', '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2', ...(process.platform === 'darwin' ? ['--macho-segment-name', 'NODE_SEA'] : [])], { stdio: 'inherit', shell: windows });
+if (mac) execFileSync('codesign', ['--remove-signature', output]);
+execFileSync('npx', ['postject', output, 'NODE_SEA_BLOB', 'dist/instalador.blob', '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2', ...(mac ? ['--macho-segment-name', 'NODE_SEA'] : [])], { stdio: 'inherit', shell: windows });
 // macOS only runs what carries a signature. An ad-hoc one identifies nobody.
-if (process.platform === 'darwin') execFileSync('codesign', ['--sign', '-', output]);
+if (mac) execFileSync('codesign', ['--sign', '-', output]);
+if (mac) execFileSync('ditto', ['-c', '-k', '--keepParent', output, published]);
+if (!windows && !mac) execFileSync('tar', ['-czf', published, '-C', 'dist', basename(output)]);
 // So that anyone can check that what they downloaded is what was published.
-const digest = createHash('sha256').update(readFileSync(output)).digest('hex');
-writeFileSync(`${output}.sha256`, `${digest}  ${basename(output)}\n`);
-console.log(output);
+const digest = createHash('sha256').update(readFileSync(published)).digest('hex');
+writeFileSync(`${published}.sha256`, `${digest}  ${basename(published)}\n`);
+console.log(published);
