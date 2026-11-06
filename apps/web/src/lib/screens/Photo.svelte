@@ -30,7 +30,7 @@
   }
 </script>
 
-<Pantalla accion="escrutinio" volver ojo={t('photo.eyebrow')} titulo={t('photo.title')} bajada={t('photo.text')}>
+<Pantalla accion="escrutinio" volver aviso ojo={t('photo.eyebrow')} titulo={t('photo.title')} bajada={t('photo.text')}>
   {#if preview}
     <img class="foto-acta" src={preview} alt={t('photo.alt')} />
   {:else}

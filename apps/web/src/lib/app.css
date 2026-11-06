@@ -67,3 +67,14 @@ label.boton { text-align: center; }
 .registro { margin: 0; padding: 0; }
 .registro small { display: block; color: var(--suave); }
 .persona-boton { cursor: pointer; }
+
+/* «Algo anda mal» as a pill at the top right, on the screens with a keypad and on the photo. */
+.cabeza-fila { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cabeza-fila .atras { padding: 4px 0; }
+.pastilla-aviso { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--r-boton); background: var(--peligro-fondo); color: var(--peligro-texto) !important; box-shadow: inset 0 0 0 2px var(--peligro-borde); font-family: var(--f-boton); font-size: 17px !important; font-weight: 700; cursor: pointer; }
+.pastilla-aviso .ic { width: 20px; height: 20px; }
+/* Two links side by side at the bottom: the roll and the settings. */
+.renglon-enlaces { display: flex; justify-content: center; gap: 28px; }
+.pie .renglon-enlaces .enlace { width: auto; }
+/* What changed in a correction: the old number crossed out, the new one beside it. */
+.antes { color: var(--suave); text-decoration: line-through 2px; font-weight: 400; margin-right: 8px; }

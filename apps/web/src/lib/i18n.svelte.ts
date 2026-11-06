@@ -143,6 +143,28 @@ const es = {
   'tally.review.total': 'Total',
   'tally.review.match': 'Coincide con los {count} sobres.',
   'tally.review.differ': 'Contaste {envelopes} sobres y cargaste {votes} votos. Fijate antes de guardar.',
+  'correct.link': 'Corregir algo que cargaste',
+  'correct.hint': '¿Te equivocaste en algo? Lo podés corregir hasta que se cierre la elección.',
+  'correct.eyebrow': 'Corregir',
+  'correct.title': '¿Qué querés corregir?',
+  'correct.text': 'Lo que ya mandaste no se borra: tu jefe ve las dos versiones.',
+  'correct.envelopes': 'Sobres del {day}',
+  'correct.envelopes.detail': 'Contaste {count}',
+  'correct.otherDay': 'Sobres de otro día',
+  'correct.whichDay': '¿De qué día?',
+  'correct.tally': 'Escrutinio: {category}',
+  'correct.tally.detail': 'Cargaste {count} votos',
+  'correct.go': 'Corregir',
+  'correct.of': 'Corrección · {what}',
+  'correct.before': 'Habías contado {count}.',
+  'correct.tell': 'Le vamos a avisar a {name} para que elija cuál vale.',
+  'correct.tell.noName': 'Le vamos a avisar a tu jefe para que elija cuál vale.',
+  'correct.save': 'Guardar la corrección',
+  'correct.saved': 'Corrección guardada. {name} la va a ver.',
+  'correct.saved.noName': 'Corrección guardada. Tu jefe la va a ver.',
+  'roll.closed.ask': 'La votación de hoy ya cerró. ¿Tachar igual?',
+  'roll.closed.yes': 'Tachar igual',
+  'roll.closed.no': 'No, volver',
   'photo.eyebrow': 'Último paso',
   'photo.title': 'Sacale una foto al acta',
   'photo.text': 'Que se lean bien los números. Después ya está: terminaste.',
@@ -853,6 +875,28 @@ const en: Record<MessageKey, string> = {
   'tally.review.total': 'Total',
   'tally.review.match': 'It matches the {count} envelopes.',
   'tally.review.differ': 'You counted {envelopes} envelopes and entered {votes} votes. Check before saving.',
+  'correct.link': 'Correct something you entered',
+  'correct.hint': 'Made a mistake? You can correct it until the election closes.',
+  'correct.eyebrow': 'Correct',
+  'correct.title': 'What do you want to correct?',
+  'correct.text': 'What you already sent is not deleted: your chief sees both versions.',
+  'correct.envelopes': 'Envelopes of {day}',
+  'correct.envelopes.detail': 'You counted {count}',
+  'correct.otherDay': 'Envelopes of another day',
+  'correct.whichDay': 'Which day?',
+  'correct.tally': 'Vote count: {category}',
+  'correct.tally.detail': 'You entered {count} votes',
+  'correct.go': 'Correct',
+  'correct.of': 'Correction · {what}',
+  'correct.before': 'You had counted {count}.',
+  'correct.tell': 'We will let {name} know, to choose which one counts.',
+  'correct.tell.noName': 'We will let your chief know, to choose which one counts.',
+  'correct.save': 'Save the correction',
+  'correct.saved': 'Correction saved. {name} will see it.',
+  'correct.saved.noName': 'Correction saved. Your chief will see it.',
+  'roll.closed.ask': 'Today’s voting has closed. Cross out anyway?',
+  'roll.closed.yes': 'Cross out anyway',
+  'roll.closed.no': 'No, go back',
   'photo.eyebrow': 'Last step',
   'photo.title': 'Take a photo of the tally sheet',
   'photo.text': 'The numbers should be easy to read. After that, you are done.',
@@ -1449,6 +1493,17 @@ export function t(key: MessageKey, values: Record<string, string | number> = {})
 }
 
 /** «Martes 6 de abril»: a day as a date, at midday so that no time zone can move it to another day. */
+/** A day inside a sentence, short: «jueves 8». */
+export function formatDayShort(day: string): string {
+  const date = new Date(`${day}T12:00:00`);
+  return `${date.toLocaleDateString(current, { weekday: 'long' })} ${date.getDate()}`;
+}
+
+/** Several days, as one or the other: «martes 6 o miércoles 7». */
+export function formatDayChoice(days: string[]): string {
+  return new Intl.ListFormat(current, { type: 'disjunction' }).format(days.map(formatDayShort));
+}
+
 export function formatDay(day: string): string {
   const text = new Date(`${day}T12:00:00`).toLocaleDateString(current, { weekday: 'long', day: 'numeric', month: 'long' });
   return text.charAt(0).toUpperCase() + text.slice(1);

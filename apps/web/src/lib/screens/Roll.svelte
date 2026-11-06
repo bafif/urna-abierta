@@ -26,6 +26,14 @@
   const total = $derived(app.electors.length);
   const marked = $derived(app.markedCount);
   const days = $derived(app.table?.days.length ?? 1);
+  // The day closed when its envelopes were counted, or when today is no voting day after the first one.
+  const closed = $derived.by(() => {
+    const all = app.table?.days ?? [];
+    return app.countedDays.has(app.today) || (all.length > 0 && app.today > all[0]! && !all.includes(app.today));
+  });
+  let asking = $state<RollEntry | null>(null);
+  /** Asked once per visit: whoever said yes may have a few more to cross out. */
+  let allowed = false;
 
   function stay(id: string, on: boolean) {
     const next = new Set(staying);
@@ -36,6 +44,10 @@
 
   async function mark(entry: RollEntry) {
     if (app.noRoom || staying.has(entry.id)) return;
+    if (closed && !allowed) {
+      asking = entry;
+      return;
+    }
     last = entry;
     clearTimeout(undoTimer);
     undoTimer = setTimeout(() => (last = null), UNDO_MS);
@@ -46,6 +58,13 @@
       last = null;
       stay(entry.id, false);
     }
+  }
+
+  function markAnyway() {
+    allowed = true;
+    const entry = asking;
+    asking = null;
+    if (entry) void mark(entry);
   }
 
   function undo() {
@@ -95,6 +114,14 @@
     </div>
   {/if}
   {#snippet pie()}
-    <button class="boton discreto-peligro" onclick={() => nav.go('alert')}><Ic name="aviso" /><span>{t('roll.problem')}</span></button>
+    {#if asking}
+      <div class="pila" role="alertdialog" aria-label={t('roll.closed.ask')} data-testid="closed-ask">
+        <p class="aviso-fuerte">{t('roll.closed.ask')}</p>
+        <button class="boton primario" onclick={markAnyway}>{t('roll.closed.yes')}</button>
+        <button class="boton secundario" onclick={() => (asking = null)}>{t('roll.closed.no')}</button>
+      </div>
+    {:else}
+      <button class="boton discreto-peligro" onclick={() => nav.go('alert')}><Ic name="aviso" /><span>{t('roll.problem')}</span></button>
+    {/if}
   {/snippet}
 </Pantalla>
