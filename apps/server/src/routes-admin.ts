@@ -4,12 +4,19 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, isRole, isSecurityProfile, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
+import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 import { audit, authenticated, can, forgetActors, getSetting, requires, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
-const MAX_ROLL_BYTES = 64 * 1024 * 1024;
+/** A CSV saved by Excel in Spanish on Windows comes in Windows-1252: read as UTF-8, its accents would break. */
+function csvText(body: Buffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(body);
+  } catch {
+    return new TextDecoder('windows-1252').decode(body);
+  }
+}
 const STATS_ROLE_DAYS = 90;
 const STATUSES = ['preparacion', 'jornada', 'escrutinio', 'cerrada', 'purgada'];
 const KINDS = ['estudiantil', 'local', 'nacional', 'otra'];
@@ -231,7 +238,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const election = request.params.id;
     if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'send_a_file' });
     const isCsv = (request.headers['content-type'] ?? '').startsWith('text/csv');
-    const read: PadronRead = isCsv ? readCsvRoll(request.body.toString('utf8')) : readPadron(new Uint8Array(request.body));
+    const read: PadronRead = isCsv ? readCsvRoll(csvText(request.body)) : readPadron(new Uint8Array(request.body));
     if (!read.padron) return reply.code(422).send({ error: 'cannot_read', problems: read.problems });
     const { electors, manifest } = read.padron;
     const profile = await getSetting(pool, 'security_profile', 'estudiantil');
