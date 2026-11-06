@@ -638,6 +638,7 @@ const es = {
   'roll.upload.corrected': 'Las {count} correcciones que ya hiciste quedan como están.',
   'roll.upload.corrected.one': 'La corrección que ya hiciste queda como está.',
   'roll.upload.closed': 'Esta elección ya cerró: su padrón no se puede cambiar.',
+  'light.sensitiveMark': 'Ya tiene una categoría sensible, que ve solo quien tiene ese permiso. No la podés cambiar ni sacar.',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1282,6 +1283,7 @@ const en: Record<MessageKey, string> = {
   'roll.upload.corrected': 'The {count} corrections you already made stay as they are.',
   'roll.upload.corrected.one': 'The correction you already made stays as it is.',
   'roll.upload.closed': 'This election is closed: its roll cannot be changed.',
+  'light.sensitiveMark': 'They already have a sensitive category, which only people with that permission can see. You cannot change it or remove it.',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;

@@ -232,6 +232,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { category } = request.body ?? {};
     const ref = await refOf(pool, id, elector);
     if (!ref) return reply.code(404).send({ error: 'not_found' });
+    // Whoever cannot see a sensitive mark sees no mark at all: they must not replace it or clear it without knowing.
+    const current = await pool.query('SELECT sealed IS NOT NULL AS sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
+    if (current.rows[0]?.sealed && !can(request.actor, 'semaphore.sensitive')) return reply.code(403).send({ error: 'sensitive_mark' });
     if (category === null) {
       await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
       await audit(pool, request.actor, 'semaphore.cleared', ref);
@@ -274,12 +277,20 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!person.rows[0]) return reply.code(404).send({ error: 'not_found' });
     const mark = await pool.query('SELECT category_id, sealed, noted_at FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
     const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, id]);
-    await audit(pool, request.actor, 'person.exported', person.rows[0].ref);
+    const { ref } = person.rows[0];
+    await audit(pool, request.actor, 'person.exported', ref);
     const row = mark.rows[0];
-    const category = row && (row.sealed ? unseal(row.sealed) : row.category_id);
+    // A sensitive category is opened only for whoever has its own permission, and that is recorded as such.
+    const hidden = Boolean(row?.sealed) && !can(request.actor, 'semaphore.sensitive');
+    if (row?.sealed && !hidden) await audit(pool, request.actor, 'semaphore.sensitive_viewed', ref, { people: [ref] });
+    const category = row && !hidden ? (row.sealed ? unseal(row.sealed) : row.category_id) : null;
     const name = category && (await pool.query('SELECT name FROM semaphore_categories WHERE id = $1', [category])).rows[0]?.name;
     const { search: _search, ref: _ref, ...data } = person.rows[0];
-    return { person: data, semaphore: name ?? null, markedVoted: voted.rows.map((r) => r.device_time) };
+    return {
+      person: data,
+      semaphore: row ? { category: name ?? null, sensitive: Boolean(row.sealed), hidden, notedAt: row.noted_at } : null,
+      markedVoted: voted.rows.map((r) => r.device_time),
+    };
   });
 
   app.put<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {
