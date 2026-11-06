@@ -144,8 +144,8 @@ bucket. `urna restaurar` te lo recuerda.
 
 ### Copias fuera del servidor
 
-Las copias se hacen cada 6 horas y quedan en el disco del servidor: las últimas 28, una semana. Si se pierde el servidor, o la nube
-cierra la cuenta, se pierden con él. Para tener siempre una afuera:
+La primera se hace al instalar y después una cada 6 horas, y quedan en el disco del servidor: las últimas 28, una semana. Si se pierde
+el servidor, o la nube cierra la cuenta, se pierden con él. Para tener siempre una afuera:
 
 - **Bajalas desde la app**, en **Más cosas**, **Copias de seguridad**, cada tanto y sobre todo antes de la elección.
 - **Mandalas a un almacenamiento S3.** Si configurás uno para las fotos (abajo), cada copia va también al bucket, a la carpeta

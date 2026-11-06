@@ -144,8 +144,8 @@ the bucket. `urna restaurar` reminds you.
 
 ### Backups off the server
 
-Backups are made every 6 hours and stay on the server's disk: the last 28, one week. If the server is lost, or the cloud closes the
-account, they are lost with it. To always have one elsewhere:
+The first backup is made on installing and then one every 6 hours, and they stay on the server's disk: the last 28, one week. If the
+server is lost, or the cloud closes the account, they are lost with it. To always have one elsewhere:
 
 - **Download them from the app**, in **More**, **Backups**, now and then and above all before the election.
 - **Send them to S3 storage.** If you set one up for the photos (below), each backup also goes to the bucket, to a `backups/` folder
