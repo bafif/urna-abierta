@@ -748,7 +748,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const base = `/api/persons/${found.election_id}/${found.id}`;
       expect((await call('coordinacion', 'PUT', `${base}/consent`, { date: '2027-01-01', means: 'firma' })).statusCode).toBe(200);
       const exported = (await call('coordinacion', 'GET', `${base}/export`)).json();
-      expect(exported).toMatchObject({ party: 'Agrupación Ejemplo', consent: { date: '2027-01-01', means: 'firma' }, person: { name: found.full_name, document: found.document }, table: { name: 'Mesa 12' } });
+      expect(exported).toMatchObject({ party: 'Agrupación Ejemplo', consent: { date: '2027-01-01', means: 'firma' }, person: { name: found.full_name, document: found.document }, table: { name: found.table_name } });
       expect(exported.election.name).toContain('Elección de prueba');
       // Nothing internal: no ids, flags or raw columns.
       expect(Object.keys(exported).sort()).toEqual(['consent', 'election', 'markedVoted', 'party', 'person', 'semaphore', 'table']);
@@ -833,8 +833,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
       for (const action of ['users.viewed', 'district.viewed', 'table.viewed', 'table.pulled', 'audit.viewed', 'unit.created', 'table.changed']) expect(count(action), action).toBe(1);
       // Nothing in the log names anyone by roll id, document or name.
       const text = JSON.stringify(entries);
-      expect(text).not.toMatch(/99\d{6}/);
-      for (const person of people) expect(text).not.toContain(person.id);
+      const seen = (await pool.query('SELECT id, full_name, document FROM electors WHERE id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows;
+      for (const person of seen) for (const value of [person.id, person.full_name, person.document]) expect(text).not.toContain(value);
     });
 
     it('the audit log records who did what, and cannot be changed', async () => {
