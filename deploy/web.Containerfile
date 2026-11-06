@@ -10,5 +10,9 @@ COPY apps/web apps/web
 RUN pnpm --filter @urna-abierta/web build
 
 FROM docker.io/library/caddy:2-alpine
+# Ties the published image to the repository on GitHub.
+LABEL org.opencontainers.image.source="https://github.com/bafif/urna-abierta" \
+      org.opencontainers.image.description="Urna Abierta: the app and its web server" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/apps/web/build /srv

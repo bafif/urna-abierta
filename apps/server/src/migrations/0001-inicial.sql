@@ -19,12 +19,9 @@ CREATE TABLE IF NOT EXISTS elections (
   days date[] NOT NULL DEFAULT '{}',
   categories jsonb NOT NULL DEFAULT '[]',
   status text NOT NULL DEFAULT 'preparacion',
-  -- Which day it is depends on where the election happens, not on the server's clock.
-  time_zone text NOT NULL DEFAULT 'America/Argentina/Buenos_Aires',
   created_at timestamptz NOT NULL DEFAULT now(),
   closed_at timestamptz
 );
-ALTER TABLE elections ADD COLUMN IF NOT EXISTS time_zone text NOT NULL DEFAULT 'America/Argentina/Buenos_Aires';
 
 CREATE TABLE IF NOT EXISTS units (
   id text PRIMARY KEY,
@@ -76,17 +73,9 @@ CREATE TABLE IF NOT EXISTS devices (
   revoked_at timestamptz
 );
 
--- 96 random bits, written in 16 letters and digits.
-CREATE OR REPLACE FUNCTION new_public_id() RETURNS text AS $$
-  SELECT translate(encode(substr(uuid_send(gen_random_uuid()), 1, 6) || substr(uuid_send(gen_random_uuid()), 11, 6), 'base64'), '+/', '-_')
-$$ LANGUAGE sql VOLATILE;
-
 CREATE TABLE IF NOT EXISTS electors (
   election_id uuid NOT NULL REFERENCES elections (id) ON DELETE CASCADE,
   id text NOT NULL,
-  -- What phones know a person by. The id comes from the roll and can carry the whole document; this one is
-  -- random, its own in each election, and importing the roll again never changes it.
-  public_id text NOT NULL DEFAULT new_public_id(),
   table_id text REFERENCES polling_tables (id) ON DELETE SET NULL,
   order_number integer,
   full_name text NOT NULL,
@@ -100,19 +89,6 @@ CREATE TABLE IF NOT EXISTS electors (
   consent jsonb,
   PRIMARY KEY (election_id, id)
 );
--- What the audit log names a person by: never the roll id, which is often their DNI and outlives an erasure.
-ALTER TABLE electors ADD COLUMN IF NOT EXISTS ref uuid NOT NULL DEFAULT gen_random_uuid();
--- A name or document someone corrected: uploading the roll again does not undo it.
-ALTER TABLE electors ADD COLUMN IF NOT EXISTS corrected_at timestamptz;
--- Someone who asked to be erased: the row stays, with nothing of them, so that the totals of the table still add up.
-ALTER TABLE electors ADD COLUMN IF NOT EXISTS erased_at timestamptz;
--- Who the person was in the file, keyed with the field key: a roll without DNI or legajo names people by their row.
-ALTER TABLE electors ADD COLUMN IF NOT EXISTS source_key text;
--- Erasures made when the roll id already went, before they were marked as such.
-UPDATE electors SET erased_at = now() WHERE erased_at IS NULL AND id LIKE 'x-%' AND full_name = 'Borrado a pedido' AND search = '';
--- Elections purged before the roll ids went too still have them, and those are often the DNI.
-UPDATE electors SET id = 'x-' || replace(gen_random_uuid()::text, '-', ''), ref = gen_random_uuid(), order_number = NULL, source_key = NULL
-  WHERE id NOT LIKE 'x-%' AND election_id IN (SELECT id FROM elections WHERE status = 'purgada');
 CREATE INDEX IF NOT EXISTS electors_table ON electors (table_id, order_number);
 CREATE INDEX IF NOT EXISTS electors_document ON electors (document);
 
@@ -131,18 +107,6 @@ CREATE TABLE IF NOT EXISTS operations (
   UNIQUE (table_id, seq)
 );
 CREATE INDEX IF NOT EXISTS operations_type ON operations (table_id, type);
-
--- Databases from before the random ids: each person gets one, and the marks already sent name them by it.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'electors' AND column_name = 'public_id') THEN
-    ALTER TABLE electors ADD COLUMN public_id text NOT NULL DEFAULT new_public_id();
-    UPDATE operations o SET payload = jsonb_set(o.payload, '{elector}', to_jsonb(x.public_id))
-      FROM polling_tables t JOIN electors x ON x.election_id = t.election_id
-      WHERE o.table_id = t.id AND o.type IN ('voter.marked', 'voter.unmarked') AND x.id = o.payload->>'elector';
-  END IF;
-END $$;
-CREATE UNIQUE INDEX IF NOT EXISTS electors_public ON electors (election_id, public_id);
 
 CREATE TABLE IF NOT EXISTS incident_states (
   operation_id uuid PRIMARY KEY REFERENCES operations (id) ON DELETE CASCADE,
@@ -213,7 +177,3 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS audit_log_no_changes ON audit_log;
 CREATE TRIGGER audit_log_no_changes BEFORE UPDATE OR DELETE ON audit_log
   FOR EACH ROW EXECUTE FUNCTION audit_log_is_append_only();
--- Emptying the whole table at once does not go row by row, so it needs its own trigger.
-DROP TRIGGER IF EXISTS audit_log_no_truncate ON audit_log;
-CREATE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON audit_log
-  FOR EACH STATEMENT EXECUTE FUNCTION audit_log_is_append_only();

@@ -22,9 +22,17 @@ Para ver la propuesta de diseño alcanza con abrir `design/index.html` en el nav
 
 ## El instalador
 
-Se baja de la página de releases de GitHub, para Windows, macOS o Linux. Se abre en tu navegador y solo se ve desde tu computadora. Mientras
-no haya una versión publicada, se corre desde el código con `node apps/installer/src/main.ts`, y hay que tener las imágenes de los
-contenedores armadas.
+Se baja de la página de releases de GitHub, para Windows, macOS o Linux: [Bajarlo y abrirlo](#bajarlo-y-abrirlo) dice cuál. Se abre en tu
+navegador y solo se ve desde tu computadora.
+
+Mientras no haya una versión publicada, se corre desde el código, en la carpeta del repo, con Node 24 y Podman:
+
+```sh
+deploy/instalador.sh
+```
+
+Arma las imágenes del servidor y de la app con ese mismo código, y abre el instalador. Con esas imágenes anda la opción de probar en
+esta computadora; para instalar en un servidor hacen falta imágenes publicadas.
 
 Te hace tres preguntas y hace el resto.
 
@@ -94,13 +102,22 @@ Dos cosas importan más que el proveedor:
 - **Los servidores gratuitos suelen estar fuera de Argentina.** Eso tiene consecuencias legales, que corren por cuenta del partido.
   Están en la [información legal](../../LEGAL.md).
 
-## Los avisos del sistema
+## Bajarlo y abrirlo
 
-El instalador puede estar sin firmar, así que tu computadora te va a avisar. Es esperable:
+En la [página de releases](https://github.com/bafif/urna-abierta/releases/latest), bajá el de tu computadora. El instalador puede estar
+sin firmar, así que tu computadora te va a avisar. Es esperable:
 
-- **Windows:** tocá «Más información» y después «Ejecutar de todas formas».
-- **macOS:** lo bloquea la primera vez. Andá a Ajustes, Privacidad y seguridad, y tocá «Abrir igual».
-- **Linux:** no hay aviso.
+| Tu computadora | El archivo | Cómo abrirlo |
+|---|---|---|
+| Windows | `urna-abierta-instalador-windows.exe` | Doble clic. Si aparece «Windows protegió tu PC», tocá «Más información» y después «Ejecutar de todas formas» |
+| Mac con chip Apple | `urna-abierta-instalador-mac-apple.zip` | Doble clic en el `.zip`, y después en `urna-abierta-instalador`. La primera vez macOS lo bloquea: andá a Ajustes, Privacidad y seguridad, y tocá «Abrir igual» |
+| Mac con Intel | `urna-abierta-instalador-mac-intel.zip` | Igual que en una Mac con chip Apple |
+| Linux | `urna-abierta-instalador-linux.tar.gz` | Descomprimilo y, en una terminal abierta en esa carpeta, corré `./urna-abierta-instalador`. No hay aviso |
+
+Para saber qué Mac tenés: menú Apple, «Acerca de esta Mac». Dice «Chip Apple M…» o «Procesador Intel».
+
+Junto con el navegador se abre una ventana con letras sobre fondo negro. **Dejala abierta hasta terminar:** si la cerrás, el instalador
+se frena.
 
 Bajalo solamente de la página de releases, y comprobá que su SHA-256 sea el publicado. Un instalador falso es la forma más fácil de
 robarle los datos a un partido.

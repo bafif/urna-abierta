@@ -81,7 +81,7 @@ function assign(name: string, value: string): string {
 
 /**
  * A script without its comment lines, so that the whole block fits in what clouds accept. The block at the top stays,
- * because `urna` prints it as its help, and so does every here-document, because those lines are a file's content.
+ * because it says what the script is, and so does every here-document, because those lines are a file's content.
  */
 export function withoutComments(script: string): string {
   const kept: string[] = [];
@@ -121,15 +121,11 @@ export function renderScript({ secrets, site, cert, theme, images: chosen = imag
     ...(imagesTar ? [assign('URNA_IMAGES_TAR', imagesTar)] : []),
     ...(extraEnv.length ? [`URNA_EXTRA_ENV='${extraEnv.join('\n')}'`] : []),
   ];
+  // The `urna` script does not go here: it comes in the server image, so that each version brings its own.
   return [
     '#!/bin/sh',
     '# Urna Abierta: installs everything on an Ubuntu or Debian server.',
     ...settings,
-    'write_urna() {',
-    "cat <<'URNA_SCRIPT'",
-    withoutComments(assetText('urna')).trimEnd(),
-    'URNA_SCRIPT',
-    '}',
     withoutComments(assetText('instalar.sh')).trimEnd(),
     '',
   ].join('\n');
