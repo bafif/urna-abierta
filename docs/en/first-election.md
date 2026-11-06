@@ -173,7 +173,7 @@ You notice because nobody can get in, phones pile up items “not sent” and th
    | `FALLA  copias: no hay una reciente` | `sudo urna copia` |
    | `FALLA  copias en el bucket` | `sudo urna copia`, and look at what it says. [Backups off the server](servers.md#backups-off-the-server) explains it |
    | `FALLA  hora` | `sudo timedatectl set-ntp true`. Without the right time, the certificate and the codes fail |
-   | `FALLA  certificado` | Open ports 80 and 443 in the cloud, as the [servers guide](servers.md#without-giving-the-installer-any-key) says |
+   | `FALLA  certificado`, and `espera el servidor responde: sin certificado` | Open ports 80 and 443 in the cloud, as the [servers guide](servers.md#without-giving-the-installer-any-key) says. Everything keeps running, and the certificate arrives by itself in a few minutes |
    | `FALLA  fotos` | [Photos in S3 storage](servers.md#photos-in-s3-storage) explains it |
 
    To see what the server said last:

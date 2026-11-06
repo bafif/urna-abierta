@@ -107,7 +107,7 @@ After=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 Environment=URNA_HOME=$home
-ExecStart=$home/urna arrancar
+ExecStart=$home/urna arrancar sin-esperar
 ExecStop=$home/urna frenar
 TimeoutStartSec=600
 
@@ -156,10 +156,16 @@ ln -sf "$home/urna" /usr/local/bin/urna
 
 say 'starting'
 # With a user session it starts through systemd, so that it comes back after a reboot.
-started=no
 if [ -d "/run/user/$uid" ] && run_as_urna systemctl --user daemon-reload 2>/dev/null; then
   run_as_urna systemctl --user enable --now urna-copia.timer >/dev/null 2>&1 || true
-  if run_as_urna systemctl --user enable --now urna-abierta.service >/dev/null 2>&1; then started=yes; fi
+  run_as_urna systemctl --user enable --now urna-abierta.service >/dev/null 2>&1 || true
 fi
-[ "$started" = yes ] || run_as_urna "$home/urna" arrancar
-say "ready $URNA_SITE"
+# Starts what systemd did not, and waits for it to answer. A slow certificate, as while the
+# cloud's firewall keeps 80 and 443 closed, stops nothing: everything keeps running, and «urna estado» says what is missing.
+answered=0
+run_as_urna "$home/urna" arrancar || answered=$?
+case "$answered" in
+  0) say "ready $URNA_SITE" ;;
+  3) say "still_waiting $URNA_SITE" ;;
+  *) exit 1 ;;
+esac

@@ -152,10 +152,12 @@ wait_healthy() {
   return 1
 }
 
-# After wait_healthy failed. If the server already said why, that is enough.
+# After wait_healthy failed. If the server already said why, that is enough. If it only did not answer yet, everything
+# keeps running, and it ends with 3: the first time it is almost always the certificate, waiting for the ports.
 not_answering() {
-  [ "$1" = 2 ] || echo 'Arrancó, pero el servidor no responde todavía.' >&2
-  exit 1
+  [ "$1" = 2 ] && exit 1
+  echo 'Arrancó y queda andando, pero todavía no responde. La primera vez casi siempre falta el certificado, que llega cuando los puertos 80 y 443 están abiertos en el firewall de la nube. «urna estado» dice qué falta.' >&2
+  exit 3
 }
 
 backup() {
@@ -346,7 +348,16 @@ status() {
     [ "$state" = running ] && check "$name" ok || check "$name" mal "está $state. Probá «urna arrancar»"
   done
   answer=$(ask_here --max-time 10 "$health" 2>/dev/null || true)
-  if [ -n "$answer" ]; then check 'el servidor responde' ok; else check 'el servidor responde' mal "no contesta. Mirá lo último que dijo con «$(server_logs)»"; fi
+  address=$(site_address)
+  ends=$(echo | timeout 10 openssl s_client -connect "${URNA_TLS_CHECK:-localhost:443}" -servername "$address" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
+  if [ -n "$answer" ]; then
+    check 'el servidor responde' ok
+  elif [ -z "$ends" ]; then
+    # Without a certificate nobody gets in, this command neither: what is missing is the certificate, not the server.
+    check 'el servidor responde' espera 'sin certificado no se le puede preguntar. Mirá el renglón del certificado'
+  else
+    check 'el servidor responde' mal "no contesta. Mirá lo último que dijo con «$(server_logs)»"
+  fi
   photos_status "$answer"
   free=$(df -Pm "$home" | awk 'NR == 2 {print $4}')
   [ "$free" -gt 500 ] && check "disco: quedan $free MB" ok || check 'disco' mal "quedan $free MB. Borrá copias viejas"
@@ -360,15 +371,20 @@ status() {
     check 'copias en el bucket' mal "ninguna de las últimas 7 horas llegó a $URNA_S3_BUCKET. Corré «urna copia» y fijate qué dice"
   fi
   if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then check 'la hora está sincronizada' ok; else check 'hora' mal 'este servidor no sincroniza la hora'; fi
-  address=$(site_address)
-  ends=$(echo | timeout 10 openssl s_client -connect "${URNA_TLS_CHECK:-localhost:443}" -servername "$address" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
-  if [ -n "$ends" ]; then check "certificado hasta: $ends" ok; else check 'certificado' mal 'todavía no hay. Hacen falta los puertos 80 y 443 abiertos'; fi
+  if [ -n "$ends" ]; then check "certificado hasta: $ends" ok; else check 'certificado' mal "todavía no hay, y sin él nadie entra. Let's Encrypt lo da cuando llega a este servidor por los puertos 80 y 443: abrí TCP 80 y 443, y UDP 443, en el firewall de la nube, y en unos minutos llega solo"; fi
   [ "$problems" = 0 ] && echo 'Todo en orden.'
   return "$problems"
 }
 
 case "${1:-estado}" in
-  arrancar) start; wait_healthy || not_answering $?; echo 'Andando.' ;;
+  arrancar)
+    start
+    # Its systemd unit only starts the pod: a wait tied to the unit would make systemd stop every container when
+    # the certificate takes long, as it does while the ports are closed. Whoever installs waits with a second «arrancar».
+    [ "${2:-}" = sin-esperar ] && exit 0
+    wait_healthy || not_answering $?
+    echo 'Andando.'
+    ;;
   frenar) stop_all ;;
   copia) backup ;;
   restaurar)

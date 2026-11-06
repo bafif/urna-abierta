@@ -19,7 +19,12 @@ cat >"$work/bin/curl" <<'EOF'
 printf '%s' "$FAKE_HEALTH"
 EOF
 printf '#!/bin/sh\necho yes\n' >"$work/bin/timedatectl"
-printf '#!/bin/sh\nexit 1\n' >"$work/bin/openssl"
+# There is a certificate only when FAKE_CERT says until when.
+cat >"$work/bin/openssl" <<'EOF'
+#!/bin/sh
+[ "$1" = x509 ] && [ -n "${FAKE_CERT:-}" ] && { echo "notAfter=$FAKE_CERT"; exit 0; }
+exit 1
+EOF
 chmod +x "$work/bin/"*
 touch "$work/home/copias/urna-20270101-000000.tar.gpg"
 
@@ -46,22 +51,32 @@ never() {
 bucket='URNA_S3_ENDPOINT=https://s3.ejemplo.test
 URNA_S3_BUCKET=fotos-prueba'
 
-estado 'sin respuesta, con bucket' "$bucket"
+cert='FAKE_CERT=Feb  1 00:00:00 2027 GMT'
+
+# The first boot while the cloud's firewall keeps the ports closed: it is the certificate, not the server.
+estado 'sin certificado todavía' ''
+says 'espera el servidor responde: sin certificado no se le puede preguntar'
+says 'FALLA  certificado: todavía no hay'
+says 'abrí TCP 80 y 443, y UDP 443, en el firewall de la nube'
+never 'podman logs'
+
+estado 'sin respuesta, con bucket' "$bucket" "$cert"
 says 'FALLA  el servidor responde: no contesta. Mirá lo último que dijo con «podman logs --tail 50 otra-server»'
 never 'urna-server'
 says 'espera fotos: según .env se guardan en el bucket fotos-prueba de https://s3.ejemplo.test, cifradas. El bucket no entra en la copia. Hasta que el servidor conteste, no se sabe si llegan'
 
-estado 'sin respuesta, sin bucket' ''
+estado 'sin respuesta, sin bucket' '' "$cert"
 says "bien   fotos: en el disco, en $work/home/fotos, y entran en la copia"
 
-estado 'sin respuesta, entrando como root' "$bucket" URNA_FROM_ROOT=si
+estado 'sin respuesta, entrando como root' "$bucket" "$cert" URNA_FROM_ROOT=si
 says "no contesta. Mirá lo último que dijo con «sudo runuser -u $(id -un) -- env XDG_RUNTIME_DIR=/run/user/$(id -u) HOME=$work/home podman logs --tail 50 otra-server»"
 
-estado 'con respuesta, con bucket' "$bucket" FAKE_HEALTH='{"ok":true,"photos":{"storage":"s3","working":true}}'
+estado 'con respuesta, con bucket' "$bucket" "$cert" FAKE_HEALTH='{"ok":true,"photos":{"storage":"s3","working":true}}'
 says 'bien   el servidor responde'
 says 'bien   fotos: en el bucket fotos-prueba de https://s3.ejemplo.test, cifradas'
+says 'bien   certificado hasta: Feb  1 00:00:00 2027 GMT'
 
-estado 'el bucket no anda' "$bucket" FAKE_HEALTH='{"ok":true,"photos":{"storage":"s3","working":false}}'
+estado 'el bucket no anda' "$bucket" "$cert" FAKE_HEALTH='{"ok":true,"photos":{"storage":"s3","working":false}}'
 says 'FALLA  fotos: no se pueden guardar en el bucket fotos-prueba'
 says '«podman logs --tail 50 otra-server»'
 
