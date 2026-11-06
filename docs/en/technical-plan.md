@@ -118,8 +118,9 @@ Fonts travel with the app, because it has to work without signal, and all of the
 ## Without signal, and sync
 
 Everything is saved on the phone first, and the screen responds without waiting for the network. With signal, “Prepare
-table” downloads the roll of that table, without addresses. Each action is an operation with its own identifier, and
-sending it again duplicates nothing.
+table” downloads the roll of that table, without addresses, and with a random identifier for each person, never their
+document. If the roll changes afterwards, the phone downloads it again by itself when it has signal, and what was crossed out
+stays. Each action is an operation with its own identifier, and sending it again duplicates nothing.
 
 | Data | Rule |
 |---|---|
@@ -129,16 +130,18 @@ sending it again duplicates nothing.
 | Tally sheet photo | Identified by its SHA-256 |
 | Roll, schedule, permissions, traffic light | Edited only with signal |
 
-No rule depends on the clock of a phone. Each table numbers its operations under a lock on its row, because with one global
-sequence a reader can miss rows that commit out of order. What arrives after the close goes to quarantine for
-review instead of being discarded. A revoked phone stops sending, and what it had stays saved on it.
+No rule depends on the clock of a phone: the day comes from the server's clock, in the election's time zone. Each table numbers
+its operations under a lock on its row, because with one global sequence a reader can miss rows that commit out of order. What
+arrives after the close goes to quarantine for review instead of being discarded, except marks that arrive after the purge,
+which are dropped. A revoked phone stops sending, and what it had stays saved on it.
 
 A phone with no space is the worst case, because writing to the database can break it and lose everything. The app checks when
 it opens, when preparing the table and every 10 minutes, with a separate write. With no room it warns and blocks crossing out
 until space is freed; if a write fails anyway, the person goes back to the list and the app says so. It never shows as saved
 what was not saved.
 
-The urgent alert is saved and sent. If it does not go out, it offers a call, WhatsApp and SMS, with the table and the type
+The urgent alert is saved and goes out first, on its own, without waiting for what is queued. If it does not go out within a
+few seconds, it offers a call, WhatsApp and SMS, with the table and the type
 of problem, and no voter data.
 
 ### Elections lasting several days
