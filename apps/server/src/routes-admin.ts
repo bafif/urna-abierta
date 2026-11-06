@@ -202,7 +202,9 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (typeof kind !== 'string' || !KINDS.includes(kind)) return reply.code(400).send({ error: 'invalid_kind' });
     const dates = Array.isArray(days) ? days.filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) : [];
     if (dates.length === 0) return reply.code(400).send({ error: 'no_days' });
-    if (timeZone !== undefined && !isTimeZone(timeZone)) return reply.code(400).send({ error: 'invalid_time_zone' });
+    // Postgres has to know it too: the panel works out the day there, and a zone it lacks would break it for the whole election.
+    const zoneKnown = async (zone: string) => (await pool.query('SELECT 1 FROM pg_timezone_names WHERE name = $1', [zone])).rowCount !== 0;
+    if (timeZone !== undefined && !(isTimeZone(timeZone) && (await zoneKnown(timeZone)))) return reply.code(400).send({ error: 'invalid_time_zone' });
     const id = randomUUID();
     await pool.query('INSERT INTO elections (id, name, kind, days, categories, time_zone) VALUES ($1, $2, $3, $4::date[], $5, $6)', [id, name, kind, dates, JSON.stringify(Array.isArray(categories) ? categories : []), timeZone ?? DEFAULT_TIME_ZONE]);
     await audit(pool, request.actor, 'election.created', id);

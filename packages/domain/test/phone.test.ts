@@ -68,4 +68,9 @@ describe('the day in the time zone of the election', () => {
     expect(isTimeZone('Marte/Olympus')).toBe(false);
     expect(dayIn('Marte/Olympus', new Date('2027-04-07T01:00:00Z'))).toBe('2027-04-06');
   });
+
+  it('only a name of the time zone database counts, never an offset that Postgres would read backwards', () => {
+    for (const name of ['UTC', 'America/Argentina/Buenos_Aires', 'Europe/Madrid', 'Etc/GMT+3']) expect(isTimeZone(name)).toBe(true);
+    for (const offset of ['-0300', '-03:00', '+03:00', '-3', 'GMT+3', 'EST5EDT', 'utc', 'america/argentina/buenos_aires', '']) expect(isTimeZone(offset)).toBe(false);
+  });
 });
