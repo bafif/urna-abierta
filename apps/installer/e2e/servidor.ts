@@ -118,6 +118,10 @@ const urna = (m: { name: string }, ...args: string[]) => podman('exec', m.name, 
 /** As the user that owns the containers, the way `urna` runs them. */
 const asUrna = (m: { name: string }, ...args: string[]) =>
   podman('exec', m.name, 'sh', '-c', 'runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta "$@"', 'sh', ...args);
+/** A container next to the database, in the same pod, as the web one is, that asks it for something with that password or none. */
+const fromThePod = (m: { name: string }, password?: string) =>
+  attempt('exec', m.name, 'sh', '-c', 'runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta "$@"', 'sh',
+    'podman', 'run', '--rm', '--pod', 'urna', ...(password ? ['-e', `PGPASSWORD=${password}`] : []), images.db, 'psql', '-h', '127.0.0.1', '-U', 'urna', '-w', '-tAc', 'SELECT 1');
 const raw = s3Client({ endpoint: bucket.endpoint, bucket: bucket.name, region: bucket.region, accessKeyId: bucket.accessKeyId, secretAccessKey: bucket.secretAccessKey });
 
 /** A backup made by hand, opened by `key`, whose photos would replace the commands and add a service, and whose field key is a command. */
@@ -194,6 +198,9 @@ record('la app responde, pide el primer administrador y usa el tema elegido', pu
 const refused = api(first, 'POST', '/setup', { body: { code: 'otro', name: 'Laura', accepted: true } });
 const { token } = api(first, 'POST', '/setup', { body: { code: secrets.setupCode, name: 'Laura', accepted: true } });
 record('el primer administrador entra solo con el código', refused.error === 'wrong_code' && Boolean(token));
+const noPassword = fromThePod(first);
+const wrongPassword = fromThePod(first, 'otra');
+record('dentro del pod, la base pide su clave: un contenedor vecino, como el de la web, no entra sin ella', !noPassword.ok && noPassword.said.includes('no password supplied') && !wrongPassword.ok && wrongPassword.said.includes('password authentication failed'), [noPassword.said.trim(), wrongPassword.said.trim()]);
 
 api(first, 'PUT', '/party', { token, body: { name: 'Agrupación Ejemplo', theme: 'mate' } });
 const { id: election } = api(first, 'POST', '/elections', { token, body: { name: 'Simulacro', kind: 'estudiantil', days: ['2027-04-06'], categories: [] } });
@@ -225,6 +232,11 @@ record('«urna estado» dice que está todo bien, y que las copias van al bucket
 const copy = join(work, 'copia.tar.gpg');
 podman('cp', `${first.name}:${backup}`, copy);
 
+// A database as installations from before have it, which trusts whoever connects from inside the pod.
+asUrna(first, 'podman', 'exec', '-u', 'postgres', 'urna-db', 'sh', '-c', 'sed -i -- "s/scram-sha-256$/trust/" "$PGDATA/pg_hba.conf" && kill -HUP 1');
+await sleep(2_000);
+const trusting = fromThePod(first);
+
 // Updating: the next version is already on the machine, as if it had been downloaded.
 podman('cp', nextFile, `${first.name}:/tmp/nuevas.tar`);
 podman('exec', first.name, 'chmod', '644', '/tmp/nuevas.tar');
@@ -238,6 +250,8 @@ record('trae las imágenes y los comandos de esa versión, y la base se pone al 
 const afterUpdate = api(first, 'GET', '/elections', { token }).elections;
 const backupsNow = api(first, 'GET', '/backups', { token }).backups;
 record('después de actualizar están los datos, siguen las sesiones y hay una copia de antes', afterUpdate?.[0]?.name === 'Simulacro' && afterUpdate[0].people === 30 && backupsNow?.length === 2, afterUpdate?.[0]);
+const closedNow = fromThePod(first);
+record('«urna actualizar» le pide la clave también a una base que confiaba en el pod', trusting.ok && trusting.said.trim() === '1' && !closedNow.ok && closedNow.said.includes('no password supplied'), [trusting.said.trim(), closedNow.said.trim()]);
 const same = attempt('exec', first.name, 'urna', 'actualizar', 'nueva');
 const missing = attempt('exec', first.name, 'urna', 'actualizar', 'v0.0.0-no-existe');
 const unchanged = podman('exec', first.name, 'grep', '^URNA_IMAGE_SERVER=', '/opt/urna-abierta/.env');

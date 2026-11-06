@@ -65,9 +65,12 @@ start() {
     # shellcheck disable=SC2086
     podman pod create --name "$pod" --network "$(network)" $ports >/dev/null
   fi
+  # The database asks for its password on every connection, from the socket too: the web container shares the pod's
+  # network, and gets nowhere without it. PGPASSWORD is for the commands that run inside, such as pg_dump.
   if ! podman container exists "$pod-db"; then
     podman run -d --pod "$pod" --name "$pod-db" --restart=always \
-      -e POSTGRES_USER=urna -e POSTGRES_DB=urna -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+      -e POSTGRES_USER=urna -e POSTGRES_DB=urna -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" -e PGPASSWORD="$POSTGRES_PASSWORD" \
+      -e POSTGRES_INITDB_ARGS='--auth-host=scram-sha-256 --auth-local=scram-sha-256' \
       -v "$pod-database:/var/lib/postgresql" "$URNA_IMAGE_DB" \
       postgres -c shared_buffers=128MB -c max_connections=20 -c work_mem=4MB -c effective_cache_size=384MB >/dev/null
   fi
@@ -85,6 +88,10 @@ start() {
       -v "$pod-caddy-data:/data" -v "$pod-caddy-config:/config" "$URNA_IMAGE_WEB" >/dev/null
   fi
   podman pod start "$pod" >/dev/null
+  # A database made before that trusted every connection from inside the pod. Once its container has the password, as
+  # the one above, it asks for it too, from then on: the next «urna actualizar» or «urna reiniciar» does it.
+  podman exec -u postgres "$pod-db" sh -c '[ -n "${PGPASSWORD:-}" ] && grep -qs -- "[[:space:]]trust$" "$PGDATA/pg_hba.conf" || exit 0
+    sed -i -- "s/[[:space:]]trust$/ scram-sha-256/" "$PGDATA/pg_hba.conf" && kill -HUP 1' >/dev/null 2>&1 || true
 }
 
 stop_all() {
