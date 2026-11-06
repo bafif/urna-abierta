@@ -20,7 +20,22 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
   mkdirSync(gnupg, { mode: 0o700 });
   const bin = join(root, 'bin');
   mkdirSync(bin);
-  writeFileSync(join(bin, 'podman'), '#!/bin/sh\ncase "$1" in\n  unshare) shift; exec "$@" ;;\n  inspect) echo 0 ;;\n  *) exit 0 ;;\nesac\n', { mode: 0o755 });
+  // What reaches pg_restore is kept, with what the restore had in its temporary folder by then. With PRUEBA_BASE_FALLA,
+  // the database refuses to be emptied, as one that asks for a password the command does not have.
+  writeFileSync(join(bin, 'podman'), [
+    '#!/bin/sh',
+    'case "$1" in',
+    '  unshare) shift; exec "$@" ;;',
+    '  inspect) echo 0 ;;',
+    '  exec)',
+    '    case "$*" in',
+    '      *pg_restore*) cat >"$PRUEBA_VOLCADO"; find "$TMPDIR" -type f >"$PRUEBA_VOLCADO.temporales" ;;',
+    '      *DROP*) [ -z "${PRUEBA_BASE_FALLA:-}" ] || { echo "psql: error: fe_sendauth: no password supplied" >&2; exit 2; } ;;',
+    '    esac ;;',
+    'esac',
+    'exit 0',
+    '',
+  ].join('\n'), { mode: 0o755 });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   let count = 0;
   const env = { ...process.env, GNUPGHOME: gnupg, PATH: `${bin}:${process.env.PATH}`, URNA_HEALTH_URL: 'file:///etc/hostname' };
@@ -33,8 +48,11 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     copyFileSync(script, join(home, 'urna'));
     writeFileSync(join(home, '.env'), ['POSTGRES_PASSWORD=inventada', `URNA_FIELD_KEY=${'0'.repeat(64)}`, `URNA_BACKUP_KEY=${KEY}`, 'URNA_SITE=https://192.0.2.10', 'URNA_CERT=ip', 'URNA_IMAGE_SERVER=localhost/urna-server:v1', 'URNA_IMAGE_WEB=localhost/urna-web:v1', 'URNA_IMAGE_DB=localhost/postgres:18', ''].join('\n'), { mode: 0o600 });
     writeFileSync(join(home, 'fotos', 'propia'), 'foto de antes');
-    const restore = (file: string) => {
-      const done = spawnSync('sh', [join(home, 'urna'), 'restaurar', file, KEY], { env: { ...env, URNA_HOME: home }, encoding: 'utf8' });
+    const temporary = join(root, `tmp-${count}`);
+    mkdirSync(temporary);
+    const dump = join(root, `volcado-${count}`);
+    const restore = (file: string, more: Record<string, string> = {}) => {
+      const done = spawnSync('sh', [join(home, 'urna'), 'restaurar', file, KEY], { env: { ...env, URNA_HOME: home, TMPDIR: temporary, PRUEBA_VOLCADO: dump, ...more }, encoding: 'utf8' });
       return { ok: done.status === 0, said: `${done.stdout}${done.stderr}` };
     };
     const untouched = () =>
@@ -42,11 +60,11 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
       readFileSync(join(home, '.env'), 'utf8').includes(`URNA_FIELD_KEY=${'0'.repeat(64)}\n`) &&
       !existsSync(join(home, '.config/systemd/user/urna-copia.service')) &&
       existsSync(join(home, 'fotos', 'propia'));
-    return { home, restore, untouched };
+    return { home, restore, untouched, dump };
   }
 
   /** A backup: its files as given, and fotos.tar made from what `photos` leaves in a folder. */
-  function backup({ fieldKey = FIELD_KEY, photos = (_stage: string) => undefined as void, outer = (_payload: string) => [] as string[] } = {}): string {
+  function backup({ fieldKey = FIELD_KEY, photos = (_stage: string) => undefined as void, outer = (_payload: string) => [] as string[], leave = [] as string[] } = {}): string {
     const payload = mkdtempSync(join(root, 'copia-'));
     const stage = join(payload, 'stage');
     mkdirSync(join(stage, 'fotos'), { recursive: true });
@@ -55,7 +73,7 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     execFileSync('tar', ['-C', stage, '-cf', join(payload, 'fotos.tar'), ...execFileSync('ls', ['-A', stage], { encoding: 'utf8' }).trim().split('\n')]);
     writeFileSync(join(payload, 'base.dump'), 'no es una base de verdad');
     writeFileSync(join(payload, 'clave-campos'), fieldKey);
-    const members = ['base.dump', 'fotos.tar', 'clave-campos', ...outer(payload)];
+    const members = [...['base.dump', 'fotos.tar', 'clave-campos'].filter((member) => !leave.includes(member)), ...outer(payload)];
     execFileSync('tar', ['-C', payload, '-cf', join(payload, 'copia.tar'), ...members]);
     const file = join(payload, 'copia.tar.gpg');
     execFileSync('gpg', ['--batch', '--yes', '--quiet', '--pinentry-mode', 'loopback', '--passphrase', KEY, '--symmetric', '--cipher-algo', 'AES256', '-o', file, join(payload, 'copia.tar')], { env });
@@ -69,6 +87,24 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     expect(readFileSync(join(home, '.env'), 'utf8')).toContain(`URNA_FIELD_KEY=${FIELD_KEY}\n`);
     expect(readFileSync(join(home, 'fotos', PHOTO), 'utf8')).toBe('foto de la copia');
     expect(existsSync(join(home, 'fotos', 'propia'))).toBe(false);
+  });
+
+  it('reads each file out of the backup as it goes: nothing of it is copied to the temporary folder but the backup itself', () => {
+    const { restore, dump } = server();
+    expect(restore(backup()).said).toContain('Copia restaurada');
+    expect(readFileSync(dump, 'utf8')).toBe('no es una base de verdad');
+    const there = readFileSync(`${dump}.temporales`, 'utf8').trim().split('\n');
+    expect(there.some((file) => file.endsWith('/copia.tar'))).toBe(true);
+    expect(there.filter((file) => /base\.dump|fotos\.tar|clave-campos|\/fotos\//.test(file))).toEqual([]);
+  });
+
+  it('refuses a backup with one of its files twice, or with one missing', () => {
+    const twice = server();
+    const repeated = twice.restore(backup({ outer: () => ['base.dump'] }));
+    expect([repeated.ok, repeated.said.includes('no restauré nada'), twice.untouched()]).toEqual([false, true, true]);
+    const short = server();
+    const missing = short.restore(backup({ leave: ['clave-campos'] }));
+    expect([missing.ok, missing.said.includes('incompleto'), short.untouched()]).toEqual([false, true, true]);
   });
 
   const crafted: [string, Parameters<typeof backup>[0]][] = [
