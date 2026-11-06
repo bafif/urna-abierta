@@ -7,6 +7,7 @@
 #   urna copia               makes an encrypted backup now
 #   urna restaurar <archivo> <llave>   replaces the data with a backup
 #   urna actualizar          brings the latest images
+#   urna reiniciar           creates the containers again with what .env says, keeping the data
 #   urna direccion <ip o dominio>      changes the address of the site
 set -eu
 
@@ -66,6 +67,7 @@ start() {
     podman run -d --pod "$pod" --name "$pod-server" --restart=always \
       -e URNA_ACEPTO_RESPONSABILIDAD=si -e PG_POOL_MAX=8 -e URNA_PHOTOS_DIR=/fotos -e URNA_BACKUPS_DIR=/copias \
       -e URNA_SETUP_CODE="$URNA_SETUP_CODE" -e URNA_FIELD_KEY="$URNA_FIELD_KEY" -e URNA_TEMA="${URNA_TEMA:-aula}" \
+      -e URNA_S3_ENDPOINT -e URNA_S3_BUCKET -e URNA_S3_REGION -e URNA_S3_PREFIX -e URNA_S3_ACCESS_KEY_ID -e URNA_S3_SECRET_ACCESS_KEY \
       -e DATABASE_URL="postgres://urna:$POSTGRES_PASSWORD@localhost:5432/urna" \
       -v "$home/fotos:/fotos:U" -v "$home/copias:/copias:ro" "$URNA_IMAGE_SERVER" >/dev/null
   fi
@@ -87,12 +89,31 @@ replace_containers() {
   start
 }
 
+server_restarts() {
+  podman inspect --format '{{.RestartCount}}' "$pod-server" 2>/dev/null || echo ninguno
+}
+
+# 0 when the server answers, 1 when it does not answer yet. 2 when its container stops right after
+# starting, as with a setting it cannot use: waiting would not help, so it shows what the server said.
 wait_healthy() {
+  restarts=$(server_restarts)
   for _ in $(seq 1 "${1:-120}"); do
     curl -fsk --max-time 5 "$health" >/dev/null 2>&1 && return 0
+    if [ "$(server_restarts)" != "$restarts" ]; then
+      echo 'El servidor se frena apenas arranca. Lo último que dijo:' >&2
+      podman logs --tail 20 "$pod-server" 2>&1 | awk '!seen[$0]++' | tail -n 8 | sed 's/^/  /' >&2
+      echo "Si es un dato de $home/.env, corregilo y corré «urna reiniciar». Mientras tanto, el sitio no anda." >&2
+      return 2
+    fi
     sleep 2
   done
   return 1
+}
+
+# After wait_healthy failed. If the server already said why, that is enough.
+not_answering() {
+  [ "$1" = 2 ] || echo 'Arrancó, pero el servidor no responde todavía.' >&2
+  exit 1
 }
 
 backup() {
@@ -139,21 +160,43 @@ restore() {
   echo "Copia restaurada."
 }
 
+# Where the photos are, according to .env and according to the server, which may not have taken .env yet.
+photos_status() {
+  if [ -n "${URNA_S3_ENDPOINT:-}" ] && [ -n "${URNA_S3_BUCKET:-}" ]; then
+    where="en el bucket $URNA_S3_BUCKET de $URNA_S3_ENDPOINT, cifradas. El bucket no entra en la copia"
+    case "$1" in
+      *'"storage":"disk"'*) check 'fotos' mal 'el servidor todavía las guarda en el disco. Corré «urna reiniciar» para que tome lo que dice .env' ;;
+      *'"working":false'*) check 'fotos' mal "no se pueden guardar $where. Mirá «podman logs $pod-server»" ;;
+      # The check the server does on starting can take a minute when the bucket does not answer.
+      *'"working":null'*) check 'fotos' espera "el servidor todavía está probando el bucket $URNA_S3_BUCKET. Volvé a correr «urna estado» en un minuto" ;;
+      *'"storage":"s3"'*) check "fotos: $where" ok ;;
+    esac
+  else
+    case "$1" in
+      *'"storage":"s3"'*) check 'fotos' mal 'el servidor las manda a un bucket que .env ya no nombra. Corré «urna reiniciar»' ;;
+      *) check "fotos: en el disco, en $home/fotos, y entran en la copia" ok ;;
+    esac
+  fi
+}
+
 status() {
   problems=0
+  # ok, espera (not confirmed yet) or anything else for a failure. Only ok counts as in order.
   check() {
-    if [ "$2" = ok ]; then
-      printf 'bien   %s\n' "$1"
-    else
-      printf 'FALLA  %s: %s\n' "$1" "$3"
-      problems=$((problems + 1))
-    fi
+    case "$2" in
+      ok) printf 'bien   %s\n' "$1"; return ;;
+      espera) printf 'espera %s: %s\n' "$1" "$3" ;;
+      *) printf 'FALLA  %s: %s\n' "$1" "$3" ;;
+    esac
+    problems=$((problems + 1))
   }
   for name in db server web; do
     state=$(podman inspect --format '{{.State.Status}}' "$pod-$name" 2>/dev/null || echo ausente)
     [ "$state" = running ] && check "$name" ok || check "$name" mal "está $state. Probá «urna arrancar»"
   done
-  if curl -fsk --max-time 10 "$health" >/dev/null 2>&1; then check 'el servidor responde' ok; else check 'el servidor responde' mal 'no contesta. Mirá «podman logs urna-server»'; fi
+  answer=$(curl -fsk --max-time 10 "$health" 2>/dev/null || true)
+  if [ -n "$answer" ]; then check 'el servidor responde' ok; else check 'el servidor responde' mal 'no contesta. Mirá «podman logs urna-server»'; fi
+  photos_status "$answer"
   free=$(df -Pm "$home" | awk 'NR == 2 {print $4}')
   [ "$free" -gt 500 ] && check "disco: quedan $free MB" ok || check 'disco' mal "quedan $free MB. Borrá copias viejas"
   newest=$(find "$home/copias" -name 'urna-*.tar.gpg' -mmin -420 2>/dev/null | head -n 1)
@@ -167,7 +210,7 @@ status() {
 }
 
 case "${1:-estado}" in
-  arrancar) start; wait_healthy || { echo 'Arrancó, pero el servidor no responde todavía.' >&2; exit 1; }; echo 'Andando.' ;;
+  arrancar) start; wait_healthy || not_answering $?; echo 'Andando.' ;;
   frenar) stop_all ;;
   copia) backup ;;
   restaurar)
@@ -179,6 +222,11 @@ case "${1:-estado}" in
     replace_containers
     wait_healthy
     echo 'Actualizado.'
+    ;;
+  reiniciar)
+    replace_containers
+    wait_healthy || not_answering $?
+    echo 'Andando, con lo que dice .env.'
     ;;
   direccion)
     [ $# -eq 2 ] || { echo 'Uso: urna direccion <ip o dominio>' >&2; exit 2; }
@@ -192,5 +240,5 @@ case "${1:-estado}" in
     echo "Ahora está en $site. Cada fiscal va a tener que volver a preparar la mesa."
     ;;
   estado) status ;;
-  *) sed -n '2,10p' "$0" | cut -c3-; exit 2 ;;
+  *) sed -n '2,11p' "$0" | cut -c3-; exit 2 ;;
 esac

@@ -77,6 +77,7 @@ With SSH on the server:
 sudo urna estado      # says whether everything is fine and what to do if not
 sudo urna copia       # makes an encrypted backup now
 sudo urna actualizar  # gets the latest version
+sudo urna reiniciar   # creates the containers again with what /opt/urna-abierta/.env says, keeping the data
 ```
 
 What was running comes back by itself after a reboot. Backups are made every 6 hours, and are downloaded from the app, in **More**,
@@ -86,7 +87,77 @@ What was running comes back by itself after a reboot. Backups are made every 6 h
 sudo urna restaurar /path/to/the/backup.tar.gpg YOUR-RECOVERY-KEY
 ```
 
+If the photos went to S3 storage, also fill in the `URNA_S3_...` lines of `/opt/urna-abierta/.env` on the new server and run
+`sudo urna reiniciar`: those settings are not in the backup, and without them the server stores on disk and cannot find the photos in
+the bucket.
+
+## Photos in S3 storage
+
+The photos of the tally sheets are kept on the server's disk and go into every backup. For most elections that is enough. Sending them
+to S3 storage is worth it if you expect many tables (each photo weighs up to 8 MB and every backup carries all of them), if the server's
+disk is small, or if you want the photos kept apart from the machine.
+
+Before leaving the server, each photo is encrypted with AES-256-GCM, with a key derived from `URNA_FIELD_KEY`. The provider keeps data it
+cannot read, under names that do not say which photo they are either. The other side of it: without `URNA_FIELD_KEY` those photos cannot
+be opened. That key travels inside every backup; the bucket settings (address, name and access keys) do not. To get everything back you need the
+backup, the recovery key and those settings, which you set again on the new server.
+
+| Variable | What it is |
+| --- | --- |
+| `URNA_S3_ENDPOINT` | The address of the service, without the bucket. Examples below. |
+| `URNA_S3_BUCKET` | The name of the bucket. Create it first, private. |
+| `URNA_S3_REGION` | The region of the bucket. If empty, `us-east-1`. |
+| `URNA_S3_ACCESS_KEY_ID` | The public part of the access key. |
+| `URNA_S3_SECRET_ACCESS_KEY` | The secret part. |
+| `URNA_S3_PREFIX` | The folder inside the bucket. If empty, `fotos/`. If it does not end in `/`, one is added. |
+
+Photos go to the bucket only when both `URNA_S3_ENDPOINT` and `URNA_S3_BUCKET` are set; with both empty, they go to disk. With only one
+of them, or without the access keys, the server does not start and says what is missing. Addresses are path-style
+(`https://service/bucket/photo`), which every provider below accepts.
+
+To turn it on in a server that is already installed:
+
+1. Edit `/opt/urna-abierta/.env` (for example with `sudo nano /opt/urna-abierta/.env`) and fill in the `URNA_S3_...` lines. If your server
+   was installed with an earlier version, those lines are not there: add them at the end. Write the values without quotes or spaces.
+2. `sudo urna reiniciar`, so that the server takes the new settings. The data stays.
+3. `sudo urna estado` should say `bien   fotos: en el bucket ...`. If it says `espera`, the server is still testing the bucket: run it
+   again in a minute.
+
+Each time it starts, the server writes, reads and deletes a test object. If something fails, it writes so in plain sight in its log and
+`urna estado` marks it as `FALLA`, but everything else keeps working: a photo that cannot be stored is not stored anywhere else, and each
+phone keeps it and sends it again until it gets in. Deleting the test object needs permission to delete; without it, a single object
+remains, always the same one.
+
+Better decide this before the election. The photos already on disk can still be seen and still go into the backup; the new ones go to
+the bucket. If you later go back to disk, the ones left in the bucket can no longer be seen in the app.
+
+**The bucket is not in the backup.** The backup carries the database and the photo folder on disk, which with S3 stays empty or holds the
+older ones. The photos in the bucket are looked after by the provider; for more safety, turn on versioning for the bucket.
+
+Address and region for each provider:
+
+- **AWS S3:** `https://s3.<region>.amazonaws.com`, for example `https://s3.sa-east-1.amazonaws.com` with the region `sa-east-1`. It has to
+  be the region of the bucket. For the keys, create an IAM user that can only `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on
+  `arn:aws:s3:::YOUR-BUCKET/*`, and `s3:ListBucket` on `arn:aws:s3:::YOUR-BUCKET` (without `/*`). Without permission to list, AWS answers
+  "access denied" instead of "not found" when asked for a photo it does not have, and the server cannot tell a missing photo from a key
+  without permission.
+- **Oracle Object Storage:** use its S3 compatibility API, `https://<namespace>.compat.objectstorage.<region>.oci.customer-oci.com`, with
+  the Oracle region, for example `sa-saopaulo-1`. The namespace shows in the bucket details. The keys are a **Customer Secret Key**, from
+  your profile: Oracle shows the secret part only once.
+  [Oracle's documentation](https://docs.oracle.com/en-us/iaas/Content/Object/Tasks/s3compatibleapi.htm).
+- **Cloudflare R2:** `https://<account-id>.r2.cloudflarestorage.com`, with the region `auto`. The keys are an R2 API token with object read
+  and write permission on that bucket. [Cloudflare's documentation](https://developers.cloudflare.com/r2/api/s3/api/).
+- **Your own MinIO:** its address, for example `https://minio.your-domain.org`, with the region `us-east-1` unless you set another one. Use
+  `https`: with `http` the photos still travel encrypted, but anyone on the way sees the signed requests. Only inside your own network it
+  makes no difference.
+
+**Status.** I tested it against MinIO and against a simulation that checks every signature; not yet against AWS, Oracle or R2.
+
 ## When the election is over
 
 The server is seasonal. Purge the data from the app, download the last backup if needed and delete the machine, the disk and the address
 in the cloud's console. If you do not delete them, they may keep charging.
+
+If the photos went to S3 storage, neither purging nor deleting the server touches them: they stay in the bucket, and the provider keeps
+charging for them. When you no longer need them, empty the bucket in the provider's console (every version, if you turned on
+versioning), delete it and delete the access key you created for the server.

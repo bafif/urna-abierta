@@ -1,10 +1,20 @@
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { buildApp, migrate } from './app.ts';
+import { PhotoConfigError, photoStoreFromEnv, type PhotoStore } from './photo-store.ts';
 
 const testMode = process.env.URNA_TEST_SERVER === 'fake-data-only';
 if (!testMode && process.env.URNA_ACEPTO_RESPONSABILIDAD !== 'si') {
   console.error('El partido es el responsable de esta base y de cumplir la ley. Definí URNA_ACEPTO_RESPONSABILIDAD=si para aceptarlo, o URNA_TEST_SERVER=fake-data-only para probar con personas inventadas.');
+  process.exit(1);
+}
+// Before the test mode makes up a field key: photos in a bucket need one that lasts.
+let photos: PhotoStore;
+try {
+  photos = photoStoreFromEnv();
+} catch (error) {
+  if (!(error instanceof PhotoConfigError)) throw error;
+  console.error(error.message);
   process.exit(1);
 }
 if (!process.env.URNA_FIELD_KEY) {
@@ -39,9 +49,12 @@ async function waitForDatabase(): Promise<void> {
 
 await waitForDatabase();
 await migrate(pool);
-const app = buildApp(pool, { testMode });
+const app = buildApp(pool, { testMode, photos });
 await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 3000) });
 console.log('servidor listo');
+console.log(`fotos: ${photos.where}`);
+// Without waiting: a bucket that fails must not keep the rest of the system from working.
+void photos.probe();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {

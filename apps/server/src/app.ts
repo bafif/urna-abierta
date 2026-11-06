@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { fakeRoll } from '@urna-abierta/domain';
 import { setSetting } from './actor.ts';
+import { photoStoreFromEnv, type PhotoStore } from './photo-store.ts';
 import { adminRoutes } from './routes-admin.ts';
 import { authRoutes, createInvitation } from './routes-auth.ts';
 import { syncRoutes } from './routes-sync.ts';
@@ -69,17 +70,18 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
   return { election, links, tables: fiscales, chiefs };
 }
 
-export function buildApp(pool: pg.Pool, { testMode = false }: { testMode?: boolean } = {}): FastifyInstance {
+export function buildApp(pool: pg.Pool, { testMode = false, photos = photoStoreFromEnv() }: { testMode?: boolean; photos?: PhotoStore } = {}): FastifyInstance {
   // Caddy is the only way in, and it says which address each request came from.
   const app = Fastify({ logger: false, bodyLimit: 256 * 1024, trustProxy: true });
 
+  // Where the photos go, and whether that answers: «urna estado» reads it. Never the bucket or its keys.
   app.get('/api/health', async () => {
     await pool.query('SELECT 1');
-    return { ok: true };
+    return { ok: true, photos: photos.status() };
   });
 
   authRoutes(app, pool);
-  syncRoutes(app, pool);
+  syncRoutes(app, pool, photos);
   adminRoutes(app, pool);
   workRoutes(app, pool);
 

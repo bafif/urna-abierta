@@ -1,15 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation, type SecurityProfile } from '@urna-abierta/domain';
 import { audit, authenticated, canReachTable, getSetting } from './actor.ts';
+import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
 const MAX_PULL = 200;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const TABLE_ID = /^[\w-]{1,64}$/;
-const photosDir = () => process.env.URNA_PHOTOS_DIR ?? '/tmp/urna-fotos';
 
 /** At most one write every half a minute: hearing from a phone is frequent and tells little. */
 const HEARD_EVERY_MS = 30_000;
@@ -67,7 +65,7 @@ async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
   return statuses.get(table) ?? null;
 }
 
-export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
+export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoStore) {
   const signedIn = authenticated(pool);
 
   /** Only what the poll watcher needs: no addresses, and as few document digits as the election asks for. */
@@ -148,8 +146,13 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'not_an_image' });
     if (createHash('sha256').update(request.body).digest('hex') !== sha) return reply.code(400).send({ error: 'hash_mismatch' });
-    await mkdir(photosDir(), { recursive: true });
-    await writeFile(join(photosDir(), sha), request.body);
+    try {
+      await photos.put(sha, request.body);
+    } catch (error) {
+      // Never somewhere else instead: the phone keeps it and sends it again.
+      if (error instanceof PhotoStoreUnavailable) return reply.code(503).send({ error: 'photo_storage_unavailable' });
+      throw error;
+    }
     await pool.query('INSERT INTO photos (sha256, table_id, bytes) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [sha, table, request.body.length]);
     return { ok: true };
   });
@@ -160,7 +163,14 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     const known = await pool.query('SELECT 1 FROM photos WHERE sha256 = $1 AND table_id = $2', [sha, table]);
     if (!known.rowCount) return reply.code(404).send({ error: 'not_found' });
-    reply.type('image/jpeg');
-    return readFile(join(photosDir(), sha));
+    let bytes: Buffer | null;
+    try {
+      bytes = await photos.get(sha);
+    } catch (error) {
+      if (error instanceof PhotoStoreUnavailable) return reply.code(503).send({ error: 'photo_storage_unavailable' });
+      throw error;
+    }
+    if (!bytes) return reply.code(404).send({ error: 'not_found' });
+    return reply.type('image/jpeg').send(bytes);
   });
 }
