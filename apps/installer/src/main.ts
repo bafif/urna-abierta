@@ -133,7 +133,7 @@ const server = createServer((request, response) => {
     if (path.startsWith('api/')) return api(path.slice(4), request, response);
     const name = path === '' ? 'index.html' : path;
     const content = asset(name);
-    if (!content || !/^[\w./-]+$/.test(name) || name.includes('..') || name === 'urna' || name === 'instalar.sh') return send(response, 404, { error: 'not_found' });
+    if (!content || !/^[\w./-]+$/.test(name) || name.includes('..') || name === 'instalar.sh') return send(response, 404, { error: 'not_found' });
     response.writeHead(200, { 'content-type': TYPES[name.split('.').pop() ?? ''] ?? 'application/octet-stream', 'cache-control': 'no-store', 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:" });
     response.end(content);
   })().catch((error) => {
