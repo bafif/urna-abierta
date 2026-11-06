@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createVerify, generateKeyPairSync } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { awsCloud, signAws } from '../src/clouds/aws.ts';
 import { googleCloud, signGoogleAssertion } from '../src/clouds/google.ts';
@@ -379,4 +379,29 @@ describe('waiting for the server', () => {
     }) as typeof fetch;
     expect(await waitForHealth('https://x', () => undefined, 1, never)).toBe(false);
   }, 15_000);
+});
+
+describe('the files a release publishes', () => {
+  it('every installer file that a doc or a page names is one that the build publishes', () => {
+    const root = new URL('../../../', import.meta.url);
+    const build = readFileSync(new URL('apps/installer/build.mjs', root), 'utf8');
+    const friendly = new Function(`return ${/const FRIENDLY = (\{[^}]*\});/.exec(build)![1]}`)() as Record<string, string>;
+    // As build.mjs packs each one: Windows as it is, macOS in a .zip and Linux in a .tar.gz. Each one with its SHA-256 next to it.
+    const published = Object.entries(friendly).map(([platform, name]) => `urna-abierta-instalador-${name}${platform.startsWith('win32') ? '.exe' : platform.startsWith('darwin') ? '.zip' : '.tar.gz'}`);
+    const allowed = new Set(published.flatMap((name) => [name, `${name}.sha256`]));
+    expect(published).toContain('urna-abierta-instalador-windows.exe');
+    const named: string[] = [];
+    for (const folder of ['docs', 'landing']) {
+      for (const file of readdirSync(new URL(`${folder}/`, root), { recursive: true }) as string[]) {
+        if (!/\.(md|html)$/.test(file)) continue;
+        const text = readFileSync(new URL(`${folder}/${file}`, root), 'utf8');
+        for (const [name] of text.matchAll(/urna-abierta-instalador-[\w.-]*[A-Za-z0-9]/g)) named.push(`${folder}/${file}: ${name}`);
+      }
+    }
+    for (const file of ['README.md', 'README.en.md']) {
+      for (const [name] of readFileSync(new URL(file, root), 'utf8').matchAll(/urna-abierta-instalador-[\w.-]*[A-Za-z0-9]/g)) named.push(`${file}: ${name}`);
+    }
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((each) => !allowed.has(each.split(': ')[1]!))).toEqual([]);
+  });
 });
