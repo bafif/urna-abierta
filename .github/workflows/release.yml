@@ -58,7 +58,7 @@ jobs:
     needs: draft
     strategy:
       matrix:
-        os: [ubuntu-24.04, windows-2022, macos-14, macos-13]
+        os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
