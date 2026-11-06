@@ -151,7 +151,7 @@ for (let attempt = 0; ; attempt += 1) {
 const first = await machine(`${name}-1`, port, port + 2);
 const secrets = newSecrets();
 const said = await installOn(first, secrets, { variables: s3Settings });
-record('instala por SSH en un Ubuntu', said.at(-1)?.startsWith('listo en') === true, said);
+record('instala por SSH en un Ubuntu', said.at(-1)?.startsWith('ready ') === true, said);
 
 const pub = api(first, 'GET', '/public');
 record('la app responde, pide el primer administrador y usa el tema elegido', pub.setupNeeded === true && pub.party.theme === 'mate', pub);
