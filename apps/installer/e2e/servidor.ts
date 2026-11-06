@@ -11,7 +11,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EMPTY_SHA256, amzDate, s3Client, signS3 } from '../../server/src/s3.ts';
@@ -119,6 +119,25 @@ const urna = (m: { name: string }, ...args: string[]) => podman('exec', m.name, 
 const asUrna = (m: { name: string }, ...args: string[]) =>
   podman('exec', m.name, 'sh', '-c', 'runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta "$@"', 'sh', ...args);
 const raw = s3Client({ endpoint: bucket.endpoint, bucket: bucket.name, region: bucket.region, accessKeyId: bucket.accessKeyId, secretAccessKey: bucket.secretAccessKey });
+
+/** A backup made by hand, opened by `key`, whose photos would replace the commands and add a service, and whose field key is a command. */
+function craftedBackup(key: string): string {
+  const folder = mkdtempSync(join(work, 'trucha-'));
+  const gnupg = mkdtempSync(join(work, 'gnupg-'));
+  const stage = join(folder, 'stage');
+  mkdirSync(join(stage, 'fotos'), { recursive: true });
+  mkdirSync(join(stage, '.config/systemd/user'), { recursive: true });
+  writeFileSync(join(stage, 'fotos', 'a'.repeat(64)), 'foto');
+  writeFileSync(join(stage, 'urna'), '#!/bin/sh\ntouch /tmp/marca-trucha-urna\n', { mode: 0o755 });
+  writeFileSync(join(stage, '.config/systemd/user/urna-copia.service'), '[Service]\nExecStart=/bin/touch /tmp/marca-trucha-servicio\n');
+  execFileSync('tar', ['-C', stage, '-cf', join(folder, 'fotos.tar'), 'fotos', 'urna', '.config']);
+  writeFileSync(join(folder, 'base.dump'), 'no es una base');
+  writeFileSync(join(folder, 'clave-campos'), 'x$(touch /tmp/marca-trucha-env)');
+  execFileSync('tar', ['-C', folder, '-cf', join(folder, 'copia.tar'), 'base.dump', 'fotos.tar', 'clave-campos']);
+  const file = join(folder, 'copia.tar.gpg');
+  execFileSync('gpg', ['--batch', '--yes', '--quiet', '--pinentry-mode', 'loopback', '--passphrase', key, '--symmetric', '--cipher-algo', 'AES256', '-o', file, join(folder, 'copia.tar')], { env: { ...process.env, GNUPGHOME: gnupg } });
+  return file;
+}
 
 function cleanup(): void {
   for (const each of [`${name}-1`, `${name}-2`, `${name}-minio`]) attempt('rm', '-f', each);
@@ -248,6 +267,15 @@ const notThere = asUbuntu('no-esta.tar.gpg', secrets.recoveryKey);
 const notBackup = asUbuntu('/etc/hostname', secrets.recoveryKey);
 const wrongKey = asUbuntu('copia.tar.gpg', 'LLAVE-EQUIVOCADA');
 record('dice si el archivo no está, si no es una copia, o si la llave es otra', !notThere.ok && notThere.said.includes('No encuentro el archivo') && !notBackup.ok && notBackup.said.includes('no es una copia de Urna Abierta') && !wrongKey.ok && wrongKey.said.includes('Esa llave no abre esta copia'), [notThere.said, notBackup.said, wrongKey.said]);
+// A backup someone hands over, with the right key, made to write outside the photos: the commands of the server and
+// one of its services, and a field key that runs a command once .env is read. Nothing of it may land.
+podman('cp', craftedBackup(secrets.recoveryKey), `${second.name}:/home/ubuntu/trucha.tar.gpg`);
+podman('exec', second.name, 'sh', '-c', 'chown ubuntu:ubuntu /home/ubuntu/trucha.tar.gpg && chmod 600 /home/ubuntu/trucha.tar.gpg');
+const fingerprint = () => podman('exec', second.name, 'sh', '-c', 'cd /opt/urna-abierta && sha256sum urna .env .config/systemd/user/urna-copia.service && ls fotos | wc -l');
+const beforeCrafted = fingerprint();
+const crafted = asUbuntu('trucha.tar.gpg', secrets.recoveryKey);
+const marked = attempt('exec', second.name, 'sh', '-c', 'ls /tmp/marca-trucha* /opt/urna-abierta/marca-trucha* 2>/dev/null').said.trim();
+record('no restaura una copia que escribiría fuera de las fotos, y deja todo como estaba', !crafted.ok && crafted.said.includes('no restauré nada') && fingerprint() === beforeCrafted && marked === '' && api(second, 'GET', '/health').ok === true, crafted.said.split('\n'));
 const restored = asUbuntu('copia.tar.gpg', secrets.recoveryKey);
 record('restaura la copia desde la carpeta de quien entra, con su ruta corta', restored.ok && restored.said.includes('Copia restaurada') && restored.said.includes('URNA_S3_'), restored.said.split('\n'));
 const elections = api(second, 'GET', '/elections', { token }).elections;

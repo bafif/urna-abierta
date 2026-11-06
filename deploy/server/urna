@@ -157,29 +157,49 @@ backup() {
 has_bucket() { [ -n "${URNA_S3_ENDPOINT:-}" ] && [ -n "${URNA_S3_BUCKET:-}" ]; }
 
 # The backup comes as standard input (see the top). What gpg says tells a wrong key from a file that is not a backup.
+# A backup can come from someone else, so nothing in it goes anywhere until every file is what a backup holds: its
+# three files, the field key as the installation makes it, and photos inside their folder, none of them a link.
 restore() {
   key=$1
   work=$(mktemp -d)
-  trap 'rm -rf "$work"' EXIT
+  staging=''
+  trap 'rm -rf "$work"; [ -z "$staging" ] || { chmod -R u+w "$staging"; rm -rf "$staging"; }' EXIT
   printf '%s' "$key" >"$work/llave"
   chmod 600 "$work/llave"
-  { LC_ALL=C gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --decrypt 2>"$work/gpg" || touch "$work/mal"; } |
-    tar -C "$work" -xf - 2>/dev/null || touch "$work/mal"
+  LC_ALL=C gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --decrypt -o "$work/copia.tar" 2>"$work/gpg" || touch "$work/mal"
   if grep -q 'Bad session key' "$work/gpg"; then
     echo 'Esa llave no abre esta copia. Tiene que ser la llave de recuperación de la instalación que hizo la copia.' >&2
     exit 1
   fi
-  if [ -e "$work/mal" ] || [ ! -s "$work/base.dump" ] || [ ! -f "$work/clave-campos" ]; then
-    echo 'Ese archivo no es una copia de Urna Abierta, o está incompleto. Bajalo de nuevo y volvé a probar.' >&2
-    exit 1
-  fi
-  sed -i "s|^URNA_FIELD_KEY=.*|URNA_FIELD_KEY=$(cat "$work/clave-campos")|" "$home/.env"
-  URNA_FIELD_KEY=$(cat "$work/clave-campos")
+  incomplete() { echo 'Ese archivo no es una copia de Urna Abierta, o está incompleto. Bajalo de nuevo y volvé a probar.' >&2; exit 1; }
+  strange() { echo "Esa copia trae $1, que una copia de Urna Abierta no tiene, así que no restauré nada. Si no la hiciste vos o alguien de confianza, no la uses." >&2; exit 1; }
+  [ ! -e "$work/mal" ] && tar -tf "$work/copia.tar" >"$work/nombres" 2>/dev/null || incomplete
+  while IFS= read -r name; do
+    case "$name" in base.dump | fotos.tar | clave-campos) ;; *) strange 'un archivo de más' ;; esac
+  done <"$work/nombres"
+  # A link or anything else that is not a plain file.
+  tar -tvf "$work/copia.tar" | grep -qv '^-' && strange 'un enlace'
+  mkdir "$work/copia"
+  tar -C "$work/copia" -xf "$work/copia.tar" --no-same-owner base.dump fotos.tar clave-campos 2>/dev/null || incomplete
+  [ -s "$work/copia/base.dump" ] && [ -f "$work/copia/clave-campos" ] && [ -f "$work/copia/fotos.tar" ] || incomplete
+  field_key=$(cat "$work/copia/clave-campos")
+  case "$field_key" in *[!0-9a-f]*) strange 'una clave de campos rara' ;; esac
+  [ "${#field_key}" -eq 64 ] || strange 'una clave de campos rara'
+  tar -tf "$work/copia/fotos.tar" >"$work/fotos" 2>/dev/null || incomplete
+  grep -Evx 'fotos(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*/?' "$work/fotos" >/dev/null && strange 'archivos fuera de la carpeta de las fotos'
+  tar -tvf "$work/copia/fotos.tar" | grep -Eqv '^[-d]' && strange 'un enlace entre las fotos'
+  # Next to where they go, so that putting them in place is only a rename.
+  staging=$(mktemp -d "$home/.restaurando.XXXXXX")
+  if [ -s "$work/fotos" ]; then tar -C "$staging" -xf "$work/copia/fotos.tar" --no-same-owner fotos; fi
+  mkdir -p "$staging/fotos"
+
+  sed -i "s|^URNA_FIELD_KEY=.*|URNA_FIELD_KEY=$field_key|" "$home/.env"
+  URNA_FIELD_KEY=$field_key
   podman rm -f "$pod-server" >/dev/null 2>&1 || true
   podman exec "$pod-db" psql -q -U urna -d urna -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null 2>&1
-  podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner <"$work/base.dump"
+  podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner <"$work/copia/base.dump"
   podman unshare rm -rf "$home/fotos"
-  podman unshare tar -C "$home" -xf "$work/fotos.tar"
+  mv "$staging/fotos" "$home/fotos"
   start
   wait_healthy 60 || not_answering $?
   echo "Copia restaurada. Las copias que se hagan desde ahora se abren con la llave de recuperación de este servidor."
