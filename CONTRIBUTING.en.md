@@ -28,6 +28,7 @@ corepack pnpm install
 corepack pnpm test                                   # the unit tests of the whole repository
 corepack pnpm check                                  # the types of every package, its tests included
 node design/verificar-contraste.mjs                  # that every theme can be read
+sh deploy/server/prueba-estado.sh                    # what «urna estado» says, with fake podman and curl
 ```
 
 The server tests against a real database run only if you give them an empty Postgres. Without `TEST_DATABASE_URL`, they are skipped:
