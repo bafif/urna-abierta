@@ -16,9 +16,23 @@ runs:
         # The ids that the containers get. The test machines need the usual 65536: their users run Podman inside.
         if ! grep -q "^$(id -un):" /etc/subuid || ! grep -q "^$(id -un):" /etc/subgid; then
           sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$(id -un)"
-          podman system migrate
         fi
-        podman info --format 'Podman {{.Version.Version}}, rootless: {{.Host.Security.Rootless}}, {{.Store.GraphDriverName}}'
+        # A systemd session for this user, as on a computer: the test machines run systemd, which needs cgroups of its own.
+        uid=$(id -u)
+        sudo loginctl enable-linger "$(id -un)"
+        for _ in $(seq 1 30); do [ -d "/run/user/$uid" ] && break; sleep 1; done
+        export XDG_RUNTIME_DIR="/run/user/$uid"
+        if [ ! -S "$XDG_RUNTIME_DIR/bus" ]; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq dbus-user-session >/dev/null
+          systemctl --user daemon-reload
+          systemctl --user start dbus.socket
+        fi
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+        echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >>"$GITHUB_ENV"
+        echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >>"$GITHUB_ENV"
+        [ -e /dev/fuse ] || sudo modprobe fuse || true
+        podman system migrate
+        podman info --format 'Podman {{.Version.Version}}, rootless: {{.Host.Security.Rootless}}, cgroups: {{.Host.CgroupManager}} {{.Host.CgroupsVersion}}, storage: {{.Store.GraphDriverName}}'
     - if: inputs.room == 'true'
       shell: bash
       run: |
