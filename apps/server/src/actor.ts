@@ -179,6 +179,14 @@ export function erasedId(id: string): string {
   return `x-${createHmac('sha256', sealingKey()).update(`erased:${id}`).digest('hex').slice(0, 32)}`;
 }
 
+/**
+ * Who a person was in the file they came from, as their name and document read for search: enough to know them in
+ * the next file when their id is only a position, not to read it back without the field key.
+ */
+export function rollKey(search: string): string {
+  return createHmac('sha256', sealingKey()).update(`roll:${search}`).digest('hex').slice(0, 32);
+}
+
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 export function newTotpSecret(): string {
