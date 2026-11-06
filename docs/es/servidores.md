@@ -76,20 +76,63 @@ Con SSH en el servidor:
 ```sh
 sudo urna estado      # dice si está todo bien y qué hacer si no
 sudo urna copia       # hace una copia cifrada ahora
-sudo urna actualizar  # baja la última versión
+sudo urna actualizar  # hace una copia y pasa a la última versión
 sudo urna reiniciar   # vuelve a crear los contenedores con lo que dice /opt/urna-abierta/.env, sin borrar datos
 ```
 
-Lo que estaba andando vuelve solo después de un reinicio. Las copias de seguridad se hacen cada 6 horas, y se bajan desde la app, en
-**Más cosas**, **Copias de seguridad**. Para volver a poner una en un servidor nuevo:
+Lo que estaba andando vuelve solo después de un reinicio.
+
+### Actualizar
+
+`sudo urna actualizar` baja la última versión publicada, hace una copia, cambia también los comandos de `urna` por los de esa versión y
+vuelve a crear los contenedores, sin borrar datos. Para ir a una versión en particular: `sudo urna actualizar v0.2.0`. Mientras tanto,
+el sitio deja de responder uno o dos minutos. `sudo urna estado` dice en qué versión está.
+
+Actualizá antes de preparar una elección o después de cerrarla, nunca durante la votación ni en los días previos. Si una versión nueva
+trae un problema, tiene que aparecer en un [simulacro](simulacro.md), no el día de la elección.
+
+Si la versión nueva no arranca, `urna actualizar` lo dice, con lo último que dijo el servidor, y explica cómo volver: primero
+`sudo urna actualizar` con la versión anterior y, si así tampoco arranca, restaurar la copia que hizo antes de actualizar.
+
+La base queda en el formato de la versión nueva. Una copia hecha después de actualizar se restaura en esa versión o en una más nueva.
+
+### Restaurar una copia
+
+Primero subí la copia al servidor. Desde tu computadora, en la carpeta donde la bajaste y con la llave SSH del servidor:
 
 ```sh
-sudo urna restaurar /ruta/a/la/copia.tar.gpg TU-LLAVE-DE-RECUPERACION
+scp -i tu-llave-ssh urna-20270406-063000.tar.gpg ubuntu@203.0.113.24:
 ```
+
+En Windows ese mismo comando anda en PowerShell; también sirve [WinSCP](https://winscp.net/). La copia queda en la carpeta de tu
+usuario. Después, en el servidor:
+
+```sh
+sudo urna restaurar urna-20270406-063000.tar.gpg TU-LLAVE-DE-RECUPERACION
+```
+
+Restaurar reemplaza todos los datos de ese servidor. Va la llave de recuperación de la instalación que hizo la copia: si es otra, lo
+dice, y si el archivo no es una copia o se cortó al subirlo, también.
+
+Las copias que el servidor haga después se abren con **su** llave de recuperación, no con la de la copia restaurada. Guardá las dos.
 
 Si las fotos iban a un almacenamiento S3, en el servidor nuevo completá también las líneas `URNA_S3_...` de `/opt/urna-abierta/.env`
 y corré `sudo urna reiniciar`: esos datos no entran en la copia, y sin ellos el servidor guarda en el disco y no encuentra las fotos del
-bucket.
+bucket. `urna restaurar` te lo recuerda.
+
+### Copias fuera del servidor
+
+Las copias se hacen cada 6 horas y quedan en el disco del servidor: las últimas 28, una semana. Si se pierde el servidor, o la nube
+cierra la cuenta, se pierden con él. Para tener siempre una afuera:
+
+- **Bajalas desde la app**, en **Más cosas**, **Copias de seguridad**, cada tanto y sobre todo antes de la elección.
+- **Mandalas a un almacenamiento S3.** Si configurás uno para las fotos (abajo), cada copia va también al bucket, a la carpeta
+  `backups/`, y ahí quedan las 28 más nuevas. Siguen cifradas con la llave de recuperación: el proveedor guarda algo que no puede abrir.
+  Para borrar las viejas, la clave de acceso necesita permiso de listar el bucket; sin él se mandan igual, pero se acumulan. Conviene un
+  bucket de otro proveedor que el del servidor, así la copia sobrevive si se cierra esa cuenta.
+
+`urna estado` dice si la última copia llegó al bucket. Sin S3, lo recuerda con una línea `aviso`: las copias quedan solo en ese
+servidor.
 
 ## Fotos en un almacenamiento S3
 
@@ -131,8 +174,9 @@ queda uno solo, siempre el mismo.
 Conviene decidirlo antes de la elección. Las fotos que ya estaban en el disco se siguen viendo y siguen entrando en la copia; las nuevas
 van al bucket. Si después volvés al disco, las que quedaron en el bucket dejan de verse en la app.
 
-**El bucket no entra en la copia de seguridad.** La copia lleva la base y la carpeta de fotos del disco, que con S3 queda vacía o con las
-de antes. Las fotos del bucket las cuida el proveedor; si querés más resguardo, activá el versionado del bucket.
+**Las fotos del bucket no entran en la copia de seguridad.** La copia lleva la base y la carpeta de fotos del disco, que con S3 queda
+vacía o con las de antes. Las fotos del bucket las cuida el proveedor; si querés más resguardo, activá el versionado del bucket. Las
+copias, en cambio, sí van al bucket, a `backups/`: lo explica [Copias fuera del servidor](#copias-fuera-del-servidor).
 
 Direcciones y regiones de cada proveedor:
 
@@ -159,6 +203,6 @@ Direcciones y regiones de cada proveedor:
 El servidor es de temporada. Purgá los datos desde la app, bajá la última copia si hace falta y borrá la máquina, el disco y la dirección
 en la consola de la nube. Si no los borrás, pueden seguir cobrando.
 
-Si las fotos iban a un almacenamiento S3, purgar no las toca y borrar el servidor tampoco: siguen en el bucket, y el proveedor sigue
-cobrando por ellas. Cuando ya no las necesites, en la consola del proveedor vaciá el bucket (con todas las versiones, si activaste el
+Si las fotos iban a un almacenamiento S3, purgar no las toca y borrar el servidor tampoco: siguen en el bucket, junto con las copias de
+`backups/`, y el proveedor sigue cobrando por ellas. Cuando ya no las necesites, en la consola del proveedor vaciá el bucket (con todas las versiones, si activaste el
 versionado), borralo y borrá la clave de acceso que creaste para el servidor.

@@ -4,14 +4,22 @@
 #   urna estado              says whether everything is fine, and what to do if it is not
 #   urna arrancar            starts it
 #   urna frenar              stops it, without deleting anything
-#   urna copia               makes an encrypted backup now
+#   urna copia               makes an encrypted backup now, and sends it to the bucket if there is one
 #   urna restaurar <archivo> <llave>   replaces the data with a backup
-#   urna actualizar          brings the latest images
+#   urna actualizar [versión]          makes a backup and moves to the newest version, or to the one given
 #   urna reiniciar           creates the containers again with what .env says, keeping the data
 #   urna direccion <ip o dominio>      changes the address of the site
 set -eu
 
 home=${URNA_HOME:-/opt/urna-abierta}
+# The backup to restore is opened first, from the folder the command was run in, and as root when it runs as root:
+# it may be where the user `urna` cannot read, like the home of whoever connected. It goes on as standard input.
+if [ "${1:-}" = restaurar ] && [ $# -eq 3 ] && [ "$2" != - ]; then
+  [ -f "$2" ] || { echo "No encuentro el archivo $2. Fijate la ruta, o pasala completa, como /home/ubuntu/copia.tar.gpg." >&2; exit 1; }
+  [ -r "$2" ] || { echo "No puedo leer $2. Probá con sudo." >&2; exit 1; }
+  exec <"$2"
+  set -- restaurar - "$3"
+fi
 # Whoever calls this may be in a folder that this user cannot enter.
 cd /
 
@@ -135,17 +143,34 @@ backup() {
   # shellcheck disable=SC2012
   ls -1t "$home"/copias/urna-*.tar.gpg | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
   echo "$home/copias/urna-$stamp.tar.gpg"
+  # Out of the server too, when there is a bucket: a free account can close with the machine and its copies inside.
+  # The server sends it, because it already has the bucket's keys. Only the path goes to standard output.
+  if has_bucket; then
+    if podman exec "$pod-server" node apps/server/src/backup-upload.ts "/copias/urna-$stamp.tar.gpg" "$keep" >&2; then
+      touch "$home/.copia-en-bucket"
+    else
+      echo "No se pudo mandar la copia al bucket $URNA_S3_BUCKET: quedó solo en este servidor." >&2
+    fi
+  fi
 }
 
+has_bucket() { [ -n "${URNA_S3_ENDPOINT:-}" ] && [ -n "${URNA_S3_BUCKET:-}" ]; }
+
+# The backup comes as standard input (see the top). What gpg says tells a wrong key from a file that is not a backup.
 restore() {
-  file=$1
-  key=$2
+  key=$1
   work=$(mktemp -d)
   trap 'rm -rf "$work"' EXIT
   printf '%s' "$key" >"$work/llave"
   chmod 600 "$work/llave"
-  if ! gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --decrypt "$file" 2>/dev/null | tar -C "$work" -xf -; then
-    echo "No se pudo abrir esa copia. Fijate que la llave sea la de esa instalación." >&2
+  { LC_ALL=C gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --decrypt 2>"$work/gpg" || touch "$work/mal"; } |
+    tar -C "$work" -xf - 2>/dev/null || touch "$work/mal"
+  if grep -q 'Bad session key' "$work/gpg"; then
+    echo 'Esa llave no abre esta copia. Tiene que ser la llave de recuperación de la instalación que hizo la copia.' >&2
+    exit 1
+  fi
+  if [ -e "$work/mal" ] || [ ! -s "$work/base.dump" ] || [ ! -f "$work/clave-campos" ]; then
+    echo 'Ese archivo no es una copia de Urna Abierta, o está incompleto. Bajalo de nuevo y volvé a probar.' >&2
     exit 1
   fi
   sed -i "s|^URNA_FIELD_KEY=.*|URNA_FIELD_KEY=$(cat "$work/clave-campos")|" "$home/.env"
@@ -156,8 +181,56 @@ restore() {
   podman unshare rm -rf "$home/fotos"
   podman unshare tar -C "$home" -xf "$work/fotos.tar"
   start
-  wait_healthy 60
-  echo "Copia restaurada."
+  wait_healthy 60 || not_answering $?
+  echo "Copia restaurada. Las copias que se hagan desde ahora se abren con la llave de recuperación de este servidor."
+  has_bucket || echo "Si las fotos iban a un bucket S3, completá las líneas URNA_S3_ de $home/.env y corré «urna reiniciar»: esos datos no entran en la copia."
+}
+
+# The newest published version: where GitHub's address for the latest release leads.
+newest() {
+  curl -fsSIL --max-time 30 -o /dev/null -w '%{url_effective}' "${URNA_RELEASES:-https://github.com/bafif/urna-abierta/releases/latest}" 2>/dev/null |
+    sed -n 's|.*/releases/tag/\([A-Za-z0-9._-]*\)$|\1|p'
+}
+
+# The images of the new version, a backup, and then its commands and its containers. Nothing changes until it has both.
+update() {
+  version=${1:-$(newest)}
+  case "$version" in
+    '') echo 'No pude averiguar cuál es la última versión. Buscala en github.com/bafif/urna-abierta/releases y pedila, como en «urna actualizar v0.2.0».' >&2; exit 1 ;;
+    [0-9]*) version=v$version ;;
+  esac
+  case "$version" in *[!A-Za-z0-9._-]*) echo "$version no es una versión: tiene que ser algo como v0.2.0." >&2; exit 2 ;; esac
+  before=${URNA_IMAGE_SERVER##*:}
+  server=${URNA_IMAGE_SERVER%:*}:$version
+  web=${URNA_IMAGE_WEB%:*}:$version
+  if [ "$server" = "$URNA_IMAGE_SERVER" ] && [ "$web" = "$URNA_IMAGE_WEB" ]; then
+    echo "Ya está en la versión $version."
+    return
+  fi
+  echo "Bajando la versión $version…"
+  # A version never changes once published: if it is already here, it is the one.
+  for image in "$server" "$web"; do
+    podman image exists "$image" || podman pull -q "$image" >/dev/null || { echo "No se pudo bajar la versión $version. No cambié nada." >&2; exit 1; }
+  done
+  # The database keeps its major version, and gets its fixes when the registry answers.
+  podman pull -q "$URNA_IMAGE_DB" >/dev/null 2>&1 || true
+  echo 'Haciendo una copia antes de actualizar…'
+  # As its own process, so that any step that fails stops it.
+  copy=$("$0" copia) || { echo 'No se pudo hacer la copia, así que no cambié nada. Mirá «urna estado».' >&2; exit 1; }
+  # Its commands replace these, but only if they read as a script. The running copy keeps its own file.
+  if podman run --rm --network none --entrypoint cat "$server" /app/urna >"$home/urna.nueva" 2>/dev/null && [ -s "$home/urna.nueva" ] && sh -n "$home/urna.nueva"; then
+    chmod 755 "$home/urna.nueva"
+    mv "$home/urna.nueva" "$home/urna"
+  else
+    rm -f "$home/urna.nueva"
+  fi
+  sed -i "s|^URNA_IMAGE_SERVER=.*|URNA_IMAGE_SERVER=$server|; s|^URNA_IMAGE_WEB=.*|URNA_IMAGE_WEB=$web|" "$home/.env"
+  echo "Arrancando la versión $version…"
+  if ! "$home/urna" reiniciar >/dev/null; then
+    echo "La versión $version no arrancó. Para volver a la $before con los datos de antes: «urna actualizar $before», y si así tampoco arranca, «urna restaurar $copy TU-LLAVE-DE-RECUPERACION»." >&2
+    exit 1
+  fi
+  echo "Listo: está en la versión $version. La copia de antes quedó en $copy."
 }
 
 # Where the photos are, according to .env and according to the server, which may not have taken .env yet.
@@ -181,15 +254,17 @@ photos_status() {
 
 status() {
   problems=0
-  # ok, espera (not confirmed yet) or anything else for a failure. Only ok counts as in order.
+  # ok, aviso (worth knowing, but in order), espera (not confirmed yet) or anything else for a failure.
   check() {
     case "$2" in
       ok) printf 'bien   %s\n' "$1"; return ;;
+      aviso) printf 'aviso  %s\n' "$1"; return ;;
       espera) printf 'espera %s: %s\n' "$1" "$3" ;;
       *) printf 'FALLA  %s: %s\n' "$1" "$3" ;;
     esac
     problems=$((problems + 1))
   }
+  check "versión: ${URNA_IMAGE_SERVER##*:}" ok
   for name in db server web; do
     state=$(podman inspect --format '{{.State.Status}}' "$pod-$name" 2>/dev/null || echo ausente)
     [ "$state" = running ] && check "$name" ok || check "$name" mal "está $state. Probá «urna arrancar»"
@@ -201,6 +276,13 @@ status() {
   [ "$free" -gt 500 ] && check "disco: quedan $free MB" ok || check 'disco' mal "quedan $free MB. Borrá copias viejas"
   newest=$(find "$home/copias" -name 'urna-*.tar.gpg' -mmin -420 2>/dev/null | head -n 1)
   [ -n "$newest" ] && check 'hay una copia de las últimas 7 horas' ok || check 'copias' mal 'no hay una reciente. Probá «urna copia»'
+  if ! has_bucket; then
+    check 'las copias quedan solo en este servidor: si se pierde, se pierden con él. Bajá una desde la app cada tanto, o mandalas a un bucket S3' aviso
+  elif [ -n "$(find "$home/.copia-en-bucket" -mmin -420 2>/dev/null)" ]; then
+    check "las copias también van al bucket $URNA_S3_BUCKET" ok
+  else
+    check 'copias en el bucket' mal "ninguna de las últimas 7 horas llegó a $URNA_S3_BUCKET. Corré «urna copia» y fijate qué dice"
+  fi
   if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then check 'la hora está sincronizada' ok; else check 'hora' mal 'este servidor no sincroniza la hora'; fi
   address=${URNA_SITE#https://}
   ends=$(echo | timeout 10 openssl s_client -connect "${URNA_TLS_CHECK:-localhost:443}" -servername "$address" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
@@ -215,14 +297,9 @@ case "${1:-estado}" in
   copia) backup ;;
   restaurar)
     [ $# -eq 3 ] || { echo 'Uso: urna restaurar <archivo> <llave>' >&2; exit 2; }
-    restore "$2" "$3"
+    restore "$3"
     ;;
-  actualizar)
-    podman pull -q "$URNA_IMAGE_DB" "$URNA_IMAGE_SERVER" "$URNA_IMAGE_WEB" >/dev/null
-    replace_containers
-    wait_healthy
-    echo 'Actualizado.'
-    ;;
+  actualizar) update "${2:-}" ;;
   reiniciar)
     replace_containers
     wait_healthy || not_answering $?

@@ -76,20 +76,63 @@ With SSH on the server:
 ```sh
 sudo urna estado      # says whether everything is fine and what to do if not
 sudo urna copia       # makes an encrypted backup now
-sudo urna actualizar  # gets the latest version
+sudo urna actualizar  # makes a backup and moves to the latest version
 sudo urna reiniciar   # creates the containers again with what /opt/urna-abierta/.env says, keeping the data
 ```
 
-What was running comes back by itself after a reboot. Backups are made every 6 hours, and are downloaded from the app, in **More**,
-**Backups**. To put one back on a new server:
+What was running comes back by itself after a reboot.
+
+### Updating
+
+`sudo urna actualizar` downloads the latest published version, makes a backup, replaces the `urna` commands with that version's too,
+and creates the containers again, keeping the data. To go to a particular version: `sudo urna actualizar v0.2.0`. Meanwhile, the site
+stops answering for a minute or two. `sudo urna estado` says which version it is on.
+
+Update before preparing an election or after closing it, never during voting or in the days before. If a new version brings a problem,
+it has to show up in a [drill](drill.md), not on election day.
+
+If the new version does not start, `urna actualizar` says so, with the last thing the server said, and explains how to go back: first
+`sudo urna actualizar` with the previous version and, if it still does not start, restore the backup it made before updating.
+
+The database stays in the new version's format. A backup made after updating restores on that version or a newer one.
+
+### Restoring a backup
+
+First upload the backup to the server. From your computer, in the folder where you downloaded it and with the server's SSH key:
 
 ```sh
-sudo urna restaurar /path/to/the/backup.tar.gpg YOUR-RECOVERY-KEY
+scp -i your-ssh-key urna-20270406-063000.tar.gpg ubuntu@203.0.113.24:
 ```
+
+On Windows the same command works in PowerShell; [WinSCP](https://winscp.net/) also does. The backup lands in your user's folder.
+Then, on the server:
+
+```sh
+sudo urna restaurar urna-20270406-063000.tar.gpg YOUR-RECOVERY-KEY
+```
+
+Restoring replaces all the data on that server. It takes the recovery key of the installation that made the backup: if it is another
+one, it says so, and if the file is not a backup or got cut while uploading, it says that too.
+
+The backups the server makes afterwards open with **its own** recovery key, not with the one of the restored backup. Keep both.
 
 If the photos went to S3 storage, also fill in the `URNA_S3_...` lines of `/opt/urna-abierta/.env` on the new server and run
 `sudo urna reiniciar`: those settings are not in the backup, and without them the server stores on disk and cannot find the photos in
-the bucket.
+the bucket. `urna restaurar` reminds you.
+
+### Backups off the server
+
+Backups are made every 6 hours and stay on the server's disk: the last 28, one week. If the server is lost, or the cloud closes the
+account, they are lost with it. To always have one elsewhere:
+
+- **Download them from the app**, in **More**, **Backups**, now and then and above all before the election.
+- **Send them to S3 storage.** If you set one up for the photos (below), each backup also goes to the bucket, to the `backups/` folder,
+  and the 28 newest stay there. They are still encrypted with the recovery key: the provider keeps something it cannot open. To delete
+  the old ones, the access key needs permission to list the bucket; without it they are still sent, but they pile up. A bucket from a
+  different provider than the server's is better, so the backup survives if that account closes.
+
+`urna estado` says whether the last backup reached the bucket. Without S3, it reminds you with an `aviso` line: the backups only live on
+that server.
 
 ## Photos in S3 storage
 
@@ -131,8 +174,9 @@ remains, always the same one.
 Better decide this before the election. The photos already on disk can still be seen and still go into the backup; the new ones go to
 the bucket. If you later go back to disk, the ones left in the bucket can no longer be seen in the app.
 
-**The bucket is not in the backup.** The backup carries the database and the photo folder on disk, which with S3 stays empty or holds the
-older ones. The photos in the bucket are looked after by the provider; for more safety, turn on versioning for the bucket.
+**The photos in the bucket are not in the backup.** The backup carries the database and the photo folder on disk, which with S3 stays
+empty or holds the older ones. The photos in the bucket are looked after by the provider; for more safety, turn on versioning for the
+bucket. The backups themselves do go to the bucket, to `backups/`: see [Backups off the server](#backups-off-the-server).
 
 Address and region for each provider:
 
@@ -158,6 +202,6 @@ Address and region for each provider:
 The server is seasonal. Purge the data from the app, download the last backup if needed and delete the machine, the disk and the address
 in the cloud's console. If you do not delete them, they may keep charging.
 
-If the photos went to S3 storage, neither purging nor deleting the server touches them: they stay in the bucket, and the provider keeps
-charging for them. When you no longer need them, empty the bucket in the provider's console (every version, if you turned on
+If the photos went to S3 storage, neither purging nor deleting the server touches them: they stay in the bucket, along with the backups
+in `backups/`, and the provider keeps charging for them. When you no longer need them, empty the bucket in the provider's console (every version, if you turned on
 versioning), delete it and delete the access key you created for the server.
