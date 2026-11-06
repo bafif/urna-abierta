@@ -77,6 +77,13 @@ jobs:
       - run: deploy/e2e.sh
         env:
           URNA_E2E_INFORME: ${{ runner.temp }}/informe
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-app
+          path: ${{ runner.temp }}/informe
+          if-no-files-found: ignore
+          retention-days: 14
 
   installer:
     name: The installer in a browser (deploy/e2e-instalador.sh)
@@ -89,6 +96,13 @@ jobs:
       - run: bash deploy/e2e-instalador.sh
         env:
           URNA_E2E_INFORME: ${{ runner.temp }}/informe
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-installer
+          path: ${{ runner.temp }}/informe
+          if-no-files-found: ignore
+          retention-days: 14
 
   pasted:
     name: The pasted text, as a cloud runs it (apps/installer/e2e/texto.ts)
