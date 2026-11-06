@@ -24,7 +24,8 @@ if (!process.env.URNA_FIELD_KEY) {
   }
   process.env.URNA_FIELD_KEY = randomBytes(32).toString('base64url');
 }
-if (!process.env.URNA_SETUP_CODE) {
+// The installer leaves only the hash of the code it showed: then there is nothing to make up.
+if (!process.env.URNA_SETUP_CODE && !process.env.URNA_SETUP_CODE_HASH) {
   process.env.URNA_SETUP_CODE = randomBytes(9).toString('base64url');
   console.log(`Código de instalación: ${process.env.URNA_SETUP_CODE}`);
 }

@@ -43,6 +43,12 @@ These plans change often. Each guide carries the date it was checked and links t
 - **Data and the law:** free servers are usually outside Argentina. The guide warns about it, and deciding is up to the
   party.
 
+**Pending: backups with a public key.** Today the server encrypts each backup with the recovery key, so it holds it in its `.env` and
+in the cloud's *user data*, which anyone with access to that account can read; the servers guide says how to delete it or change the
+key. The alternative is to encrypt backups to a public key, for instance with `age` or GPG, whose private half is the key shown to the
+party: the server and the cloud would keep only the public half, which opens nothing, and restoring would ask for the private one. It
+changes the backup format, how earlier backups are restored and what the installer does, so it is left to decide.
+
 ## Installation and landing page
 
 The landing page is a static page that presents the app and links to a GitHub release, with a desktop installer for Windows,

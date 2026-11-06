@@ -67,7 +67,27 @@ Elegí **Prefiero pegar un texto**. Al final, el instalador te da un bloque. Cre
 
 El servidor se instala solo en unos minutos, y le pregunta a un servicio público cuál es su dirección. Volvé al instalador y escribila.
 
-El bloque trae las claves de tu instalación. Queda guardado en la cuenta de esa nube: no lo compartas.
+El bloque trae la llave de recuperación de tu instalación. Queda guardado en la cuenta de esa nube: no lo compartas, y leé lo que
+sigue.
+
+## Lo que queda guardado en la nube
+
+Cuando el instalador crea el servidor, o cuando pegás el bloque, la nube guarda ese bloque como *user data* de la máquina, y no lo
+borra nunca. Ahí va la **llave de recuperación**, porque el servidor cifra cada copia con ella, y el código de instalación, pero solo
+como un resumen del que no se puede sacar. La clave de la base de datos y la de los campos sellados no pasan por ahí: se generan en el
+servidor.
+
+Cualquiera con acceso a esa cuenta de la nube, aunque sea solo para mirar, puede leer el *user data*, y con la llave de recuperación
+abrir todas las copias: las del servidor y las del bucket. También lo puede leer cualquier programa que corra en el servidor, porque
+se lo pide a la nube. Por eso, después del primer arranque conviene una de estas dos cosas:
+
+- **Borrar el *user data*, donde la nube lo deja.** En Google Cloud, sacando la clave `user-data` de los metadatos de la VM. En AWS,
+  con la máquina apagada, en **Acciones**, **Configuración de la instancia**, **Editar datos de usuario**. Oracle Cloud no lo deja
+  cambiar después de crear la máquina.
+- **Cambiar la llave**, si no se puede borrar o si alguien más pudo verla. Poné una nueva en la línea `URNA_BACKUP_KEY=` de
+  `/opt/urna-abierta/.env` (sirve la que da `openssl rand -hex 16`), guardala junto a la anterior y corré `sudo urna copia`. Las
+  copias que se hagan desde ahí se abren con la nueva; las de antes, que siguen en el servidor y en el bucket hasta que se borran
+  solas, con la anterior.
 
 ## Mantenerlo
 

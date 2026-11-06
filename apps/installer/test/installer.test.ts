@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { createVerify, generateKeyPairSync } from 'node:crypto';
+import { createHash, createVerify, generateKeyPairSync } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { awsCloud, signAws } from '../src/clouds/aws.ts';
@@ -37,6 +37,17 @@ describe('the script that installs a server', () => {
     const block = renderScript(settings);
     expect(block).toContain('# Fotos en un almacenamiento S3');
     expect(execFileSync('sh', ['-n'], { input: block }).toString()).toBe('');
+  });
+
+  it('carries no key that opens data, and the setup code only as its hash: a cloud keeps the block where its console shows it', () => {
+    const local = { ...settings.secrets, postgresPassword: 'f'.repeat(48), fieldKey: 'e'.repeat(64) };
+    const script = renderScript({ ...settings, secrets: local });
+    // The database password and the field key are made on the server.
+    expect(script.split('\n').filter((line) => /^(POSTGRES_PASSWORD|URNA_FIELD_KEY|URNA_SETUP_CODE)=[^$]/.test(line))).toEqual([]);
+    for (const value of [local.postgresPassword, local.fieldKey, local.setupCode]) expect(script).not.toContain(value);
+    expect(script).toContain(`URNA_SETUP_CODE_HASH=${createHash('sha256').update(settings.secrets.setupCode).digest('hex')}\n`);
+    expect(script).toMatch(/openssl rand -hex 24/);
+    expect(script).toMatch(/openssl rand -hex 32/);
   });
 
   it('never lets a strange value into the script', () => {

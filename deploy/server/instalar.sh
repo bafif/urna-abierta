@@ -65,12 +65,21 @@ if [ "${URNA_SITE:-}" = auto ]; then
   URNA_SITE=https://$(printf '%s' "$ip" | tr -d '[:space:]')
 fi
 
+# What nobody has to see is made here, not in the block that installs, which a cloud keeps where its console shows it:
+# the database password and the key of the sealed fields. Installing again keeps those of the installation that is
+# there, which its database and its sealed fields need.
+kept() { sed -n "s/^$1=\([0-9a-f]\{1,\}\)\$/\1/p" "$home/.env" 2>/dev/null | head -n 1; }
+POSTGRES_PASSWORD=$(kept POSTGRES_PASSWORD)
+[ -n "$POSTGRES_PASSWORD" ] || POSTGRES_PASSWORD=$(openssl rand -hex 24)
+URNA_FIELD_KEY=$(kept URNA_FIELD_KEY)
+[ -n "$URNA_FIELD_KEY" ] || URNA_FIELD_KEY=$(openssl rand -hex 32)
+
 umask 077
 cat >"$home/.env" <<EOF
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 URNA_FIELD_KEY=$URNA_FIELD_KEY
 URNA_BACKUP_KEY=$URNA_BACKUP_KEY
-URNA_SETUP_CODE=$URNA_SETUP_CODE
+URNA_SETUP_CODE_HASH=$URNA_SETUP_CODE_HASH
 URNA_TEMA=$URNA_TEMA
 URNA_SITE=$URNA_SITE
 URNA_CERT=$URNA_CERT
