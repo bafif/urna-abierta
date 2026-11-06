@@ -19,7 +19,6 @@ function sources(): Record<string, URL> {
     'tema.css': here('../../web/src/lib/tema.css'),
     'temas.js': here('../../web/src/lib/temas.js'),
     'aplicar-tema.js': here('../../web/src/lib/aplicar-tema.js'),
-    urna: here('../../../deploy/server/urna'),
     'instalar.sh': here('../../../deploy/server/instalar.sh'),
     ...fonts,
   };

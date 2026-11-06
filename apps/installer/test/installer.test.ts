@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createVerify, generateKeyPairSync } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { awsCloud, signAws } from '../src/clouds/aws.ts';
 import { googleCloud, signGoogleAssertion } from '../src/clouds/google.ts';
@@ -18,15 +19,22 @@ describe('the script that installs a server', () => {
     expect(script.startsWith('#!/bin/sh\n')).toBe(true);
     expect(script).toContain('URNA_SITE=https://203.0.113.24');
     expect(script).toContain(settings.secrets.recoveryKey);
-    expect(script).toContain('URNA_SCRIPT');
     expect(Buffer.byteLength(script)).toBeLessThan(16 * 1024);
   });
 
-  it('leaves out comment lines, but keeps the help of urna and what goes inside files', () => {
+  it('takes the commands of the server from the server image, where its build puts them', () => {
+    const script = renderScript(settings);
+    expect(script).not.toContain('URNA_SCRIPT');
+    expect(script).toContain('"$URNA_IMAGE_SERVER" /app/urna');
+    const containerfile = readFileSync(new URL('../../../deploy/server.Containerfile', import.meta.url), 'utf8');
+    expect(containerfile).toMatch(/^WORKDIR \/app$/m);
+    expect(containerfile).toMatch(/^COPY deploy\/server\/urna urna$/m);
+  });
+
+  it('leaves out comment lines, but keeps the top block and what goes inside files', () => {
     const script = withoutComments(['#!/bin/sh', '# help line', 'set -eu', '# a note', '  # an indented note', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays'].join('\n'));
     expect(script.split('\n')).toEqual(['#!/bin/sh', '# help line', 'set -eu', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays']);
     const block = renderScript(settings);
-    expect(block).toContain('urna estado');
     expect(block).toContain('# Fotos en un almacenamiento S3');
     expect(execFileSync('sh', ['-n'], { input: block }).toString()).toBe('');
   });

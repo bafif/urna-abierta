@@ -1,5 +1,5 @@
 # Prepares an Ubuntu or Debian machine and starts Urna Abierta. Runs as root, once.
-# The installer puts the settings and the `urna` script before this, so that it fits in one block.
+# The installer puts the settings before this, so that it fits in one block. The `urna` script comes in the server image.
 set -eu
 
 home=/opt/urna-abierta
@@ -74,9 +74,6 @@ ${URNA_EXTRA_ENV:-}
 EOF
 umask 022
 mkdir -p "$home/copias" "$home/fotos" "$home/.config/systemd/user/default.target.wants" "$home/.config/systemd/user/timers.target.wants"
-write_urna >"$home/urna"
-chmod 755 "$home/urna"
-ln -sf "$home/urna" /usr/local/bin/urna
 
 cat >"$home/.config/systemd/user/urna-abierta.service" <<EOF
 [Unit]
@@ -128,6 +125,11 @@ else
   say 'bajando las imágenes'
   run_as_urna podman pull -q "$URNA_IMAGE_DB" "$URNA_IMAGE_SERVER" "$URNA_IMAGE_WEB" >/dev/null
 fi
+# The commands of this version, from its image: «urna actualizar» brings the ones of the next.
+run_as_urna podman run --rm --network none --entrypoint cat "$URNA_IMAGE_SERVER" /app/urna >"$home/urna"
+chown urna:urna "$home/urna"
+chmod 755 "$home/urna"
+ln -sf "$home/urna" /usr/local/bin/urna
 
 say 'arrancando'
 # With a user session it starts through systemd, so that it comes back after a reboot.
