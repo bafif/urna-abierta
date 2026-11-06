@@ -17,6 +17,10 @@
   const days = $derived(table?.shift ?? table?.days ?? []);
   const multiDay = $derived(days.length > 1);
   const pending = $derived(app.pendingCount + app.pendingPhotos);
+  const chief = $derived(session.me?.contact?.name.split(' ')[0] ?? '');
+  // What was entered can be corrected from the first envelope count until the election closes.
+  const canCorrect = $derived(app.countedDays.size > 0);
+  const rollToo = $derived(step === 'tally' || step === 'photo' || step === 'done');
 
   const stations = $derived.by((): Station[] => {
     const order = ['prepare', 'mark', 'count', 'tally'];
@@ -105,6 +109,17 @@
 {:else}
   <Pantalla ojo={formatDay(app.today)} titulo={title} bajada={subtitle} desliza>
     <Stations steps={stations} />
+    {#if app.correctionSaved}
+      <p class="resultado bien" role="status" data-testid="correction-saved"><Ic name="tilde" />{chief ? t('correct.saved', { name: chief }) : t('correct.saved.noName')}</p>
+    {/if}
+    {#if canCorrect && step === 'done'}
+      <div class="aviso-suave">
+        <span>{t('correct.hint')}</span>
+        <button class="enlace" onclick={() => nav.go('correct')}>{t('correct.link')}</button>
+      </div>
+    {:else if canCorrect}
+      <button class="enlace" onclick={() => nav.go('correct')}>{t('correct.link')}</button>
+    {/if}
     {#if failed}<p class="problema" role="alert">{t('prepare.failed')}</p>{/if}
     {#if step === 'photo' && app.photoRefused}<p class="problema" role="alert">{t('photo.refused')}</p>{/if}
     {#if pwa.installEvent && !app.practice}
@@ -131,7 +146,18 @@
         {:else if step === 'photo'}
           <button class="boton primario" onclick={() => nav.go('photo')}><Ic name="camara" /><span>{t('plan.takePhoto')}</span></button>
         {/if}
-        <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+        <!-- Something can go wrong at any step, also after the count: the record is signed afterwards. -->
+        {#if step !== 'prepare'}
+          <button class="boton discreto-peligro" onclick={() => nav.go('alert')}><Ic name="aviso" /><span>{t('roll.problem')}</span></button>
+        {/if}
+        {#if rollToo}
+          <div class="renglon-enlaces">
+            <button class="enlace" onclick={() => nav.go('roll')}>{t('plan.openRoll')}</button>
+            <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+          </div>
+        {:else}
+          <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+        {/if}
       </div>
     {/snippet}
   </Pantalla>

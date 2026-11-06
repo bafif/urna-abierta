@@ -9,6 +9,7 @@
     sobre: '<path d="M3 6h18v13H3zM3 7l9 7 9-7"/>',
     atras: '<path d="M19 12H6M12 6l-6 6 6 6"/>',
     mas: '<path d="M12 5v14M5 12h14"/>',
+    lapiz: '<path d="M4 20l4.5-1L19 8.5 15.5 5 5 15.5z"/>',
   };
   let { name }: { name: string } = $props();
 </script>

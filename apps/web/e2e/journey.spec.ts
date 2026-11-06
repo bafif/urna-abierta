@@ -214,6 +214,29 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   await page.getByRole('button', { name: 'Volver' }).click();
   await page.getByRole('button', { name: 'Volver' }).click();
 
+  // After finishing, the roll is a tap away, and crossing out asks first: that day's voting closed.
+  await button(fiscal, 'Abrir el padrón').click();
+  await fiscal.getByTestId('person').first().click();
+  await expect(fiscal.getByTestId('closed-ask')).toContainText('La votación de hoy ya cerró');
+  await button(fiscal, 'No, volver').click();
+  await expect(fiscal.getByTestId('closed-ask')).toHaveCount(0);
+  await fiscal.getByRole('button', { name: 'Volver' }).click();
+
+  // A mistake in the count is corrected from the plan: one more version, which the chief chooses.
+  await button(fiscal, 'Corregir algo que cargaste').click();
+  await expect(fiscal.getByRole('heading')).toHaveText('¿Qué querés corregir?');
+  await fiscal.getByRole('radio', { name: /^Escrutinio/ }).click();
+  await button(fiscal, 'Corregir').click();
+  await expect(fiscal.getByRole('heading')).toHaveText('¿Cuántos votos sacó Lista Azul?');
+  await expect(fiscal.getByTestId('alert-pill')).toBeVisible();
+  await fiscal.locator('.tecla').filter({ hasText: '←' }).click();
+  await typeNumber(fiscal, 1);
+  for (let i = 0; i < 5; i += 1) await button(fiscal, 'Seguir').click();
+  await expect(fiscal.getByTestId('tally-total').locator('.antes')).toHaveText('3');
+  await button(fiscal, 'Guardar la corrección').click();
+  await expect(fiscal.getByTestId('correction-saved')).toBeVisible();
+  await expect(fiscal.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 30_000 });
+
   // The end: only totals remain.
   await button(page, 'Pasar al escrutinio').click();
   await button(page, 'Cerrar la elección').click();

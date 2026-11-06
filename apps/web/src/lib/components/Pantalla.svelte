@@ -19,9 +19,11 @@
     pie?: Snippet;
     /** For screens whose content can be longer than the phone. */
     desliza?: boolean;
+    /** «Algo anda mal» at the top right, where the keypad or the photo leave no room at the bottom. */
+    aviso?: boolean;
   }
 
-  let { accion = 'plan', volver = false, onback, ojo, titulo = '', bajada, encabezado, children, pie, desliza = false }: Props = $props();
+  let { accion = 'plan', volver = false, onback, ojo, titulo = '', bajada, encabezado, children, pie, desliza = false, aviso = false }: Props = $props();
 
   const style = $derived(window.URNA_TEMA.variables(ui.theme, ui.mode, accion));
   const recipes = $derived(window.URNA_TEMA.recetas(ui.theme));
@@ -36,8 +38,16 @@
 <div class="pantalla" {style} {...recipes}>
   <div class="pantalla-in" data-accion={accion}>
     <header class="cabeza">
-      {#if volver}
+      {#snippet atras()}
         <button class="atras" onclick={() => (onback ? onback() : nav.back())}><Ic name="atras" /><span>{t('back')}</span></button>
+      {/snippet}
+      {#if aviso}
+        <div class="cabeza-fila">
+          {#if volver}{@render atras()}{:else}<span></span>{/if}
+          <button class="pastilla-aviso" data-testid="alert-pill" onclick={() => nav.go('alert')}><Ic name="aviso" /><span>{t('roll.problem')}</span></button>
+        </div>
+      {:else if volver}
+        {@render atras()}
       {/if}
       {#if ui.theme.logo}<div class="logo-tema"><img src={ui.theme.logo} alt={ui.theme.nombre} /></div>{/if}
       {#if ojo}<p class="ojo">{ojo}</p>{/if}

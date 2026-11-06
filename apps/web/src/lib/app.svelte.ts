@@ -180,6 +180,9 @@ class AppState {
   writeSamples = $state.raw<number[]>([]);
   /** How far ahead the server's clock is from this phone's, in milliseconds. */
   clockOffset = $state(0);
+  /** A correction was just saved: the plan says so for a moment. */
+  correctionSaved = $state(false);
+  private correctionTimer: ReturnType<typeof setTimeout> | undefined;
   /** The roll of the table changed on the server, and the phone already has the new one. */
   rollUpdated = $state(false);
   /** Photos the server will never take, by their hash. */
@@ -224,6 +227,18 @@ class AppState {
   get lastEnvelopes(): number | null {
     const last = this.ofType('envelopes.counted').at(-1);
     return last ? (last.payload as { envelopes: number }).envelopes : null;
+  }
+
+  /** The last count of one day's envelopes, with how many were crossed out then: a correction compares with that. */
+  envelopesOf(day: string): { envelopes: number; marked: number } | null {
+    const last = this.ofType('envelopes.counted').findLast((operation) => (operation.payload as { day: string }).day === day);
+    return last ? (last.payload as { envelopes: number; marked: number }) : null;
+  }
+
+  /** The last tally sent for a category: a correction starts from it. */
+  lastTally(category: string): Record<string, number> | null {
+    const last = this.ofType('tally.submitted').findLast((operation) => (operation.payload as { category: string }).category === category);
+    return last ? (last.payload as { results: Record<string, number> }).results : null;
   }
 
   get talliedCategories(): Set<string> {
@@ -634,8 +649,9 @@ class AppState {
     return sent ? 'sent' : 'queued';
   }
 
-  async countEnvelopes(day: string, envelopes: number): Promise<boolean> {
-    const operation = await this.record('envelopes.counted', { day, envelopes, marked: this.markedCount });
+  /** A correction of an earlier day keeps what was crossed out that day, not what is crossed out now. */
+  async countEnvelopes(day: string, envelopes: number, marked = this.markedCount): Promise<boolean> {
+    const operation = await this.record('envelopes.counted', { day, envelopes, marked });
     this.schedule(500);
     return operation !== null;
   }
@@ -644,6 +660,16 @@ class AppState {
     const operation = await this.record('tally.submitted', { category, results });
     this.schedule(500);
     return operation !== null;
+  }
+
+  /**
+   * A correction is one more version, sent like the first: nothing already sent is replaced, and the chief chooses
+   * which one counts.
+   */
+  noteCorrection(): void {
+    this.correctionSaved = true;
+    clearTimeout(this.correctionTimer);
+    this.correctionTimer = setTimeout(() => (this.correctionSaved = false), 10_000);
   }
 
   /** The photo stays saved on the phone until it reaches the server. One the server would never take is not kept. */
