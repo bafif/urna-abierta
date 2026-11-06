@@ -44,7 +44,7 @@ see [Loading the roll](#loading-the-roll).
 their phone. You can also [make your own](themes.md) and load it here, by dragging the file.
 
 At the end it gives you your server's address and a recovery key for the backups, and opens the app. An assistant then continues with
-the party, the team and the first election.
+the party, the team and the first election: [Your first election](first-election.md) goes through it.
 
 **Keep that key.** It is the only thing that opens your backups, and it cannot be generated again.
 
