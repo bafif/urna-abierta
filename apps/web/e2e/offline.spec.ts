@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { backOnline, enter, expectLeft, pendingOperations, prepared, reopen, seed } from './helpers.ts';
+import { backOnline, enter, expectLeft, pendingOperations, PHOTO, prepared, reopen, seed, typeNumber } from './helpers.ts';
 
 test('opens without signal, keeps what was marked and sends it when signal returns', async ({ context, request }) => {
   const demo = await seed(request);
@@ -68,6 +68,117 @@ test('the urgent alert offers a call, WhatsApp and SMS when it cannot go out', a
   await backOnline(page);
   await page.getByRole('button', { name: 'Volver' }).click();
   await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+});
+
+test('the urgent alert goes out at once, even with a send of marks stuck in front of it', async ({ context, request }) => {
+  const demo = await seed(request);
+  const page = await prepared(context, demo.tables[0]!.invitations[0]!);
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+  // The marks get stuck on the way: their answer never comes back.
+  await context.route('**/api/sync/push', async (route) => {
+    if (!route.request().postData()?.includes('voter.marked')) return route.continue();
+    await new Promise((resolve) => setTimeout(resolve, 30_000));
+    await route.abort().catch(() => undefined);
+  });
+  for (let i = 0; i < 5; i += 1) await page.getByTestId('person').first().click();
+  await expect(page.getByTestId('sync-status')).toContainText('Enviando', { timeout: 10_000 });
+  await page.getByRole('button', { name: 'Algo anda mal' }).click();
+  await page.getByTestId('report').click();
+  await expect(page.getByText('Tu aviso ya está en el sistema. Si es urgente, llamá a Rubén.')).toBeVisible({ timeout: 5_000 });
+  await context.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
+test('a roll changed after preparing the table reaches the phone, and its marks stay', async ({ context, request }) => {
+  const demo = await seed(request, { size: 10 });
+  const table = demo.tables[0]!.table;
+  const page = await prepared(context, demo.tables[0]!.invitations[0]!);
+  await page.getByTestId('person').first().click();
+  await expectLeft(page, 9, 10);
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+  const { token } = await (await request.post('/api/auth/redeem', { data: { token: demo.links.coordinacion } })).json();
+  const corrected = await request.put(`/api/elections/${demo.election}/electors/${table}-e-000005`, { headers: { authorization: `Bearer ${token}` }, data: { full_name: 'Zamora, Renata' } });
+  expect(corrected.ok()).toBe(true);
+  await reopen(page);
+  await expect(page.getByTestId('roll-updated')).toBeVisible({ timeout: 20_000 });
+  await expectLeft(page, 9, 10);
+  await page.getByRole('searchbox').fill('zamora');
+  await expect(page.getByTestId('person').first().locator('.nombre')).toContainText('Zamora');
+  await page.getByRole('button', { name: 'Entendido' }).click();
+  await expect(page.getByTestId('roll-updated')).toHaveCount(0);
+});
+
+test('a phone prepared before the random ids changes to them once nothing is left to send, and keeps its marks', async ({ context, request }) => {
+  const demo = await seed(request, { size: 10 });
+  const table = demo.tables[0]!.table;
+  const page = await prepared(context, demo.tables[0]!.invitations[0]!);
+  for (let i = 0; i < 2; i += 1) await page.getByTestId('person').first().click();
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 20_000 });
+  // As the version before left a phone: each person, and each mark, by the id of the roll.
+  await page.evaluate(async (table) => {
+    const ask = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const db = await ask(indexedDB.open('urna-abierta'));
+    const tx = db.transaction(['electors', 'operations', 'meta'], 'readwrite');
+    const done = new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    const electors = await ask(tx.objectStore('electors').getAll()) as { id: string; order: number }[];
+    const old = new Map(electors.map((entry) => [entry.id, `${table}-e-${String(entry.order).padStart(6, '0')}`]));
+    tx.objectStore('electors').clear();
+    for (const entry of electors) tx.objectStore('electors').put({ ...entry, id: old.get(entry.id) });
+    const rows = await ask(tx.objectStore('operations').getAll()) as { operation: { type: string; payload: { elector?: string } } }[];
+    for (const row of rows) {
+      if (row.operation.type.startsWith('voter.')) tx.objectStore('operations').put({ ...row, operation: { ...row.operation, payload: { ...row.operation.payload, elector: old.get(row.operation.payload.elector!) } } });
+    }
+    tx.objectStore('meta').delete('publicIds');
+    tx.objectStore('meta').delete('rollRevision');
+    await done;
+    db.close();
+  }, table);
+  await reopen(page);
+  await expectLeft(page, 8, 10);
+  const changed = () => page.evaluate(async (table) => {
+    const ask = <T>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const db = await ask(indexedDB.open('urna-abierta'));
+    const electors = await ask(db.transaction('electors').objectStore('electors').getAll()) as { id: string }[];
+    const flag = await ask(db.transaction('meta').objectStore('meta').get('publicIds')) as { value: boolean } | undefined;
+    db.close();
+    return Boolean(flag?.value) && electors.length === 10 && electors.every((entry) => !entry.id.startsWith(table));
+  }, table);
+  await expect.poll(changed, { timeout: 20_000 }).toBe(true);
+  await expectLeft(page, 8, 10);
+  // Nothing changed for the person: there is no notice.
+  await expect(page.getByTestId('roll-updated')).toHaveCount(0);
+});
+
+test('a photo the server refuses does not hold anything back, and the phone asks for it again', async ({ context, request }) => {
+  const demo = await seed(request, { size: 10, startsInDays: 0 });
+  const page = await prepared(context, demo.tables[0]!.invitations[0]!);
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await page.getByRole('button', { name: 'Ya cerró la mesa: contar los sobres' }).click();
+  await typeNumber(page, 0);
+  await page.getByRole('button', { name: 'Guardar' }).click();
+  await page.getByRole('button', { name: 'Empezar el escrutinio' }).click();
+  for (let i = 0; i < 4; i += 1) await page.getByRole('button', { name: 'Seguir' }).click();
+  await page.getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByRole('heading')).toHaveText('Sacale una foto al acta');
+  await context.route('**/api/tables/*/photos/*', (route) => (route.request().method() === 'PUT' ? route.fulfill({ status: 413, contentType: 'application/json', body: '{"error":"too_large"}' }) : route.continue()));
+  await page.getByTestId('photo-input').setInputFiles({ name: 'acta.png', mimeType: 'image/png', buffer: PHOTO });
+  await page.getByRole('button', { name: 'Terminé' }).click();
+  await expect(page.getByText('El servidor no aceptó la foto del acta. Sacala de nuevo.')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado');
+  await context.unrouteAll({ behavior: 'ignoreErrors' });
+  await page.getByRole('button', { name: 'Sacar la foto del acta' }).click();
+  await page.getByTestId('photo-input').setInputFiles({ name: 'acta.png', mimeType: 'image/png', buffer: PHOTO });
+  await page.getByRole('button', { name: 'Terminé' }).click();
+  await expect(page.getByRole('heading')).toHaveText('Terminaste. Gracias');
+  await expect(page.getByTestId('sync-status')).toContainText('Todo enviado', { timeout: 30_000 });
 });
 
 test('a mark that could not be saved goes back to the list, and says so', async ({ context, request }) => {

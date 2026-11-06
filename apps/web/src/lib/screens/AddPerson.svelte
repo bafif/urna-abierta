@@ -52,6 +52,7 @@
 <Pantalla accion="equipo" volver titulo={label ?? t('person.title')} desliza>
   <label class="campo"><span>{t('person.name')}</span><input bind:value={name} data-testid="person-name" /></label>
   <label class="campo"><span>{t('person.phone')}</span><input bind:value={phone} type="tel" data-testid="person-phone" /></label>
+  <p class="aclara">{t('person.phone.hint')}</p>
   {#if !fixedRole}
     <p class="etiqueta">{t('person.what')}</p>
     <Options items={options} bind:value={chosenRole} />

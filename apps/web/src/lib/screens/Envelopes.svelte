@@ -2,7 +2,7 @@
   import Ic from '../components/Ic.svelte';
   import Keypad from '../components/Keypad.svelte';
   import Pantalla from '../components/Pantalla.svelte';
-  import { app, localDay } from '../app.svelte.ts';
+  import { app } from '../app.svelte.ts';
   import { t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
 
@@ -14,7 +14,7 @@
 
   async function save() {
     if (count === null) return;
-    failed = !(await app.countEnvelopes(localDay(), count));
+    failed = !(await app.countEnvelopes(app.today, count));
     if (!failed) nav.back();
   }
 </script>

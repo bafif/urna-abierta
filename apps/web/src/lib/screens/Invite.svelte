@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { whatsappDigits } from '@urna-abierta/domain';
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import Qr from '../components/Qr.svelte';
@@ -11,7 +12,7 @@
   let copied = $state(false);
   const link = $derived(inviteLink(token));
   const firstName = $derived(name.split(' ')[0] ?? '');
-  const digits = $derived(phone?.replace(/\D/g, '') ?? '');
+  const digits = $derived(whatsappDigits(phone));
   const message = $derived(t('invite.message', { name: firstName, party: session.me?.party.name ?? '', link }));
 
   async function copy() {

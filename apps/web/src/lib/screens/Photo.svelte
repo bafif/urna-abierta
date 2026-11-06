@@ -8,7 +8,7 @@
 
   let preview = $state<string | null>(null);
   let saving = $state(false);
-  let failed = $state(false);
+  let problem = $state<'unsaved' | 'tooBig' | null>(null);
 
   onDestroy(() => {
     if (preview) URL.revokeObjectURL(preview);
@@ -18,12 +18,13 @@
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     saving = true;
-    failed = false;
-    if (await app.addPhoto(file)) {
+    problem = null;
+    const result = await app.addPhoto(file);
+    if (result === 'saved') {
       if (preview) URL.revokeObjectURL(preview);
       preview = URL.createObjectURL(file);
     } else {
-      failed = true;
+      problem = result;
     }
     saving = false;
   }
@@ -35,7 +36,11 @@
   {:else}
     <div class="marco-foto"></div>
   {/if}
-  {#if failed}<p class="problema" role="alert">{t('photo.failed')}</p>{/if}
+  {#if problem}
+    <p class="problema" role="alert">{problem === 'tooBig' ? t('photo.tooBig') : t('photo.failed')}</p>
+  {:else if app.photoRefused && !preview}
+    <p class="problema" role="alert" data-testid="photo-refused">{t('photo.refused')}</p>
+  {/if}
   {#snippet pie()}
     <div class="pila">
       {#if preview}

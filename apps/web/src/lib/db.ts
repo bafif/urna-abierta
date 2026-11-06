@@ -19,7 +19,14 @@ export interface StoredPhoto {
   sha256: string;
   /** Plain bytes, not a Blob: WebKit can refuse to store a Blob in the database. */
   bytes: ArrayBuffer;
-  sent: 0 | 1;
+  /** 0 waits to go, 1 got there, 2 the server will never take it. */
+  sent: PhotoState;
+}
+
+export const enum PhotoState {
+  Waiting = 0,
+  Sent = 1,
+  Refused = 2,
 }
 
 export class UrnaDatabase extends Dexie {
