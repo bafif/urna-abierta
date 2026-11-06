@@ -7,7 +7,7 @@ const say = (key: string, values: Record<string, string | number> = {}) => `[${k
 const data: PersonData = {
   party: 'Agrupación <Ejemplo>',
   election: { name: 'Centro de estudiantes', days: ['2027-04-06'] },
-  person: { name: 'Gómez, Ana', document: '30111222', fileNumber: null, address: null, order: 12, extra: { carrera: 'Letras' }, toReview: false },
+  person: { name: 'Gómez, Ana', document: '99111222', fileNumber: null, address: null, order: 12, extra: { carrera: 'Letras' }, toReview: false },
   table: { name: 'Mesa 3', place: 'Escuela Normal 1' },
   consent: { date: '2027-01-01', means: 'firma' },
   semaphore: { category: null, sensitive: true, hidden: true, notedAt: '2027-03-01T15:00:00.000Z' },
@@ -22,7 +22,7 @@ describe('the page with what is held about a person', () => {
     expect(page).toContain('Agrupación &lt;Ejemplo&gt;');
     expect(page).not.toContain('<Ejemplo>');
     expect(page).toContain('<dt>carrera</dt><dd>Letras</dd>');
-    expect(page).toContain('30111222');
+    expect(page).toContain('99111222');
     expect(page).not.toMatch(/<script|election_id|needs_review|"review"/);
   });
 

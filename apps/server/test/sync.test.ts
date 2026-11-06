@@ -768,7 +768,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
 
     it('erasing a person and purging the election leave no document behind, anywhere in the database', async () => {
       const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Con DNI', kind: 'estudiantil', days: ['2027-04-06'] })).json().id as string;
-      const dnis = ['30111222', '30111333', '30111444'];
+      const dnis = ['99111222', '99111333', '99111444'];
       const file = writePadron({ electors: dnis.map((dni, i) => ({ id: `d-${dni}`, full_name: `Persona${i}, Ana`, identifiers: [{ type: 'DNI', value: dni }], table: '1' })) as never });
       await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
       const mesa = (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string;
