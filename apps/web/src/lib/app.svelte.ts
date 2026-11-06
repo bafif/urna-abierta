@@ -2,6 +2,7 @@ import { tick } from 'svelte';
 import { fakeRoll, MarkState, parseOperation, SCHEMA_VERSION, uuidv7, type Operation, type RollEntry } from '@urna-abierta/domain';
 import { QueueState, storeFor, UrnaDatabase } from './db.ts';
 import { t } from './i18n.svelte.ts';
+import { rollCanGo } from './roll-release.ts';
 import { API, session, type TableInfo } from './session.svelte.ts';
 import { retryDelay, syncOnce } from './sync.ts';
 
@@ -9,12 +10,6 @@ const PRACTICE_KEY = 'urna-abierta-practica';
 const PRACTICE_PEOPLE = 40;
 const MAX_PHOTO_SIDE = 1800;
 const SHRINK_LIMIT_MS = 15_000;
-/**
- * A phone that never heard the election closed takes it as closed once the night after the last day is over,
- * counting included, and keeps the roll only the hours the security profile allows after that.
- */
-const CLOSE_ASSUMED_HOURS = 30;
-const HOURS_KEPT_IF_UNKNOWN = 12;
 const PERIODIC_SYNC_MS = 30_000;
 const ROOM_CHECK_MS = 10 * 60_000;
 /** Enough to notice a full phone in time: what the app itself writes is far smaller than this. */
@@ -314,21 +309,20 @@ class AppState {
     await this.touchCanary();
     await this.refreshPersistence();
     await this.refreshPending();
-    if (!this.practice) await this.letGoIfFinished();
+    // With signal, the first sync decides, a second from now: the server knows better than the calendar.
+    if (!this.practice && !navigator.onLine) await this.letGoIfFinished(false);
   }
 
   /**
    * The roll does not stay on the phone: once the election closed or the person moved to another
-   * table, and only when nothing is left to send, it goes.
+   * table, and only when nothing is left to send, it goes. `reached`: the server answered just now.
    */
-  private async letGoIfFinished(): Promise<void> {
+  private async letGoIfFinished(reached: boolean): Promise<void> {
     if (!this.tableId || this.pendingCount + this.pendingPhotos > 0) return;
-    const assigned = session.me?.table?.id;
-    const reached = navigator.onLine && session.me !== null;
-    const lastDay = session.me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
-    const kept = session.me?.security.localHoursAfterClose ?? HOURS_KEPT_IF_UNKNOWN;
-    const longAgo = lastDay && Date.now() - Date.parse(`${lastDay}T00:00:00`) > (CLOSE_ASSUMED_HOURS + kept) * 3_600_000;
-    if ((reached && assigned !== this.tableId) || longAgo) await this.wipe();
+    const { me } = session;
+    const lastDay = me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
+    const roll = { tableId: this.tableId, reached: reached && me !== null, assigned: me?.table?.id, lastDay, hoursKept: me?.security.localHoursAfterClose };
+    if (rollCanGo(roll)) await this.wipe();
   }
 
   private async wipe(): Promise<void> {
@@ -395,7 +389,7 @@ class AppState {
     if (this.tableId && this.tableId !== table.id && this.pendingCount + this.pendingPhotos > 0) {
       await this.sync();
       if (this.pendingCount + this.pendingPhotos > 0) throw new Error('pending from another table');
-      await this.letGoIfFinished();
+      await this.letGoIfFinished(true);
     }
     let electors: RollEntry[];
     if (this.practice) {
@@ -600,7 +594,7 @@ class AppState {
     }
     if (result === 'done') await this.sendPhotos().catch(() => undefined);
     await this.refreshPending().catch(() => undefined);
-    if (result === 'done') await this.letGoIfFinished().catch(() => undefined);
+    await this.letGoIfFinished(result === 'done').catch(() => undefined);
     this.sending = false;
     this.online = navigator.onLine;
     if (result === 'done') {
