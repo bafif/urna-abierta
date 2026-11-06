@@ -1,24 +1,40 @@
 /**
  * The real installation, over SSH, on two Ubuntu machines in containers, with invented data:
- * installs on the first, uses the app through its API, makes an encrypted backup, restores it on
- * the second and checks that everything is there. Then it reboots a machine and looks again.
+ * installs on the first, uses the app through its API, makes an encrypted backup that also goes to
+ * a bucket, updates it to a next version, restores the backup on the second and checks that
+ * everything is there. Then it reboots a machine and looks again.
  *
  *   node apps/installer/e2e/servidor.ts
+ *
+ * URNA_E2E_NAME and URNA_E2E_PORT (the first of five ports) let it run next to another copy.
  */
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { EMPTY_SHA256, amzDate, s3Client, signS3 } from '../../server/src/s3.ts';
 import { newSecrets, renderScript, type Secrets } from '../src/settings.ts';
 import { checkSsh, runScript, type SshTarget } from '../src/ssh.ts';
 
 const root = new URL('../../../', import.meta.url).pathname;
 const work = mkdtempSync(join(tmpdir(), 'urna-servidor-'));
-const IMAGE = 'localhost/urna-maquina-prueba';
+const name = process.env.URNA_E2E_NAME ?? 'urna-maquina';
+const port = Number(process.env.URNA_E2E_PORT ?? 2221);
+const IMAGE = `localhost/${name}-prueba`;
+const network = `${name}-red`;
 const results: { step: string; ok: boolean; detail?: unknown }[] = [];
 
 const podman = (...args: string[]) => execFileSync('podman', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
+/** For what has to fail: whether it did, and everything it said. */
+function attempt(...args: string[]): { ok: boolean; said: string } {
+  try {
+    return { ok: true, said: execFileSync('podman', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
+  } catch (error) {
+    const { stdout = '', stderr = '' } = error as { stdout?: string; stderr?: string };
+    return { ok: false, said: `${stdout}${stderr}` };
+  }
+}
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function record(step: string, ok: boolean, detail?: unknown): void {
@@ -45,7 +61,7 @@ function opensshPublic(pem: string): string {
 
 async function machine(name: string, sshPort: number, webPort: number): Promise<{ target: SshTarget; name: string; web: number }> {
   podman('rm', '-f', name);
-  podman('run', '-d', '--name', name, '--hostname', name, '--privileged', '--systemd=always', '--device', '/dev/fuse', '-p', `127.0.0.1:${sshPort}:22`, '-p', `127.0.0.1:${webPort}:443`, IMAGE);
+  podman('run', '-d', '--name', name, '--hostname', name, '--network', network, '--privileged', '--systemd=always', '--device', '/dev/fuse', '-p', `127.0.0.1:${sshPort}:22`, '-p', `127.0.0.1:${webPort}:443`, IMAGE);
   podman('exec', '-i', name, 'sh', '-c', `echo '${opensshPublic(publicKey)}' > /home/ubuntu/.ssh/authorized_keys; chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys; chmod 600 /home/ubuntu/.ssh/authorized_keys`);
   const target: SshTarget = { host: '127.0.0.1', port: sshPort, user: 'ubuntu', privateKey };
   for (let attempt = 0; ; attempt += 1) {
@@ -60,16 +76,24 @@ async function machine(name: string, sshPort: number, webPort: number): Promise<
 }
 
 const imageFile = join(work, 'imagenes.tar');
+const nextFile = join(work, 'imagenes-nuevas.tar');
 const inside = '/tmp/imagenes.tar';
-const images = { db: 'docker.io/library/postgres:18-alpine', server: 'localhost/urna-server:latest', web: 'localhost/urna-web:latest' };
+// Installed as version «anterior», and updated to «nueva»: the same build, plus a migration and a line in its commands.
+const images = { db: 'docker.io/library/postgres:18-alpine', server: `localhost/${name}-server:anterior`, web: `localhost/${name}-web:anterior` };
+const next = { server: `localhost/${name}-server:nueva`, web: `localhost/${name}-web:nueva` };
 
-async function installOn(m: { target: SshTarget; name: string }, secrets: Secrets, theme = 'mate'): Promise<string[]> {
+// A bucket, as a party would have it with another provider, that the first machine reaches by name.
+const bucket = { endpoint: `http://127.0.0.1:${port + 4}`, inside: `http://${name}-minio:9000`, name: 'urna-prueba', region: 'us-east-1', accessKeyId: 'urnaprueba', secretAccessKey: 'secreto-de-prueba' };
+const s3Settings = [`URNA_S3_ENDPOINT=${bucket.inside}`, `URNA_S3_BUCKET=${bucket.name}`, `URNA_S3_ACCESS_KEY_ID=${bucket.accessKeyId}`, `URNA_S3_SECRET_ACCESS_KEY=${bucket.secretAccessKey}`];
+
+/** `variables` go where the installation reads them, as the settings of a bucket would be written by hand. */
+async function installOn(m: { target: SshTarget; name: string }, secrets: Secrets, { theme = 'mate', variables = [] as string[] } = {}): Promise<string[]> {
   podman('cp', imageFile, `${m.name}:${inside}`);
   podman('exec', m.name, 'chmod', '644', inside);
   const script = renderScript({
     secrets, site: 'https://localhost', cert: 'internal', theme, images, imagesTar: inside,
     extraEnv: ['URNA_NETWORK=host', 'URNA_PORTS='],
-  }).replace('URNA_EXTRA_ENV=', 'URNA_NO_SWAP=si\nURNA_EXTRA_ENV=');
+  }).replace('URNA_EXTRA_ENV=', ['URNA_NO_SWAP=si', ...variables, 'URNA_EXTRA_ENV='].join('\n'));
   const lines: string[] = [];
   await runScript(m.target, script, (line) => {
     if (line.startsWith('urna-abierta:')) lines.push(line.slice(14));
@@ -87,15 +111,46 @@ function api(m: { name: string }, method: string, path: string, { token, body }:
 }
 
 const urna = (m: { name: string }, ...args: string[]) => podman('exec', m.name, 'urna', ...args);
+/** As the user that owns the containers, the way `urna` runs them. */
+const asUrna = (m: { name: string }, ...args: string[]) =>
+  podman('exec', m.name, 'sh', '-c', 'runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta "$@"', 'sh', ...args);
+const raw = s3Client({ endpoint: bucket.endpoint, bucket: bucket.name, region: bucket.region, accessKeyId: bucket.accessKeyId, secretAccessKey: bucket.secretAccessKey });
+
+function cleanup(): void {
+  for (const each of [`${name}-1`, `${name}-2`, `${name}-minio`]) attempt('rm', '-f', each);
+  attempt('network', 'rm', network);
+}
 
 console.log('Armando las imágenes y la máquina…');
-execFileSync('bash', ['-c', `podman build -q -t urna-server -f deploy/server.Containerfile . >/dev/null && podman build -q -t urna-web -f deploy/web.Containerfile . >/dev/null && podman build -q -t urna-maquina-prueba -f deploy/maquina-prueba.Containerfile deploy >/dev/null`], { cwd: root, stdio: 'inherit' });
+execFileSync('bash', ['-c', `podman build -q -t ${images.server} -f deploy/server.Containerfile . >/dev/null && podman build -q -t ${images.web} -f deploy/web.Containerfile . >/dev/null && podman build -q -t ${IMAGE} -f deploy/maquina-prueba.Containerfile deploy >/dev/null`], { cwd: root, stdio: 'inherit' });
+const nextBuild = mkdtempSync(join(work, 'nueva-'));
+writeFileSync(join(nextBuild, 'Containerfile'), [
+  `FROM ${images.server}`,
+  'USER root',
+  `RUN printf 'CREATE TABLE prueba_actualizacion (id int);\\n' > apps/server/src/migrations/9999-prueba-actualizacion.sql && echo '# versión nueva' >> urna`,
+  'USER node',
+].join('\n'));
+podman('build', '-q', '-t', next.server, nextBuild);
+podman('tag', images.web, next.web);
 podman('pull', '-q', images.db);
 podman('save', '-q', '--multi-image-archive', '-o', imageFile, images.db, images.server, images.web);
+podman('save', '-q', '--multi-image-archive', '-o', nextFile, next.server, next.web);
 
-const first = await machine('urna-maquina-1', 2221, 8441);
+cleanup();
+podman('network', 'create', network);
+podman('run', '-d', '--name', `${name}-minio`, '--network', network, '-p', `127.0.0.1:${port + 4}:9000`, '-e', `MINIO_ROOT_USER=${bucket.accessKeyId}`, '-e', `MINIO_ROOT_PASSWORD=${bucket.secretAccessKey}`, 'docker.io/pgsty/minio:latest', 'server', '/data');
+for (let attempt = 0; ; attempt += 1) {
+  const date = amzDate(new Date());
+  const signed = signS3({ method: 'PUT', host: `127.0.0.1:${port + 4}`, path: `/${bucket.name}`, payloadHash: EMPTY_SHA256, region: bucket.region, accessKeyId: bucket.accessKeyId, secretAccessKey: bucket.secretAccessKey, date });
+  const made = await fetch(`${bucket.endpoint}${signed.path}`, { method: 'PUT', headers: signed.headers }).catch(() => null);
+  if (made?.ok) break;
+  if (attempt > 30) throw new Error(`no se pudo crear el bucket: ${made?.status}`);
+  await sleep(1_000);
+}
+
+const first = await machine(`${name}-1`, port, port + 2);
 const secrets = newSecrets();
-const said = await installOn(first, secrets);
+const said = await installOn(first, secrets, { variables: s3Settings });
 record('instala por SSH en un Ubuntu', said.at(-1)?.startsWith('listo en') === true, said);
 
 const pub = api(first, 'GET', '/public');
@@ -125,33 +180,56 @@ const encrypted = podman('exec', first.name, 'head', '-c', '2000000', backup);
 record('hace una copia cifrada: no se lee ningún nombre', !encrypted.includes('Inventada'), { archivo: backup });
 const listed = api(first, 'GET', '/backups', { token });
 record('la copia se puede bajar desde la app', listed.backups?.length === 1, listed.backups?.[0]);
+const sent = await raw.list('backups/');
+const inBucket = sent.length === 1 ? await raw.get(sent[0]!) : null;
+record('la copia también sale del servidor, al bucket, cifrada', sent[0] === `backups/${backup.split('/').pop()}` && inBucket !== null && !inBucket.includes('Inventada'), sent);
 
-const state = urna(first, 'estado');
-record('«urna estado» dice que está todo bien', state.includes('Todo en orden'), state.split('\n'));
+const state = attempt('exec', first.name, 'urna', 'estado').said;
+record('«urna estado» dice que está todo bien, y que las copias van al bucket', state.includes('Todo en orden') && state.includes(`bien   las copias también van al bucket ${bucket.name}`) && state.includes('versión: anterior'), state.split('\n'));
 
 const copy = join(work, 'copia.tar.gpg');
 podman('cp', `${first.name}:${backup}`, copy);
 
-// The drill: the first server is gone, and everything has to be recovered on another one.
-const second = await machine('urna-maquina-2', 2222, 8442);
+// Updating: the next version is already on the machine, as if it had been downloaded.
+podman('cp', nextFile, `${first.name}:/tmp/nuevas.tar`);
+podman('exec', first.name, 'chmod', '644', '/tmp/nuevas.tar');
+asUrna(first, 'podman', 'load', '-q', '-i', '/tmp/nuevas.tar');
+const updated = attempt('exec', first.name, 'urna', 'actualizar', 'nueva');
+record('«urna actualizar» pasa a la versión que se le pide', updated.ok && updated.said.includes('Listo: está en la versión nueva'), updated.said.split('\n'));
+const env = podman('exec', first.name, 'cat', '/opt/urna-abierta/.env');
+const commands = podman('exec', first.name, 'tail', '-n', '1', '/opt/urna-abierta/urna');
+const migrations = asUrna(first, 'podman', 'exec', 'urna-db', 'psql', '-U', 'urna', '-tAc', 'SELECT max(version) FROM schema_migrations');
+record('trae las imágenes y los comandos de esa versión, y la base se pone al día', env.includes(`URNA_IMAGE_SERVER=${next.server}`) && env.includes(`URNA_IMAGE_WEB=${next.web}`) && commands === '# versión nueva' && migrations === '9999', { commands, migrations });
+const afterUpdate = api(first, 'GET', '/elections', { token }).elections;
+const backupsNow = api(first, 'GET', '/backups', { token }).backups;
+record('después de actualizar están los datos, siguen las sesiones y hay una copia de antes', afterUpdate?.[0]?.name === 'Simulacro' && afterUpdate[0].people === 30 && backupsNow?.length === 2, afterUpdate?.[0]);
+const same = attempt('exec', first.name, 'urna', 'actualizar', 'nueva');
+const missing = attempt('exec', first.name, 'urna', 'actualizar', 'v0.0.0-no-existe');
+const unchanged = podman('exec', first.name, 'grep', '^URNA_IMAGE_SERVER=', '/opt/urna-abierta/.env');
+record('si ya está en esa versión lo dice, y si la versión no existe no cambia nada', same.said.includes('Ya está en la versión nueva') && !missing.ok && missing.said.includes('No se pudo bajar la versión v0.0.0-no-existe') && unchanged === `URNA_IMAGE_SERVER=${next.server}`, missing.said.split('\n'));
+
+// The drill: the first server is gone, and everything has to be recovered on another one. The backup is
+// uploaded the usual way, to the home of the user that connects, which the user `urna` cannot read.
+const second = await machine(`${name}-2`, port + 1, port + 3);
 await installOn(second, newSecrets());
-podman('cp', copy, `${second.name}:/tmp/copia.tar.gpg`);
-podman('exec', second.name, 'chmod', '644', '/tmp/copia.tar.gpg');
-let wrongKey = false;
-try {
-  urna(second, 'restaurar', '/tmp/copia.tar.gpg', 'LLAVE-EQUIVOCADA');
-} catch {
-  wrongKey = true;
-}
-record('con otra llave, la copia no se abre', wrongKey);
-const restored = urna(second, 'restaurar', '/tmp/copia.tar.gpg', secrets.recoveryKey);
-record('restaura la copia en otro servidor', restored.includes('Copia restaurada'));
+podman('cp', copy, `${second.name}:/home/ubuntu/copia.tar.gpg`);
+podman('exec', second.name, 'sh', '-c', 'chown ubuntu:ubuntu /home/ubuntu/copia.tar.gpg && chmod 600 /home/ubuntu/copia.tar.gpg && chmod 750 /home/ubuntu');
+const asUbuntu = (...args: string[]) => attempt('exec', '--user', 'ubuntu', '-w', '/home/ubuntu', second.name, 'sudo', 'urna', 'restaurar', ...args);
+const notThere = asUbuntu('no-esta.tar.gpg', secrets.recoveryKey);
+const notBackup = asUbuntu('/etc/hostname', secrets.recoveryKey);
+const wrongKey = asUbuntu('copia.tar.gpg', 'LLAVE-EQUIVOCADA');
+record('dice si el archivo no está, si no es una copia, o si la llave es otra', !notThere.ok && notThere.said.includes('No encuentro el archivo') && !notBackup.ok && notBackup.said.includes('no es una copia de Urna Abierta') && !wrongKey.ok && wrongKey.said.includes('Esa llave no abre esta copia'), [notThere.said, notBackup.said, wrongKey.said]);
+const restored = asUbuntu('copia.tar.gpg', secrets.recoveryKey);
+record('restaura la copia desde la carpeta de quien entra, con su ruta corta', restored.ok && restored.said.includes('Copia restaurada') && restored.said.includes('URNA_S3_'), restored.said.split('\n'));
 const elections = api(second, 'GET', '/elections', { token }).elections;
 record('en el otro servidor está todo, y las mismas sesiones siguen valiendo', elections?.[0]?.name === 'Simulacro' && elections[0].people === 30 && elections[0].tables === 3, elections?.[0]);
 const again = api(second, 'GET', `/elections/${election}/people?q=inventada%201`, { token }).people.find((item: { id: string }) => item.id === people[0].id);
 record('las categorías sensibles se pueden leer después de restaurar', again?.category === category.id);
+urna(second, 'copia');
+const alone = attempt('exec', second.name, 'urna', 'estado').said;
+record('sin bucket, «urna estado» avisa que las copias quedan solo en el servidor', alone.includes('Todo en orden') && alone.includes('aviso  las copias quedan solo en este servidor'), alone.split('\n'));
 
-// A reboot: everything has to come back by itself.
+// A reboot: everything has to come back by itself, in the version it was updated to.
 podman('restart', first.name);
 await sleep(15_000);
 let back = false;
@@ -163,11 +241,9 @@ for (let attempt = 0; attempt < 60 && !back; attempt += 1) {
   }
   if (!back) await sleep(5_000);
 }
-record('después de reiniciar la máquina vuelve sola', back);
+record('después de reiniciar la máquina vuelve sola', back && attempt('exec', first.name, 'urna', 'estado').said.includes('versión: nueva'));
 
-if (!process.env.URNA_DEJAR_MAQUINAS) {
-  podman('rm', '-f', first.name, second.name);
-}
+if (!process.env.URNA_DEJAR_MAQUINAS) cleanup();
 const failed = results.filter((item) => !item.ok);
 console.log(failed.length ? `Fallaron ${failed.length} de ${results.length}.` : `Pasaron las ${results.length}.`);
 process.exit(failed.length ? 1 : 0);
