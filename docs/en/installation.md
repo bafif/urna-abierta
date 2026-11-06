@@ -36,9 +36,9 @@ It asks three questions and does the rest.
 | Paste a text | Paste a block when creating the server, without giving the installer any credential |
 | Try it on this computer | Podman or Docker running. It can only be seen from there |
 
-**2. How do we read scanned rolls?** On your computer, which is the recommended way because a roll has people's data, or you decide
-later. Using your own AI is not available yet. Today the [roll reader](https://github.com/bafif/urna-abierta-padrones) runs from a terminal
-and builds the `.padron` file that gets uploaded to the app. The app also takes a CSV sheet.
+**2. How do we read scanned rolls?** On your computer, with the roll reader, which is the recommended way because a roll has people's
+data, or you decide later. Using your own AI is not available yet. The reader is a separate download and is only needed for scanned PDFs:
+see [Loading the roll](#loading-the-roll).
 
 **3. How do you want it to look?** You choose one of the themes, seeing them first in light and dark. Each person can change it later on
 their phone. You can also [make your own](themes.md) and load it here, by dragging the file.
@@ -47,6 +47,33 @@ At the end it gives you your server's address and a recovery key for the backups
 the party, the team and the first election.
 
 **Keep that key.** It is the only thing that opens your backups, and it cannot be generated again.
+
+## Loading the roll
+
+In each election, at the “Roll” step, tap “Upload the roll” and choose the file. Before loading anything, the app shows you how many
+people it understood and what changes from what was already there.
+
+| What you have | What to do |
+|---|---|
+| An Excel (`.xlsx`) or CSV spreadsheet | Upload it directly. The first sheet is used, and the heading row can sit below a title. It needs a “Apellido y nombre”, “Nombre” or “Apellido” column (or “Name”), and it can have “Nombres”, “DNI” or “Documento”, “Legajo”, “N°” or “Orden”, “Mesa” and “Domicilio”. Other columns are not read |
+| An `.xls` or `.ods` spreadsheet | Open it and save it as `.xlsx` or CSV |
+| A scanned PDF | First open it with the [roll reader](https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download), which runs on your computer without sending the roll anywhere. It gives you a `.padron` file |
+| A `.padron` file | Upload it directly |
+
+Until the first version of the reader is published on its Releases page, the reader runs from a terminal: its
+[README](https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md) explains how.
+
+An Excel spreadsheet becomes a `.padron` on your phone or computer, before it is sent to the server. If a PDF is uploaded directly, the
+app does not send it and explains how to read it.
+
+If something cannot be read, the app says where the problem is (the row, or the line of the file) and what is wrong with it, without
+showing what that row says. Problems of the same kind come together on one line. In a spreadsheet, a row without a name, or with the
+DNI or legajo of an earlier row, is left out, and the rest can still be loaded. A row whose document does not have 7 or 8 digits is
+loaded anyway, marked for review.
+
+When the reader is not sure about a row, it marks it for review. Those people are loaded like everyone else, and the election shows
+“N people of the roll need a look”. Tapping it shows each one with their name and document: you correct what is wrong, or confirm it
+is fine.
 
 ## Which server to choose
 
