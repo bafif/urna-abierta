@@ -388,6 +388,13 @@ describe.skipIf(!url)('against a real Postgres', () => {
       }
     });
 
+    it('a zone given as an offset is refused, so that the panel and the phones agree on the day and nothing breaks', async () => {
+      const create = (timeZone: string) => call('coordinacion', 'POST', '/api/elections', { name: `Zona ${timeZone}`, kind: 'estudiantil', days: ['2027-04-06'], timeZone });
+      for (const offset of ['-0300', '-03:00', '+03:00', 'utc']) expect((await create(offset)).statusCode).toBe(400);
+      const id = (await create('Etc/GMT+3')).json().id;
+      expect((await call('coordinacion', 'GET', `/api/district/${id}`)).statusCode).toBe(200);
+    });
+
     it('once the election closes, a poll watcher hears that it ended, not that they have no table yet', async () => {
       expect((await call('fiscal', 'GET', '/api/me')).json()).toMatchObject({ ended: false, table: { id: table } });
       for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
