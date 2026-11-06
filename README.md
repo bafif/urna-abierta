@@ -84,6 +84,7 @@ La primera prueba real es una elección universitaria, en abril de 2027.
 |---|---|
 | [Instalación](docs/es/instalacion.md) | El instalador, y cómo probarla |
 | [Crear un servidor](docs/es/servidores.md) | Oracle, AWS y Google, paso a paso, y cómo mantenerlo |
+| [Tu primera elección](docs/es/primera-eleccion.md) | Paso a paso después de instalar, y qué hacer si algo falla |
 | [Simulacro](docs/es/simulacro.md) | Qué probar con personas de verdad antes de una elección |
 | [Tu propio tema](docs/es/temas.md) | Los colores de tu partido, siempre que se puedan leer |
 | [Plan técnico](docs/es/plan-tecnico.md) | Arquitectura, sincronización, permisos y formato de padrón |

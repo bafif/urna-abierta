@@ -45,7 +45,7 @@ para los PDF escaneados: lo explica [Cargar el padrón](#cargar-el-padrón).
 su teléfono. También podés [hacer el tuyo](temas.md) y cargarlo acá, arrastrando el archivo.
 
 Al terminar te da la dirección de tu servidor y una llave de recuperación para las copias de seguridad, y abre la app. Ahí sigue un
-asistente para el partido, el equipo y la primera elección.
+asistente para el partido, el equipo y la primera elección: lo recorre [Tu primera elección](primera-eleccion.md).
 
 **Guardá esa llave.** Es lo único que abre tus copias de seguridad, y no se puede volver a generar.
 

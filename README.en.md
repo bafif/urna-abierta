@@ -85,6 +85,7 @@ The first real test is a university election, in April 2027.
 |---|---|
 | [Installation](docs/en/installation.md) | The installer, and how to try it |
 | [Creating a server](docs/en/servers.md) | Oracle, AWS and Google, step by step, and how to maintain it |
+| [Your first election](docs/en/first-election.md) | Step by step after installing, and what to do when something fails |
 | [Drill](docs/en/drill.md) | What to test with real people before an election |
 | [Your own theme](docs/en/themes.md) | Your party's colors, as long as they can be read |
 | [Technical plan](docs/en/technical-plan.md) | Architecture, sync, permissions and roll format |
