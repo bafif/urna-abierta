@@ -21,14 +21,22 @@ async function heardFrom(pool: pg.Pool, table: string): Promise<void> {
 /**
  * Stores a batch in one transaction. Locking the row of the table gives every operation of
  * that table a number in commit order. With one global sequence, a reader could pass a number
- * whose transaction had not committed yet and never see that row.
+ * whose transaction had not committed yet and never see that row. Erasing a person and purging
+ * the election take the same lock, so who is named is decided here, after it: never with an id
+ * that an erasure or a purge committed meanwhile took away.
  */
-async function storeBatch(pool: pg.Pool, table: string, operations: Operation[], author: string, quarantined: boolean): Promise<void> {
+async function storeBatch(pool: pg.Pool, table: string, received: Operation[], author: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const locked = await client.query<{ last_seq: string }>('SELECT last_seq FROM polling_tables WHERE id = $1 FOR UPDATE', [table]);
     const last = Number(locked.rows[0]!.last_seq);
+    // Read after the lock, in a statement of its own: one that had to wait for it would still see the status from before.
+    const { status } = (await client.query<{ status: string }>('SELECT e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1', [table])).rows[0]!;
+    // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
+    const quarantined = ['cerrada', 'purgada'].includes(status);
+    // After the purge no one is named anymore: who voted is taken, so the phone stops sending it, and dropped.
+    const operations = status === 'purgada' ? received.filter((o) => !('elector' in o.payload)) : await renameErased(client, table, received);
     const inserted = await client.query(
       `INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload, author, quarantined)
        SELECT id, $1, $2 + ordinality, type, device, device_seq, device_time, payload, $9, $10
@@ -50,11 +58,11 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
 }
 
 /** A phone that has not heard someone was erased still names them by their old id: the mark counts, under the new one. */
-async function renameErased(pool: pg.Pool, table: string, operations: Operation[]): Promise<Operation[]> {
+async function renameErased(client: pg.PoolClient, table: string, operations: Operation[]): Promise<Operation[]> {
   const named = [...new Set(operations.flatMap((o) => ('elector' in o.payload ? [o.payload.elector] : [])))];
   if (named.length === 0) return operations;
   const oldOf = new Map(named.map((id) => [erasedId(id), id]));
-  const found = await pool.query(
+  const found = await client.query(
     'SELECT x.id FROM electors x JOIN polling_tables t ON t.election_id = x.election_id WHERE t.id = $1 AND x.id = ANY($2)',
     [table, [...oldOf.keys()]],
   );
@@ -136,11 +144,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
       else if (parsed.table !== table) rejected.push({ id: parsed.id, reason: 'wrong_table' });
       else valid.push(parsed);
     }
-    // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
-    const late = ['cerrada', 'purgada'].includes(status);
-    // After the purge no one is named anymore: who voted is taken, so the phone stops sending it, and dropped.
-    const kept = status === 'purgada' ? valid.filter((o) => !('elector' in o.payload)) : await renameErased(pool, table, valid);
-    if (kept.length > 0) await storeBatch(pool, table, kept, request.actor.userId, late);
+    if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId);
     else await heardFrom(pool, table);
     return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };
   });

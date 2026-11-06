@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, securityProfile, setSetting, type Actor } from './actor.ts';
+import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, requires, securityProfile, setSetting, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -29,7 +29,7 @@ export async function correctElector(pool: pg.Pool, actor: Actor, election: stri
   const document = typeof body?.document === 'string' ? body.document.replace(/\D/g, '') || null : null;
   const corrected = await pool.query(
     `UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5 || COALESCE(' ' || COALESCE($4, document), ''), needs_review = false, corrected_at = now()
-     WHERE election_id = $1 AND id = $2 RETURNING ref`,
+     WHERE election_id = $1 AND id = $2 AND erased_at IS NULL RETURNING ref`,
     [election, elector, name, document, foldText(name)],
   );
   if (!corrected.rows[0]) return 'not_found';
@@ -274,10 +274,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (externalAi === 'forbidden') return reply.code(422).send({ error: 'external_ai_forbidden' });
     // The other profiles let it in, saying so before it is loaded.
     if (externalAi) read.problems.push({ where: 'file', problem: externalAi === 'paid-only' ? 'external_ai_paid_only' : 'external_ai' });
-    const existing = await pool.query('SELECT id, corrected_at IS NOT NULL AS corrected FROM electors WHERE election_id = $1', [election]);
+    const existing = await pool.query('SELECT id, corrected_at IS NOT NULL AS corrected, erased_at IS NOT NULL AS erased FROM electors WHERE election_id = $1', [election]);
     // Whoever asked to be erased is not loaded again, and what someone corrected stays corrected.
-    const erased = new Set(existing.rows.filter((row) => isErasedId(row.id)).map((row) => row.id));
-    const known = new Set(existing.rows.filter((row) => !isErasedId(row.id)).map((row) => row.id));
+    const erased = new Set(existing.rows.filter((row) => row.erased).map((row) => row.id));
+    const known = new Set(existing.rows.filter((row) => !row.erased).map((row) => row.id));
     const corrected = new Set(existing.rows.filter((row) => row.corrected).map((row) => row.id));
     const electors = read.padron.electors.filter((e) => erased.size === 0 || !erased.has(erasedId(e.id)));
     const incoming = new Set(electors.map((e) => e.id));
