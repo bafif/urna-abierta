@@ -161,8 +161,11 @@ puede ver.
 - El fiscal ve solo su mesa y no baja el semáforo, salvo que el partido lo habilite en una elección de bajo riesgo.
 - El administrador técnico no ve datos políticos por su rol; para verlos necesita un permiso que queda registrado.
 - Quien hace estadísticas ve solo agregados, con grupos de 5 personas o más, y su rol vence solo.
-- Las categorías sensibles del semáforo llevan un permiso aparte y se cifran por campo. Eso protege copias de disco y
-  backups, aunque no a un servidor en marcha, donde está la clave.
+- Las categorías sensibles del semáforo llevan un permiso aparte y se cifran por campo. Eso protege un volcado de la
+  base que salga sin el `.env`. No protege una copia del disco entero ni los backups, que llevan la clave, ni a un
+  servidor en marcha.
+- Al borrar a una persona o purgar una elección, también se reemplaza su id del padrón, que suele ser el DNI. El
+  registro nombra a cada persona por una referencia al azar, nunca por ese id.
 - El registro de auditoría no se puede editar.
 - Cada persona entra con una invitación de un solo uso, que se convierte en una credencial de ese dispositivo. Los perfiles municipal
   y nacional piden además un código TOTP en cada dispositivo, salvo al fiscal, que solo ve su mesa.

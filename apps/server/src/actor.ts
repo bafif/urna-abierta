@@ -159,8 +159,9 @@ export async function setSetting(pool: pg.Pool, key: string, value: unknown) {
 }
 
 /**
- * Sensitive traffic light categories are sealed with a key from the environment. That protects
- * disk copies and backups. It does not protect a running server, where the key is.
+ * Sensitive traffic light categories are sealed with a key from the environment. That protects a dump of
+ * the database taken without the .env. It does not protect a copy of the whole disk or a backup, which
+ * carry the key, nor a running server.
  */
 function sealingKey(): Buffer {
   const secret = process.env.URNA_FIELD_KEY;

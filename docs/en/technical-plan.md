@@ -164,8 +164,11 @@ fixed list; roles are editable combinations. The server checks every request and
 - The technical administrator does not see political data through their role; seeing it takes a permission that gets
   logged.
 - Whoever does statistics sees only aggregates, in groups of 5 people or more, and their role expires by itself.
-- Sensitive categories of the traffic light need a separate permission and are encrypted per field. That protects disk
-  copies and backups, though not a running server, where the key is.
+- Sensitive categories of the traffic light need a separate permission and are encrypted per field. That protects a
+  dump of the database taken without the `.env`. It does not protect a copy of the whole disk or the backups, which carry
+  the key, nor a running server.
+- Erasing a person or purging an election also replaces their roll id, which is often the DNI. The audit log names each
+  person by a random reference, never by that id.
 - The audit log cannot be edited.
 - Each person gets in with a single-use invitation, which becomes a credential for that device. The municipal and national profiles
   also ask for a TOTP code on each device, except for poll watchers, who only see their table.

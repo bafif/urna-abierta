@@ -679,6 +679,8 @@ const es = {
   'data.rights': 'Tus derechos',
   'data.rights.text': 'Podés pedir que corrijamos o borremos estos datos (artículo 16 de la Ley 25.326). Si no te responden, podés reclamar ante la Agencia de Acceso a la Información Pública (AAIP), que controla que esa ley se cumpla.',
   'data.made': 'Hecho el {when}.',
+  'roll.problem.external_ai': 'Este padrón se armó con una IA externa: los nombres pasaron por un servicio de afuera. Con el nivel de seguridad de esta elección se puede cargar igual.',
+  'roll.problem.external_ai_paid_only': 'Este padrón se armó con una IA externa. Con el nivel de seguridad de esta elección, cargalo solo si fue un servicio pago que no guarda los datos: el archivo no lo puede mostrar.',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1364,6 +1366,8 @@ const en: Record<MessageKey, string> = {
   'data.rights': 'Your rights',
   'data.rights.text': 'You can ask us to correct or erase this data (article 16 of Ley 25.326). If you get no answer, you can complain to the Agencia de Acceso a la Información Pública (AAIP), which oversees that law.',
   'data.made': 'Made on {when}.',
+  'roll.problem.external_ai': 'This roll was built with an external AI: the names went through an outside service. This election’s security level lets you load it anyway.',
+  'roll.problem.external_ai_paid_only': 'This roll was built with an external AI. With this election’s security level, load it only if it was a paid service that keeps no data: the file cannot show that.',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;
