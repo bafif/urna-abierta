@@ -9,6 +9,8 @@ export interface PersonData {
   consent: { date: string; means: string } | null;
   semaphore: { category: string | null; sensitive: boolean; hidden: boolean; notedAt: string } | null;
   markedVoted: string[];
+  /** Other elections whose roll has the same document: this page is only about one. */
+  others?: string[];
 }
 
 type Say = (key: MessageKey, values?: Record<string, string | number>) => string;
@@ -70,6 +72,7 @@ export function personDataPage(data: PersonData, say: Say, language: string, now
     '<style>body{font:17px/1.5 system-ui,sans-serif;color:#111;max-width:40em;margin:2em auto;padding:0 1em}h1{font-size:1.5em}h2{font-size:1.15em;margin-top:1.6em;border-bottom:1px solid #ccc}dl{display:grid;grid-template-columns:max-content 1fr;gap:.3em 1em}dt{font-weight:600}dd{margin:0}.nota,.falta,footer{color:#555}footer{margin-top:2em;font-size:.9em}</style>',
     `</head><body><h1>${escape(title)}</h1>`,
     paragraph(say('data.intro', { party: data.party || say('data.party'), election: data.election.name })),
+    data.others?.length ? paragraph(say('data.others', { elections: data.others.map((name) => `«${name}»`).join(', ') })) : '',
     section(say('data.roll'), roll),
     section(say('data.where'), where),
     section(say('data.voted'), voted),
