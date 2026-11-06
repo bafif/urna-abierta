@@ -173,9 +173,10 @@ fixed list; roles are editable combinations. The server checks every request and
 - Erasing a person or purging an election also replaces their roll id, which is often the DNI. The audit log names each
   person by a random reference, never by that id, and that reference is replaced too on erasing or purging: what the log
   already said, a sensitive mark included, does not lead to the row. Until the purge, the erased row stays at its table
-  and with its order number, so that the poll watcher can cross it out and the totals add up. Its new id comes from the
-  old one with the field key, so that a phone behind and the same roll loaded again know it: whoever has that key, which
-  backups carry, can try every DNI until theirs matches, in minutes. The purge replaces those ids with random ones and
+  and with its order number, and keeps the random identifier phones know it by, so that the poll watcher can cross it
+  out and the totals add up. Its new id comes from the old one with the field key, so that the same roll loaded again,
+  and a phone prepared before the random identifiers, know it: whoever has that key, which backups carry, can try every
+  DNI until theirs matches, in minutes. The purge replaces those ids and the random identifiers with new random ones and
   clears the order numbers.
 - The audit log cannot be edited.
 - Each person gets in with a single-use invitation, which becomes a credential for that device. The municipal and national profiles
