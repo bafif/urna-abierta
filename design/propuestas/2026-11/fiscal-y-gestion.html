@@ -848,6 +848,8 @@ html, body { margin: 0; background: #1a1b1e; color: #e9e9e6; font: 17px/1.5 'Atk
         </div>
       </section>`).join('')}`;
 })();
+    // The sections are drawn here, after the browser looked for the address's anchor: go to it now.
+    if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
     </script>
   </body>
 </html>

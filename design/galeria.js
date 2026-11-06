@@ -8,7 +8,26 @@
     if (clave in estado && valor) estado[clave] = valor;
   }
 
-  const VISTAS = [['comparar', 'Comparar temas'], ...Object.entries(FLUJOS).map(([id, f]) => [id, f.titulo]), ['instalador', 'Instalador']];
+  const VISTAS = [['comparar', 'Comparar temas'], ...Object.entries(FLUJOS).map(([id, f]) => [id, f.titulo]), ['instalador', 'Instalador'], ['propuestas', 'Propuestas para aprobar']];
+  // Screens that do not exist yet: each file shows them in light and dark, with their texts and the questions to answer.
+  const PROPUESTAS = [
+    ['propuestas/2026-11/fiscal-y-gestion.html', 'Fiscal, escrutinio y administración', [
+      ['aviso', '«Algo anda mal» en todo el recorrido'], ['volver-padron', 'Volver al padrón desde cualquier paso'],
+      ['corregir', 'Corregir sobres o escrutinio ya guardados'], ['como-va', 'Cómo va el escrutinio'],
+      ['resultados', 'Resultados de todo el partido'], ['llego-tarde', 'Lo que llega después del cierre'],
+      ['equipo', 'Editar a alguien del equipo'], ['categorias', 'Categorías del semáforo: editar y marcar sensibles'],
+      ['eleccion', 'Cambiar o borrar una elección'], ['mesas', 'Corregir las mesas'],
+      ['dudosas', 'Revisar filas dudosas'], ['cronograma', 'Un cronograma simple'],
+    ]],
+    ['propuestas/2026-11/ley-instalacion-ia.html', 'Ley, instalador e IA externa', [
+      ['registro', 'Registro: qué se vio o se cambió'], ['plazo', 'Plazo para borrar los datos'],
+      ['consentimiento', 'Retirar el consentimiento'], ['responsabilidad', 'La casilla de responsabilidad y el texto legal'],
+      ['final', 'El final, cuando el servidor no contesta'], ['servidor-propio', '«Ya tengo un servidor»: puerto, contraseña y huella'],
+      ['acceso-nube', 'Entrar a un servidor creado en una nube'], ['servicio-gratis', 'El servicio gratis: decisión pendiente'],
+      ['ia-instalador', 'El paso 2 del instalador'], ['ia-lector', 'Elegir cómo leer, en el lector'],
+      ['ia-aviso', 'El aviso antes de mandar el padrón'], ['ia-nivel', 'Lo que permite cada nivel de seguridad'],
+    ]],
+  ];
   const raiz = document.getElementById('app');
 
   const logoUrna = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg>';
@@ -159,7 +178,7 @@
     const barra = `<header class="barra-galeria">
       <h1>Urna Abierta · propuesta de diseño, con personas inventadas</h1>
       <div class="fila-controles"><span>Ver</span>${VISTAS.map(([id, nombre]) => `<button class="chip" data-vista="${id}" aria-pressed="${estado.vista === id}">${nombre}</button>`).join('')}</div>
-      ${estado.vista === 'comparar' ? '' : `<div class="fila-controles"><span>Tema</span>${TEMAS.map((t) => `<button class="chip" data-tema-boton="${t.id}" aria-pressed="${t.id === tema.id}"><i style="background:${t.claro.primario}"></i>${t.nombre}</button>`).join('')}</div>
+      ${['comparar', 'propuestas'].includes(estado.vista) ? '' : `<div class="fila-controles"><span>Tema</span>${TEMAS.map((t) => `<button class="chip" data-tema-boton="${t.id}" aria-pressed="${t.id === tema.id}"><i style="background:${t.claro.primario}"></i>${t.nombre}</button>`).join('')}</div>
       <div class="fila-controles"><span>Modo</span>${[['claro', 'Claro'], ['oscuro', 'Oscuro'], ['ambos', 'Los dos']].map(([id, n]) => `<button class="chip" data-modo-boton="${id}" aria-pressed="${estado.modo === id}">${n}</button>`).join('')}</div>`}
     </header>`;
     let contenido = '';
@@ -177,6 +196,12 @@
           ${telefono(elegir('f-padron'), t, 'oscuro', { mini: true, nota: false })}
           ${telefono(elegir('f-votaron'), t, 'oscuro', { mini: true, nota: false })}
         </div></section>`).join('')}`;
+    } else if (estado.vista === 'propuestas') {
+      contenido = `<p class="intro"><strong>Propuestas para aprobar</strong>Pantallas que todavía no existen. Cada una está en claro y en oscuro, con sus textos tal cual y las preguntas para decidir antes de construirla. Tocá una para abrirla.</p>
+      <div class="propuestas">${PROPUESTAS.map(([archivo, titulo, secciones]) => `<section class="grupo-propuestas">
+        <h2><a href="${archivo}">${titulo}</a></h2>
+        <ol>${secciones.map(([id, nombre]) => `<li><a href="${archivo}#${id}">${nombre}</a></li>`).join('')}</ol>
+      </section>`).join('')}</div>`;
     } else if (estado.vista === 'instalador') {
       contenido = `<p class="intro"><strong>${INSTALADOR.titulo}</strong>${INSTALADOR.explicacion}</p><div class="tira">${modos.map((m) => INSTALADOR.pantallas.map((p, i) => ventana(p, tema, m, i)).join('')).join('')}</div>`;
     } else {
