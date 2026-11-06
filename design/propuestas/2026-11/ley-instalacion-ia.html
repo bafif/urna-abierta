@@ -1,0 +1,1052 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Urna Abierta · propuestas: ley de datos, instalador e IA externa</title>
+<style>
+/* Only the letter the app already ships, from this same repo. No request leaves the computer. */
+@font-face { font-family: 'Atkinson Hyperlegible Next'; src: url('../../../apps/web/src/lib/fuentes/atkinson-hyperlegible-next-latin-wght-normal.woff2') format('woff2'); font-weight: 200 800; }
+
+/* ---------- The page around the mockups: neutral, like the gallery ---------- */
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #1a1b1e; color: #e9e9e6; font: 16px/1.45 'Atkinson Hyperlegible Next', system-ui, sans-serif; }
+.hoja { max-width: 1560px; padding: 28px 32px 80px; }
+.hoja > header h1 { margin: 0 0 6px; font-size: 30px; line-height: 1.15; }
+.intro { max-width: 860px; margin: 0 0 10px; color: #c9c9c5; font-size: 17px; }
+.indice { display: grid; grid-template-columns: repeat(3, minmax(260px, 1fr)); gap: 6px 28px; max-width: 1200px; margin: 22px 0 8px; padding: 18px 22px; background: #232428; border-radius: 10px; }
+.indice h2 { grid-column: 1 / -1; margin: 0 0 4px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: #a3a4a8; }
+.indice div strong { display: block; margin: 6px 0 2px; color: #fff; }
+.indice ol { margin: 0; padding-left: 22px; }
+.indice a { color: #F5D768; text-decoration: none; }
+.indice a:hover { text-decoration: underline; }
+.grupo { margin: 44px 0 0; padding: 18px 0 0; border-top: 3px solid #44454b; }
+.grupo > h2 { margin: 0 0 6px; font-size: 28px; }
+.grupo > p { max-width: 900px; margin: 0; color: #c2c2be; font-size: 16.5px; }
+.propuesta { padding: 30px 0 40px; border-top: 1px solid #34353a; margin-top: 26px; }
+.propuesta > h3 { margin: 0 0 8px; font-size: 25px; }
+.falta { max-width: 1100px; margin: 0 0 8px; padding: 9px 14px; border-left: 4px solid #F5D768; background: #232428; color: #c9c9c5; font-size: 15px; border-radius: 0 8px 8px 0; }
+.falta q { color: #fff; font-style: italic; }
+.resumen { max-width: 980px; margin: 0 0 20px; color: #d7d7d3; font-size: 16.5px; }
+.maquetas { display: flex; flex-direction: column; gap: 34px; }
+.maqueta { margin: 0; }
+.maqueta > figcaption { margin: 0 0 10px; font-size: 18px; font-weight: 700; }
+.par { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; }
+.lado > span { display: block; margin: 0 0 6px; color: #a3a4a8; font-size: 14px; }
+.maqueta > .nota { max-width: 980px; margin: 10px 2px 0; color: #b5b5b1; font-size: 15px; }
+.detalles { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(460px, 1.7fr) minmax(260px, 1fr); gap: 30px; margin-top: 28px; }
+.detalles h4 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; color: #a3a4a8; }
+.detalles ol, .detalles ul { margin: 0; padding-left: 20px; }
+.detalles li { margin-bottom: 7px; }
+.textos { width: 100%; border-collapse: collapse; font-size: 14.5px; line-height: 1.35; }
+.textos th { text-align: left; color: #a3a4a8; font-weight: 600; padding: 4px 8px; }
+.textos td { border-top: 1px solid #34353a; padding: 6px 8px; vertical-align: top; }
+.textos td:first-child { width: 170px; color: #8f9095; font-family: ui-monospace, monospace; font-size: 12px; }
+.textos .antes { display: block; margin-top: 3px; color: #8f9095; font-size: 13px; text-decoration: line-through; }
+.caja { max-width: 1100px; margin: 20px 0 0; padding: 16px 20px; background: #232428; border-radius: 10px; font-size: 15.5px; }
+.caja h4 { margin: 0 0 8px; font-size: 17px; }
+.caja p { margin: 0 0 8px; color: #d7d7d3; }
+.caja ul { margin: 0 0 8px; padding-left: 20px; color: #d7d7d3; }
+.caja li { margin-bottom: 5px; }
+.caja .pendiente { display: inline-block; margin-left: 8px; padding: 1px 8px; font-size: 13px; font-weight: 700; color: #1a1b1e; background: #F5D768; border-radius: 999px; vertical-align: 2px; }
+.caja table { border-collapse: collapse; width: 100%; font-size: 15px; }
+.caja th, .caja td { text-align: left; padding: 6px 10px; border-top: 1px solid #3a3b40; vertical-align: top; }
+.caja th { color: #a3a4a8; font-weight: 600; border-top: 0; }
+.caja code, .detalles code, .resumen code { font-family: ui-monospace, monospace; font-size: 0.9em; color: #f0e3a8; }
+.caja pre { margin: 8px 0; padding: 12px 14px; background: #121315; border-radius: 8px; font: 14px/1.45 ui-monospace, monospace; color: #e9e9e6; overflow-x: auto; }
+.leyenda-hueco { border: 2px dashed #F5D768; border-radius: 4px; padding: 0 3px; }
+
+/* ---------- Frames ---------- */
+.marco-compu { width: 720px; border-radius: 12px; overflow: hidden; background: #050506; box-shadow: 0 0 0 1px #3c3d42; }
+.barra-compu { height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 12px; background: #2a2b30; }
+.barra-compu i { width: 11px; height: 11px; border-radius: 50%; background: #55565c; }
+.barra-compu span { margin-left: 14px; flex: 1; max-width: 420px; padding: 3px 12px; border-radius: 6px; background: #1a1b1e; color: #b5b5b1; font-size: 13px; }
+.marco-compu .pantalla { height: 780px; }
+.marco-compu .pantalla-in { max-width: 600px; margin: 0 auto; }
+.marco-ventana { width: 980px; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px #3c3d42; }
+.marco-archivo { width: 980px; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px #3c3d42; background: var(--superficie); color: var(--texto); }
+.barra-archivo { padding: 9px 16px; font-size: 14px; color: var(--suave); background: var(--superficie2); border-bottom: 1px solid var(--linea); }
+.marco-archivo pre { margin: 0; padding: 18px 22px 22px; font: 15px/1.5 ui-monospace, 'DejaVu Sans Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---------- Aula, copied from apps/web/src/lib/temas.js (the approved default theme) ---------- */
+.aula-claro, .aula-oscuro {
+  --f-titulo: 'Atkinson Hyperlegible Next', system-ui, sans-serif; --f-texto: var(--f-titulo); --f-boton: var(--f-titulo); --f-numero: var(--f-titulo);
+  --radio: 10px; --r-boton: 12px; --borde: 2px; --peso-titulo: 800; --caja-titulo: none; --tracking-titulo: -0.015em; --alto-titulo: 1.08; --escala-titulo: 1.02;
+  --peso-boton: 700; --caja-boton: none; --tracking-boton: 0; --ancho-titulo: 100%; --ojo-caja: none; --ojo-tracking: 0; --fondo-pie: transparent;
+}
+.aula-claro {
+  --fondo: #FDFEFB; --superficie: #FFFFFF; --superficie2: #EEF4F8; --texto: #14233A; --suave: #46566B; --linea: #C6D9E8; --margen: #E2726E;
+  --primario: #1E5A44; --sobre-primario: #FFFFFF; --acento: #1E5A44; --marca: #1746C7; --peligro: #AE2418; --sobre-peligro: #FFFFFF;
+  --peligro-fondo: #FCE9E6; --peligro-texto: #7E170E; --bien: #1E5A44; --bien-fondo: #E3F2EA; --peligro-borde: #AE2418; --sobre-pie: #1E5A44;
+}
+.aula-oscuro {
+  --fondo: #14302A; --superficie: #1B3B33; --superficie2: #21463C; --texto: #F3F6EC; --suave: #C2D3C8; --linea: #3A5D52; --margen: #3A5D52;
+  --primario: #F5D768; --sobre-primario: #16261F; --acento: #F5D768; --marca: #FFFDF2; --peligro: #FFB4A6; --sobre-peligro: #3A0B05;
+  --peligro-fondo: #3F2622; --peligro-texto: #FFD6CE; --bien: #A9E4C4; --bien-fondo: #21463C; --peligro-borde: #FFB4A6; --sobre-pie: #F5D768;
+}
+
+/* ---------- The app's pieces, copied from tema.css and app.css ---------- */
+.pantalla { width: 100%; overflow: hidden; position: relative; background: var(--fondo); color: var(--texto); font-family: var(--f-texto); font-size: 19px; line-height: 1.35; }
+.pantalla button, .pantalla input, .pantalla select, .pantalla textarea, .ventana button, .ventana input, .ventana select, .ventana textarea { font: inherit; color: inherit; }
+.pantalla-in { height: 100%; display: flex; flex-direction: column; position: relative; }
+.ic { width: 1.2em; height: 1.2em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.cabeza { padding: 22px 20px 14px; position: relative; }
+.atras { display: inline-flex; gap: 6px; align-items: center; background: none; border: 0; padding: 4px 0 10px; font-size: 17px; color: inherit; cursor: pointer; opacity: 0.9; }
+.ojo { margin: 0 0 6px; font-family: var(--f-boton); font-size: 16px; font-weight: 600; color: var(--suave); }
+.t1 { margin: 0; font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: calc(33px * var(--escala-titulo)); line-height: var(--alto-titulo); letter-spacing: var(--tracking-titulo); }
+.bajada { margin: 8px 0 0; color: var(--suave); }
+.cuerpo { flex: 1; min-height: 0; padding: 8px 20px 12px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; position: relative; }
+.pie { padding: 12px 20px 20px; background: var(--fondo-pie); }
+.boton { width: 100%; min-height: 66px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px 18px; border: 0; border-radius: var(--r-boton); font-family: var(--f-boton) !important; font-size: 22px !important; font-weight: var(--peso-boton); cursor: pointer; }
+.boton.primario { background: var(--primario); color: var(--sobre-primario) !important; }
+.boton.secundario { background: transparent; color: var(--acento) !important; box-shadow: inset 0 0 0 2.5px var(--acento); }
+.boton.peligro { background: var(--peligro); color: var(--sobre-peligro) !important; box-shadow: inset 0 0 0 3px var(--peligro-borde); }
+.pila { display: flex; flex-direction: column; gap: 12px; }
+.enlace { background: none; border: 0; padding: 6px 0; text-align: left; color: var(--acento); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.pie .pila .enlace { text-align: center; }
+.plan { list-style: none; margin: 4px 0 0; padding: 0; position: relative; display: flex; flex-direction: column; gap: 24px; }
+.plan::before { content: ''; position: absolute; left: 14px; top: 16px; bottom: 26px; width: 4px; background: var(--linea); border-radius: 2px; }
+.estacion { display: grid; grid-template-columns: 32px 1fr; gap: 14px; align-items: start; position: relative; }
+.punto { width: 32px; height: 32px; border-radius: 50%; background: var(--fondo); box-shadow: inset 0 0 0 4px var(--linea); display: grid; place-items: center; position: relative; z-index: 1; }
+.estacion strong { display: block; font-size: 21px; font-weight: 700; line-height: 1.2; color: var(--suave); }
+.cuando { display: block; color: var(--suave); font-size: 17px; }
+.estacion.hecho .punto { background: var(--acento); box-shadow: none; color: var(--fondo); }
+.estacion.hecho .punto .ic { width: 20px; height: 20px; stroke-width: 3; }
+.estacion.hecho strong { font-weight: 500; }
+.estacion.ahora .punto { box-shadow: inset 0 0 0 9px var(--acento); }
+.estacion.ahora strong { color: var(--texto); font-size: 25px; }
+.estacion.ahora .cuando { color: var(--acento); font-weight: 700; }
+.ayuda { margin: 6px 0 0; font-size: 18px; line-height: 1.3; color: var(--texto); }
+.opciones { display: flex; flex-direction: column; gap: 10px; }
+.opcion { width: 100%; min-height: 68px; display: grid; grid-template-columns: 26px 1fr; gap: 12px; align-items: center; text-align: left; padding: 12px 14px; background: var(--superficie); border: var(--borde) solid var(--linea); border-radius: var(--radio); cursor: pointer; }
+.opcion strong { display: block; font-weight: 700; line-height: 1.2; }
+.opcion small { display: block; font-size: 16px; color: var(--suave); line-height: 1.25; margin-top: 2px; }
+.radio { width: 24px; height: 24px; border-radius: 50%; box-shadow: inset 0 0 0 2.5px var(--suave); }
+.opcion.elegida { background: var(--superficie2); box-shadow: inset 0 0 0 3px var(--acento); border-color: transparent; }
+.opcion.elegida .radio { box-shadow: inset 0 0 0 7px var(--acento); }
+.campo { display: block; }
+.campo > span { display: block; margin-bottom: 6px; font-weight: 600; }
+.campo input, .buscar input { width: 100%; min-height: 62px; padding: 0 14px; font-size: 22px; background: var(--superficie); border: 2.5px solid var(--linea); border-radius: var(--radio); }
+.campo input { border-color: var(--acento); }
+.campo textarea, .campo select { width: 100%; min-height: 62px; padding: 12px 14px; font-size: 20px; background: var(--superficie); border: 2.5px solid var(--acento); border-radius: var(--radio); }
+.buscar { position: relative; display: block; }
+.buscar .ic { position: absolute; left: 14px; top: 16px; width: 26px; height: 26px; color: var(--suave); }
+.buscar input { padding-left: 50px; min-height: 58px; font-size: 20px; }
+.buscar input::placeholder { color: var(--suave); opacity: 1; }
+.tarjetas { display: flex; flex-direction: column; gap: 10px; }
+.tarjeta { display: block; width: 100%; text-align: left; padding: 14px 16px; background: var(--superficie); border: var(--borde) solid var(--linea); border-radius: var(--radio); }
+.tarjeta strong { display: block; font-size: 21px; line-height: 1.2; }
+.tarjeta span { display: block; color: var(--suave); font-size: 17px; }
+.tarjeta.apagada { opacity: 0.72; }
+.leido strong { font-family: var(--f-numero); font-size: 34px; }
+.dos-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dos-datos > div { padding: 14px; background: var(--superficie); border: var(--borde) solid var(--linea); border-radius: var(--radio); }
+.cifra { display: block; font-family: var(--f-numero); font-size: 50px; line-height: 1; color: var(--acento); }
+.llave strong { font-size: 19px; margin-bottom: 10px; }
+.mono { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.aclara { margin: 0; font-size: 16px; color: var(--suave); }
+.estado { display: flex; gap: 10px; align-items: center; margin: 0; padding: 9px 12px; font-size: 16px; line-height: 1.25; background: var(--superficie2); border-radius: var(--radio); }
+.foco { width: 12px; height: 12px; border-radius: 50%; background: var(--suave); flex: none; }
+.resultado { display: flex; gap: 8px; align-items: center; margin: 0; padding: 10px 12px; font-weight: 600; border-radius: var(--radio); }
+.resultado.bien { color: var(--bien); background: var(--bien-fondo); }
+.avisos { display: flex; flex-direction: column; gap: 8px; padding: 0 20px 8px; }
+.aviso-fuerte { margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; font-weight: 600; line-height: 1.3; color: var(--peligro-texto); background: var(--peligro-fondo); border: 2px solid var(--peligro-borde); border-radius: var(--radio); }
+.aviso-fuerte .boton { min-height: 54px; font-size: 19px !important; }
+.aviso-suave { margin: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; line-height: 1.3; background: var(--superficie2); border-radius: var(--radio); }
+.aviso-suave .enlace { padding: 2px 0; }
+.casilla { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+.casilla input { width: 26px; height: 26px; margin: 2px 0 0; accent-color: var(--acento); }
+.tabla-datos { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; margin: 0; }
+.tabla-datos dt { color: var(--suave); }
+.tabla-datos dd { margin: 0; font-weight: 600; text-align: right; }
+.renglon-botones { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.enlaces { display: flex; flex-direction: column; gap: 2px; }
+
+/* ---------- The installer and the roll reader, copied from instalador.css ---------- */
+.ventana { width: 100%; height: 680px; display: grid; grid-template-columns: 290px 1fr; background: var(--fondo); color: var(--texto); font-family: var(--f-texto); font-size: 18px; line-height: 1.35; }
+.riel { padding: 26px 22px; background: var(--superficie2); display: flex; flex-direction: column; gap: 26px; }
+.marca-app { display: flex; gap: 10px; align-items: center; font-family: var(--f-titulo); font-weight: var(--peso-titulo); font-size: 22px; line-height: 1; }
+.marca-app svg { width: 34px; height: 34px; flex: none; }
+.riel .plan { gap: 22px; }
+.riel .estacion strong { font-size: 18px !important; }
+.riel .cuando { font-size: 15px; }
+.ventana-derecha { display: flex; flex-direction: column; min-width: 0; padding: 28px 34px 24px; gap: 14px; position: relative; }
+.ventana-derecha .t1 { font-size: calc(30px * var(--escala-titulo)); }
+.ventana-derecha .ojo { margin: 0; color: var(--suave); }
+.ventana-derecha .bajada { margin: 0; }
+.cuerpo-v { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.pie-v { display: flex; justify-content: flex-end; gap: 18px; align-items: center; }
+.pie-v .boton { width: auto; min-width: 240px; min-height: 58px; }
+.ventana-derecha .opcion { min-height: 58px; padding: 9px 14px; }
+.ventana-derecha .opcion small { font-size: 15px; }
+.ventana .campo input { min-height: 54px; font-size: 19px; }
+.ventana .campo textarea { min-height: 96px; height: 96px; padding: 10px 14px; font-size: 14px; font-family: ui-monospace, monospace; resize: none; }
+.ventana-derecha .cuerpo-v .tarjeta strong { font-size: 19px; }
+
+/* ---------- New pieces in this proposal ---------- */
+.filtros { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.filtro > span { display: block; margin-bottom: 4px; font-size: 16px; font-weight: 600; color: var(--suave); }
+.filtro select { width: 100%; min-height: 52px; padding: 0 12px; font-size: 18px; background: var(--superficie); border: 2px solid var(--linea); border-radius: var(--radio); }
+.dia { margin: 4px 0 -4px; font-size: 16px; font-weight: 700; color: var(--suave); }
+.registro-v { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.registro-v li { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 9px 0; border-bottom: 1.5px solid var(--linea); font-size: 17px; line-height: 1.3; }
+.registro-v li b { font-weight: 700; }
+.registro-v small { display: block; margin-top: 2px; font-size: 15.5px; color: var(--suave); }
+.registro-v small .enlace { padding: 0; font-size: inherit; }
+.registro-v time { color: var(--suave); font-size: 15px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dos-datos > div > span { display: block; color: var(--suave); font-size: 16px; margin-top: 4px; }
+.chica { min-height: 48px !important; width: auto; padding: 8px 16px; font-size: 17px !important; }
+.enlace.en-linea { display: inline; padding: 0; font: inherit; }
+.consentimiento { display: flex; flex-direction: column; gap: 2px; }
+.consentimiento strong { font-size: 19px; }
+.consentimiento .renglon-botones { margin-top: 6px; }
+.texto-legal h2 { margin: 6px 0 4px; font-size: 21px; line-height: 1.2; }
+.texto-legal p { margin: 0 0 8px; font-size: 17px; }
+.texto-legal ul { margin: 0; padding-left: 22px; font-size: 17px; }
+.texto-legal li { margin-bottom: 4px; }
+.triple { display: grid; grid-template-columns: 1fr 110px 160px; gap: 10px; }
+.huella { overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 17px !important; }
+.contenido-archivo { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.contenido-archivo li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+.contenido-archivo .ic { width: 26px; height: 26px; color: var(--acento); margin-top: 2px; }
+.contenido-archivo strong { font-size: 18px !important; }
+.contenido-archivo span { font-size: 15.5px !important; }
+.puntos { margin: 0; padding: 12px 16px 12px 36px; }
+.puntos li { margin: 0 0 6px; font-size: 17px; }
+.puntos li:last-child { margin-bottom: 0; }
+.ya-elegido { display: inline-block; margin-top: 4px; padding: 1px 8px; font-size: 14px; font-weight: 700; font-style: normal; color: var(--acento); box-shadow: inset 0 0 0 1.5px var(--acento); border-radius: 999px; }
+.ia-linea { margin-top: 4px !important; color: var(--texto) !important; font-weight: 600; }
+/* Marks the free service in the mockups: a slot the author still has to fill. */
+.hueco { border: 2px dashed var(--acento); border-radius: 4px; padding: 0 3px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="hoja">
+<header>
+  <h1>Urna Abierta · propuestas de diseño: ley de datos, instalador e IA externa</h1>
+  <p class="intro">Son propuestas para que las apruebes antes de construir nada: no tocan la app. Siguen el lenguaje aprobado en <code>design/index.html</code> (una pantalla, una pregunta, un botón principal) y usan el tema Aula, de día y de noche. Las pantallas de administración se ven en una ventana de computadora, con la columna de 600 px que usa la app ahí; el instalador y el lector de padrones, en su ventana con el riel de pasos. Las personas, direcciones y claves son inventadas.</p>
+  <p class="intro">En cada propuesta hay: la falta que resuelve (citada del relevamiento, en inglés), las maquetas, cómo se usa, los textos nuevos o que cambian (en castellano tal como aparecerían, y en inglés) y preguntas para vos.</p>
+  <nav class="indice" aria-label="Índice">
+    <h2>Índice</h2>
+    <div><strong>Herramientas de la ley</strong><ol>
+      <li><a href="#registro">Registro: qué se vio o se cambió</a></li>
+      <li><a href="#plazo">Plazo para borrar los datos</a></li>
+      <li><a href="#consentimiento">Retirar el consentimiento</a></li>
+      <li><a href="#responsabilidad">La casilla de responsabilidad y el texto legal</a></li>
+    </ol></div>
+    <div><strong>Instalador</strong><ol start="5">
+      <li><a href="#final">El final, cuando el servidor no contesta</a></li>
+      <li><a href="#servidor-propio">«Ya tengo un servidor»: puerto, contraseña y huella</a></li>
+      <li><a href="#acceso-nube">Entrar a un servidor creado en una nube</a></li>
+    </ol></div>
+    <div><strong>IA externa para leer padrones</strong><ol start="8">
+      <li><a href="#servicio-gratis">El servicio gratis: decisión pendiente</a></li>
+      <li><a href="#ia-instalador">El paso 2 del instalador</a></li>
+      <li><a href="#ia-lector">Elegir cómo leer, en el lector</a></li>
+      <li><a href="#ia-aviso">El aviso antes de mandar el padrón</a></li>
+      <li><a href="#ia-nivel">Lo que permite cada nivel de seguridad</a></li>
+    </ol></div>
+  </nav>
+</header>
+
+<!-- ======================================================================= -->
+<section class="grupo">
+<h2>Herramientas de la ley</h2>
+<p>Pantallas de quien administra. Completan lo que pide la Ley 25.326 y ya está en <code>LEGAL.md</code>: un registro de quién vio y cambió qué, un plazo para borrar, poder retirar el consentimiento y aceptar la responsabilidad sabiendo qué se acepta.</p>
+
+<section class="propuesta" id="registro">
+  <h3>1. Registro: qué se vio o se cambió</h3>
+  <p class="falta">Resuelve: <q>The audit list doesn't say what was seen or changed, and non-sensitive semáforo reads aren't logged</q> y <q>The audit viewer does not show what was seen or changed, and cannot filter by person or user</q>.</p>
+  <p class="resumen">Cada línea del registro dice sobre qué fue (la mesa, la persona del padrón, la elección) y qué cambió. Se filtra por quién lo hizo, por tipo y por la persona del padrón, que es lo que hace falta para contestar un pedido.</p>
+  <div class="maquetas">
+    <template data-maqueta="registro-filtros" data-marco="compu" data-titulo="El registro, con filtros" data-nota="Arriba, dos filtros y una búsqueda. Cada entrada suma una segunda línea con sobre qué fue y, si cambió algo, cómo era antes. La categoría del semáforo nunca aparece en el registro. El botón baja lo que se ve, con los filtros puestos.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <h1 class="t1">Registro</h1>
+        <p class="bajada" data-t="audit.text" data-antes="Lo que hizo cada persona. Nadie lo puede cambiar.">Quién vio o cambió qué. Nadie lo puede borrar ni cambiar.</p>
+      </header>
+      <main class="cuerpo">
+        <div class="filtros">
+          <label class="filtro"><span data-t="audit.filter.who">Quién</span><select><option data-t="audit.filter.who.all">Todo el equipo</option></select></label>
+          <label class="filtro"><span data-t="audit.filter.what">Qué</span><select><option data-t="audit.filter.what.all">Vio o cambió algo</option></select></label>
+        </div>
+        <label class="buscar"><i data-ic="lupa"></i><input data-t="audit.filter.person" placeholder="Sobre quién: apellido o documento"></label>
+        <p class="dia" data-t="audit.day">Hoy, martes 6 de abril</p>
+        <ul class="registro-v">
+          <li><div><b>Laura Méndez</b>: Corrigió una persona del padrón<small data-t="audit.detail.corrected">Aguirre, Paula · Mesa 12. El nombre decía «Aguire, Paula».</small></div><time>14:40</time></li>
+          <li><div><b>Rubén Quiroga</b>: <span data-t="action.semaphore.searched">Miró el semáforo</span><small><span data-t="audit.detail.people">12 personas de la Mesa 12</span> · <button class="enlace" data-t="audit.detail.seeWho">Ver a quiénes</button></small></div><time>14:32</time></li>
+          <li><div><b>Juli Toledo</b>: Anotó a alguien en el semáforo<small data-t="audit.detail.person">Benítez, Tomás · Mesa 12</small></div><time>11:20</time></li>
+          <li><div><b>Marta Ibáñez</b>: Bajó el padrón de una mesa<small data-t="audit.detail.table">Mesa 12 · Escuela Normal 1 · 350 personas</small></div><time>7:58</time></li>
+          <li><div><b>Laura Méndez</b>: <span data-t="action.audit.viewed">Abrió el registro</span></div><time>7:40</time></li>
+        </ul>
+      </main>
+      <footer class="pie"><button class="boton primario"><i data-ic="descargar"></i><span data-t="audit.download">Bajar lo que se ve</span></button></footer>
+    </template>
+    <template data-maqueta="registro-persona" data-marco="compu" data-titulo="Todo lo de una persona, para contestar su pedido" data-nota="Se llega desde «Pedidos de personas» o escribiendo un apellido en la búsqueda del registro. Arriba, dos números; abajo, cada vez que alguien vio o cambió sus datos. Las frases usan «su» y «le», para no suponer el género.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo" data-t="audit.person.eyebrow">Registro · Pedidos de personas</p>
+        <h1 class="t1">Aguirre, Paula</h1>
+        <p class="bajada" data-t="audit.person.text">Todo lo que se vio o se cambió de sus datos, en Centro de estudiantes.</p>
+      </header>
+      <main class="cuerpo">
+        <div class="dos-datos"><div><strong class="cifra">3</strong><span data-t="audit.person.seen">veces que alguien vio sus datos</span></div><div><strong class="cifra">2</strong><span data-t="audit.person.changed">cambios en sus datos</span></div></div>
+        <ul class="registro-v">
+          <li><div><b>Laura Méndez</b>: <span data-t="audit.person.searched">Buscó sus datos en Pedidos de personas</span></div><time data-t="audit.today">Hoy 9:10</time></li>
+          <li><div><b>Laura Méndez</b>: <span data-t="audit.person.corrected">Corrigió su nombre</span><small>«Aguire, Paula» → «Aguirre, Paula»</small></div><time>6/4 14:40</time></li>
+          <li><div><b>Rubén Quiroga</b>: <span data-t="audit.person.semaphoreSeen">Miró su marca en el semáforo</span><small data-t="audit.person.withOthers">Junto con otras 11 personas de la Mesa 12</small></div><time>6/4 14:32</time></li>
+          <li><div><b>Juli Toledo</b>: <span data-t="audit.person.noted">Le puso una marca en el semáforo</span></div><time>6/4 11:20</time></li>
+          <li><div><b>Marta Ibáñez</b>: <span data-t="audit.person.downloaded">Bajó el padrón de su mesa</span><small>Mesa 12 · 350 personas</small></div><time>6/4 7:58</time></li>
+        </ul>
+      </main>
+      <footer class="pie"><button class="boton primario"><i data-ic="descargar"></i><span data-t="audit.person.download">Bajar esta lista para su pedido</span></button></footer>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>En «Más cosas», tocás «Registro».</li>
+      <li>Ves lo último primero, con sobre qué fue cada cosa. Si hace falta, elegís quién o qué.</li>
+      <li>Para un pedido, escribís el apellido: queda todo lo de esa persona, con dos números arriba.</li>
+      <li>Tocás «Bajar…» y te queda un CSV con lo que se ve.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿La lista de una persona se suma sola al archivo que se le entrega por el art. 14 («Bajar todo lo que tenemos»), o queda aparte?</li>
+      <li>Mirar el semáforo deja una entrada por búsqueda, no por tecla. ¿Te alcanza una entrada cada pocos minutos por persona, o querés cada búsqueda?</li>
+      <li>¿Quién puede ver el registro completo? Hoy lo ve quien tiene «sistema»; ¿un jefe debería ver solo lo de su distrito?</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="plazo">
+  <h3>2. Plazo para borrar los datos</h3>
+  <p class="falta">Resuelve: <q>No purge deadline: the party cannot set one, nothing reminds it, and nothing purges on time</q> y <q>Purge has no deadline set by the party: it is only a manual button</q>.</p>
+  <p class="resumen">El partido elige el plazo al crear la elección, con uno recomendado según el nivel de seguridad. La estación «Cierre» muestra cuánto falta, y una semana antes aparece un aviso en la pantalla de inicio. Lo que pasa al vencer queda para que lo decidas.</p>
+  <div class="maquetas">
+    <template data-maqueta="plazo-elegir" data-marco="compu" data-titulo="Elegir el plazo, al crear la elección" data-nota="Una pregunta más en «Nueva elección», con la opción recomendada ya marcada. Se puede cambiar después desde la elección, hasta que se borren los datos.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo" data-t="purge.eyebrow">Nueva elección</p>
+        <h1 class="t1" data-t="purge.title">¿Hasta cuándo guardamos los nombres?</h1>
+        <p class="bajada" data-t="purge.text">Después de la elección se borran nombres, documentos y marcas del semáforo. Quedan solo los totales.</p>
+      </header>
+      <main class="cuerpo">
+        <div class="opciones">
+          <button class="opcion"><span class="radio"></span><span><strong data-t="purge.week">Una semana después</strong><small data-t="purge.week.text">Alcanza para revisar el escrutinio.</small></span></button>
+          <button class="opcion elegida"><span class="radio"></span><span><strong data-t="purge.month">Un mes después</strong><small data-t="purge.recommended">Lo recomendado para tu nivel de seguridad.</small></span></button>
+          <button class="opcion"><span class="radio"></span><span><strong data-t="purge.months3">Tres meses después</strong><small data-t="purge.months3.text">Si puede haber un reclamo largo.</small></span></button>
+          <button class="opcion"><span class="radio"></span><span><strong data-t="purge.other">Otra fecha</strong></span></button>
+        </div>
+        <p class="resultado bien"><i data-ic="tilde"></i><span data-t="purge.result">Se borran el sábado 8 de mayo. Te avisamos una semana antes.</span></p>
+      </main>
+      <footer class="pie"><button class="boton primario"><i data-ic="flecha"></i><span>Seguir</span></button></footer>
+    </template>
+    <template data-maqueta="plazo-eleccion" data-marco="compu" data-titulo="La elección terminada, con cuánto falta" data-nota="La estación «Cierre» dice la fecha y cuánto falta, y que lo decidió el partido. «Cambiar el plazo» queda a mano. El botón de borrar es el mismo de hoy.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo">6 al 8 de abril</p>
+        <h1 class="t1">Centro de estudiantes</h1>
+      </header>
+      <main class="cuerpo">
+        <ol class="plan">
+          <li class="estacion hecho"><span class="punto"><i data-ic="tilde"></i></span><div><strong>Padrón</strong><span class="cuando">3.120 personas</span></div></li>
+          <li class="estacion hecho"><span class="punto"><i data-ic="tilde"></i></span><div><strong>Mesas</strong><span class="cuando">9 mesas</span></div></li>
+          <li class="estacion hecho"><span class="punto"><i data-ic="tilde"></i></span><div><strong>Fiscales</strong><span class="cuando">Una persona por mesa</span></div></li>
+          <li class="estacion hecho"><span class="punto"><i data-ic="tilde"></i></span><div><strong>Votación</strong><span class="cuando">6 al 8 de abril</span></div></li>
+          <li class="estacion hecho"><span class="punto"><i data-ic="tilde"></i></span><div><strong>Escrutinio</strong><span class="cuando">Al final</span></div></li>
+          <li class="estacion ahora"><span class="punto"></span><div><strong>Cierre</strong><span class="cuando">Estás acá</span><p class="ayuda" data-t="election.st.close.help" data-antes="Quedan solo los totales. Los nombres se borran para siempre.">Borrá los datos antes del sábado 8 de mayo: faltan 12 días. Lo decidió tu partido. Quedan solo los totales.</p></div></li>
+        </ol>
+        <div class="renglon-botones"><button class="enlace" data-t="purge.change">Cambiar el plazo</button><button class="enlace">Números</button></div>
+        <span hidden data-t="election.st.close.when" data-antes="Y borrar los datos">Borrar antes del 8 de mayo</span>
+      </main>
+      <footer class="pie"><button class="boton peligro">Borrar los datos personales</button></footer>
+    </template>
+    <template data-maqueta="plazo-inicio" data-marco="compu" data-titulo="El aviso, una semana antes, en la pantalla de inicio" data-nota="Usa el aviso fuerte que ya existe para lo que no puede pasar desapercibido. La tarjeta de la elección también dice la fecha.">
+      <header class="cabeza">
+        <p class="ojo">Agrupación Ejemplo</p>
+        <h1 class="t1">Tus elecciones</h1>
+      </header>
+      <div class="avisos"><div class="aviso-fuerte"><span data-t="purge.reminder">Faltan 5 días para borrar los datos de Centro de estudiantes. Tu partido decidió hacerlo antes del sábado 8 de mayo.</span><button class="boton secundario" data-t="purge.reminder.open">Ver la elección</button></div></div>
+      <main class="cuerpo">
+        <div class="tarjetas">
+          <button class="tarjeta"><strong>Centro de estudiantes</strong><span>6 al 8 de abril · Terminó · <span style="display:inline" data-t="elections.purgeBy">Se borra el 8 de mayo</span></span></button>
+          <button class="tarjeta apagada"><strong>Consejo Directivo</strong><span>Noviembre de 2026 · Terminó, sin datos personales</span></button>
+        </div>
+        <span hidden data-t="purge.overdue">Se pasó el plazo que decidió tu partido para borrar los datos de Centro de estudiantes. Borralos hoy.</span>
+      </main>
+      <footer class="pie"><div class="pila"><button class="boton primario"><i data-ic="mas"></i><span>Crear una elección</span></button><button class="enlace">Más cosas</button></div></footer>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>Al crear la elección, elegís hasta cuándo se guardan los nombres. Viene marcado el recomendado.</li>
+      <li>Cuando termina, la estación «Cierre» dice la fecha y cuántos días faltan.</li>
+      <li>Una semana antes, el aviso aparece en tu inicio y no se va hasta que borres.</li>
+      <li>Tocás «Ver la elección» y después «Borrar los datos personales».</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>Al vencer el plazo, ¿la app borra sola, solo avisa (como acá), o no deja seguir trabajando hasta que se borre?</li>
+      <li>¿Qué plazo recomienda cada nivel? Para la maqueta usé un mes en los tres.</li>
+      <li>Las copias de seguridad guardan los nombres 7 días más. ¿Agregamos que al borrar se borren también las copias viejas, o alcanza con decirlo en el aviso?</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="consentimiento">
+  <h3>3. Retirar el consentimiento</h3>
+  <p class="falta">Resuelve: <q>Consent cannot be withdrawn or cleared</q>.</p>
+  <p class="resumen">En la ficha de la persona, el consentimiento pasa a una tarjeta con fecha y medio, y dos caminos: «Retiró su consentimiento», que lo anota y borra su marca del semáforo, y «Se cargó por error», para corregir una carga equivocada.</p>
+  <div class="maquetas">
+    <template data-maqueta="consentimiento-persona" data-marco="compu" data-titulo="La ficha de la persona" data-nota="Para que entre todo sin desplazar, corregir el nombre o el documento pasa a su propia pantalla («Corregir sus datos»). Desde acá también se llega a su registro (propuesta 1).">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo">Centro de estudiantes</p>
+        <h1 class="t1">Aguirre, Paula</h1>
+        <p class="bajada">Mesa 12</p>
+      </header>
+      <main class="cuerpo">
+        <dl class="tabla-datos"><dt>Documento</dt><dd>30.123.406</dd><dt>Tiene una marca en el semáforo</dt><dd>sí</dd></dl>
+        <div class="tarjeta consentimiento">
+          <span data-t="persons.consent.given">Dio su consentimiento</span>
+          <strong data-t="persons.consent.detail">El 2 de marzo de 2027, por escrito, en la mesa de afiliación</strong>
+          <div class="renglon-botones"><button class="enlace" data-t="persons.consent.revoke">Retiró su consentimiento</button><button class="enlace" data-t="persons.consent.clear">Se cargó por error</button></div>
+        </div>
+        <button class="boton secundario">Bajar todo lo que tenemos</button>
+        <div class="enlaces"><button class="enlace" data-t="persons.audit">Ver quién vio o cambió sus datos</button><button class="enlace" data-t="persons.correct.open">Corregir sus datos</button></div>
+        <span hidden data-t="persons.consent.revoked">Lo retiró el 26 de abril de 2027, por mail a la agrupación</span>
+        <span hidden data-t="persons.consent.clearConfirm">¿Borrar este consentimiento? Usalo solo si se cargó por error. En el registro queda que lo borraste.</span>
+      </main>
+      <footer class="pie"><button class="boton peligro">Borrar sus datos</button></footer>
+    </template>
+    <template data-maqueta="consentimiento-retirar" data-marco="compu" data-titulo="¿Retiró su consentimiento?" data-nota="Una pregunta con dos campos. Avisa antes de que pase que su marca del semáforo se borra en el mismo momento. Después, la tarjeta de la ficha dice «Lo retiró el…».">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo">Aguirre, Paula</p>
+        <h1 class="t1" data-t="persons.revoke.title">¿Retiró su consentimiento?</h1>
+        <p class="bajada" data-t="persons.revoke.text">Anotamos cuándo y cómo lo pidió. Su marca en el semáforo se borra ahora.</p>
+      </header>
+      <main class="cuerpo">
+        <label class="campo"><span data-t="persons.revoke.date">¿Cuándo lo pidió?</span><input value="26/04/2027"></label>
+        <label class="campo"><span data-t="persons.revoke.means">¿Cómo lo pidió?</span><input value="Por mail a la agrupación"></label>
+        <p class="aviso-suave" data-t="persons.revoke.keeps">El registro guarda que lo dio y que lo retiró, con las dos fechas. Si lo vuelve a dar, se anota de nuevo.</p>
+      </main>
+      <footer class="pie"><button class="boton primario"><i data-ic="tilde"></i><span data-t="persons.revoke.save">Anotar que lo retiró</span></button></footer>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>En «Pedidos de personas», buscás a la persona y abrís su ficha.</li>
+      <li>En la tarjeta del consentimiento, tocás «Retiró su consentimiento».</li>
+      <li>Anotás cuándo y cómo lo pidió, y tocás «Anotar que lo retiró».</li>
+      <li>Su marca del semáforo se borra en el mismo paso, y el registro lo guarda.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿Dejamos «Se cargó por error» (borra el consentimiento, y en el registro queda que se borró), o solo «Retiró», para que siempre quede la historia?</li>
+      <li>¿Te parece bien sacar «Corregir» a su propia pantalla, o preferís que la ficha siga teniendo los campos y se desplace?</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="responsabilidad">
+  <h3>4. La casilla de responsabilidad y el texto legal</h3>
+  <p class="falta">Resuelve: <q>The responsibility checkbox has no link to the full legal text, and the desktop installer never mentions it</q>.</p>
+  <p class="resumen">La casilla suma «Leer el texto completo», que abre el texto legal dentro de la app: el mismo <code>LEGAL.md</code> de la versión instalada, sin salir a internet. El instalador lo nombra en su pantalla final (se ve en la propuesta 5).</p>
+  <div class="maquetas">
+    <template data-maqueta="responsabilidad-alta" data-marco="compu" data-titulo="Crear la cuenta, con el enlace" data-nota="La frase de la casilla no cambia. El enlace va al final, dentro de la misma casilla, para que se lea antes de marcar.">
+      <header class="cabeza">
+        <h1 class="t1">Vamos a crear tu cuenta</h1>
+        <p class="bajada">Sos quien administra esta instalación.</p>
+      </header>
+      <main class="cuerpo">
+        <label class="campo"><span>Tu nombre</span><input value="Laura Méndez"></label>
+        <label class="campo"><span>Tu teléfono</span><input value="11 5555 0123"></label>
+        <label class="casilla"><input type="checkbox" checked><span>Entiendo que mi partido es el responsable de los datos que se carguen acá y de cumplir la ley de datos personales. <button class="enlace en-linea" data-t="setup.responsibility.read">Leer el texto completo</button></span></label>
+      </main>
+      <footer class="pie"><button class="boton primario"><i data-ic="flecha"></i><span>Empezar</span></button></footer>
+    </template>
+    <template data-maqueta="responsabilidad-texto" data-marco="compu" data-titulo="El texto, dentro de la app" data-nota="Primero un resumen en castellano simple; abajo, desplazando, sigue el texto completo con la licencia. Viene con cada versión, así que siempre es el que corresponde a lo instalado.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo" data-t="legal.eyebrow">Información legal</p>
+        <h1 class="t1" data-t="legal.title">Quién responde por los datos</h1>
+      </header>
+      <main class="cuerpo">
+        <p class="aviso-suave" data-t="legal.draft">Es un borrador: un abogado todavía tiene que revisarlo. No es asesoramiento legal.</p>
+        <div class="texto-legal">
+          <h2 data-t="legal.responsible.title">Tu partido es el responsable</h2>
+          <p data-t="legal.responsible.text">El partido que instala la app responde por su base de datos y por cumplir la ley. Decide qué se carga, quién lo ve, dónde está el servidor y cuándo se borra.</p>
+          <h2 data-t="legal.project.title">El proyecto no toca tus datos</h2>
+          <p data-t="legal.project.text">No tiene un servidor central ni recibe nada de esta app. No puede ver tu servidor ni tus padrones.</p>
+          <h2 data-t="legal.law.title">Lo que pide la ley</h2>
+          <ul>
+            <li data-t="legal.law.sensitive">Las opiniones políticas son un dato sensible (Ley 25.326, art.&nbsp;2).</li>
+            <li data-t="legal.law.rights">Cada persona puede ver, corregir y borrar sus datos (arts. 14 a 16).</li>
+            <li data-t="legal.law.abroad">Los servidores gratis suelen estar fuera del país, y eso tiene límites (art.&nbsp;12).</li>
+          </ul>
+        </div>
+        <p class="aclara" data-t="legal.more">Más abajo sigue el texto completo, con la licencia.</p>
+      </main>
+      <footer class="pie"><button class="boton primario"><span data-t="legal.ok">Entendido</span></button></footer>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>Al crear la cuenta, quien administra lee la casilla.</li>
+      <li>Si quiere, toca «Leer el texto completo» y se abre el texto legal de esta versión.</li>
+      <li>Toca «Entendido», vuelve con lo que ya había escrito y marca la casilla.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿El resumen de arriba te sirve, o preferís mostrar <code>LEGAL.md</code> tal cual, sin resumir?</li>
+      <li>En el instalador, ¿alcanza con una línea en la pantalla final, o lo querés también en la primera, antes de crear el servidor?</li>
+    </ol></div>
+  </div>
+</section>
+</section>
+
+<!-- ======================================================================= -->
+<section class="grupo">
+<h2>Instalador</h2>
+<p>La ventana del instalador, con el riel de pasos a la izquierda. Tres cambios: no anunciar que anda cuando el servidor no contestó, dejar guardar lo que hace falta para después, y que «Ya tengo un servidor» sirva con las llaves y los puertos de verdad.</p>
+
+<section class="propuesta" id="final">
+  <h3>5. El final, cuando el servidor no contesta</h3>
+  <p class="falta">Resuelve: <q>The done screen announces success when the server never answered, and the recovery key cannot be saved</q>.</p>
+  <p class="resumen">Si la dirección no contestó, el instalador lo dice y ofrece comprobar de nuevo, en vez de festejar. Cuando sí anda, la llave se puede copiar o guardar, y hay que marcar «Ya guardé la llave» para abrir la app. También nombra la responsabilidad (propuesta 4).</p>
+  <div class="maquetas">
+    <template data-maqueta="final-sin-respuesta" data-marco="ventana" data-riel="instalador" data-paso="3" data-titulo="Todavía no contesta" data-nota="Reemplaza al «ya está andando» cuando pasaron 20 minutos sin respuesta. La llave ya existe: se puede guardar desde acá por si se cierra la ventana.">
+      <h1 class="t1" data-t="slow.title">Tu servidor todavía no contesta</h1>
+      <p class="bajada" data-t="slow.text">Lo creamos y arrancó, pero su dirección no responde desde hace 20 minutos. Casi siempre es el certificado, que a veces tarda más.</p>
+      <div class="cuerpo-v">
+        <p class="estado"><span class="foco"></span><span data-t="slow.status">https://203.0.113.24 · Probamos por última vez a las 15:42</span></p>
+        <div class="tarjeta"><strong data-t="slow.what">Qué podés hacer</strong><span data-t="slow.what.text">Esperá unos minutos y probá de nuevo. Si sigue igual, fijate que los puertos 80 y 443 estén abiertos en tu nube.</span></div>
+        <div class="aviso-suave"><span data-t="slow.key">Tu llave de recuperación ya está creada. Guardala ahora, por si cerrás esta ventana.</span><button class="enlace" data-t="done.saveFile">Guardar el archivo de acceso</button></div>
+        <button class="enlace" data-t="slow.log">Ver lo que pasó</button>
+      </div>
+      <div class="pie-v"><button class="boton primario"><i data-ic="refrescar"></i><span data-t="slow.retry">Comprobar de nuevo</span></button></div>
+    </template>
+    <template data-maqueta="final-listo" data-marco="ventana" data-riel="instalador" data-paso="4" data-titulo="Ya anda, y la llave se guarda" data-nota="«Abrir Urna Abierta» se habilita al marcar «Ya guardé la llave» (ese texto ya existía y no se usaba). El link para crear la cuenta también queda a la vista, porque después no se puede volver a leer.">
+      <h1 class="t1">Tu Urna Abierta ya está andando</h1>
+      <p class="bajada">Guardá esta llave en un lugar seguro: sin ella no se pueden abrir tus copias de seguridad.</p>
+      <div class="cuerpo-v">
+        <div class="tarjeta llave">
+          <span>Dirección</span><strong>https://203.0.113.24</strong>
+          <span data-t="done.setupLink">Link para crear tu cuenta (sirve una sola vez)</span><strong class="mono">https://203.0.113.24/#setup=K7Q2-9WXP-31LM</strong>
+          <span>Llave de recuperación</span><strong class="mono">TIZA-URNA-4821-SOBRE-7730</strong>
+          <div class="renglon-botones" style="gap:10px"><button class="boton secundario chica"><i data-ic="copiar"></i><span data-t="done.copyKey">Copiar la llave</span></button><button class="boton secundario chica"><i data-ic="descargar"></i><span data-t="done.saveFile">Guardar el archivo de acceso</span></button></div>
+        </div>
+        <label class="casilla"><input type="checkbox" checked><span>Ya guardé la llave</span></label>
+        <p class="aclara"><span data-t="done.responsibility">Al crear tu cuenta vas a aceptar que tu partido responde por los datos que cargue.</span> <button class="enlace en-linea" data-t="done.responsibility.read">Leer el texto completo</button></p>
+        <p class="aclara">Si tus padrones son PDF escaneados: <button class="enlace en-linea">bajá el lector de padrones</button></p>
+        <span hidden data-t="done.local.text">Se ve solo desde esta computadora. En este modo no hay copias de seguridad, así que no hay llave para guardar.</span>
+      </div>
+      <div class="pie-v"><button class="boton primario"><i data-ic="flecha"></i><span>Abrir Urna Abierta</span></button></div>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>El instalador espera a que la dirección conteste, como hoy.</li>
+      <li>Si a los 20 minutos no contestó, muestra «Todavía no contesta» y deja guardar la llave.</li>
+      <li>Tocás «Comprobar de nuevo» hasta que conteste.</li>
+      <li>Cuando contesta, copiás o guardás la llave, marcás «Ya guardé la llave» y abrís la app.</li>
+      <li>En «Probar en esta computadora» no hay copias: se muestra solo la dirección.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿Obligamos a marcar «Ya guardé la llave», o alcanza con mostrarla bien grande?</li>
+      <li>El archivo de acceso, ¿es un solo .txt, o un .zip con el texto y la llave SSH aparte (ver propuesta 7)?</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="servidor-propio">
+  <h3>6. «Ya tengo un servidor»: puerto, contraseña y huella</h3>
+  <p class="falta">Resuelve: <q>The 'I already have a server' option accepts only an unencrypted key on port 22, and never checks the host key</q>.</p>
+  <p class="resumen">El formulario suma el puerto y la contraseña de la llave. Antes de mandar nada, el instalador muestra la huella del servidor para comprobarla con la del proveedor, y la guarda en el archivo de acceso.</p>
+  <div class="maquetas">
+    <template data-maqueta="propio-datos" data-marco="ventana" data-riel="instalador" data-paso="0" data-titulo="Los datos del servidor" data-nota="Dirección, puerto y usuario en una fila; el puerto viene en 22. La contraseña de la llave es opcional, y si la llave la necesita y falta, el error lo dice con esas palabras.">
+      <p class="ojo">Paso 1 de 3</p>
+      <h1 class="t1">¿Cuál es tu servidor?</h1>
+      <p class="bajada">Tiene que ser Ubuntu o Debian. La dirección tiene que ser fija.</p>
+      <div class="cuerpo-v">
+        <div class="triple">
+          <label class="campo"><span>Dirección (IP o dominio)</span><input value="203.0.113.24"></label>
+          <label class="campo"><span data-t="ssh.port">Puerto</span><input value="2222"></label>
+          <label class="campo"><span>Usuario</span><input value="ubuntu"></label>
+        </div>
+        <label class="campo"><span>Llave privada SSH</span><textarea>-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBmZ3Vx
+dW5wb3JxdWVub3NlZW50aWVuZGUAAAAQAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAg</textarea></label>
+        <label class="campo"><span data-t="ssh.passphrase">Contraseña de la llave, si tiene</span><input type="password" value="contraseña"></label>
+        <p class="aclara" data-t="ssh.passphrase.note">Se usa solo para entrar ahora. No se guarda.</p>
+        <button class="enlace" data-t="ssh.howKey">¿No tenés una llave? Cómo hacer una</button>
+        <span hidden data-t="ssh.encrypted">Esta llave tiene contraseña. Escribila en el campo de abajo.</span>
+        <span hidden data-t="ssh.bad_passphrase">Esa contraseña no abre la llave.</span>
+      </div>
+      <div class="pie-v"><button class="boton primario"><i data-ic="flecha"></i><span>Seguir</span></button></div>
+    </template>
+    <template data-maqueta="propio-huella" data-marco="ventana" data-riel="instalador" data-paso="0" data-titulo="¿Es este tu servidor?" data-nota="Aparece al conectar, antes de mandar el script con las claves. «No es igual» corta sin mandar nada. La huella va al archivo de acceso para la próxima vez.">
+      <p class="ojo">Paso 1 de 3</p>
+      <h1 class="t1" data-t="ssh.host.title">¿Es este tu servidor?</h1>
+      <p class="bajada" data-t="ssh.host.text">Antes de mandarle nada, fijate que esta huella sea igual a la que muestra tu proveedor. Así sabés que no hay nadie en el medio.</p>
+      <div class="cuerpo-v">
+        <div class="tarjeta llave">
+          <span data-t="ssh.host.fingerprint">Huella del servidor (ED25519)</span><strong class="huella">SHA256:pX3c9Gq1Lw8eT0vBr2MhyKz4aN6dQ5sJ1fUe7oWbH0k</strong>
+          <span>Dirección</span><strong>203.0.113.24, puerto 2222</strong>
+        </div>
+        <div class="tarjeta"><strong data-t="ssh.host.where">Dónde la ves</strong><span data-t="ssh.host.where.text">En el panel de tu proveedor, en la consola del servidor, o con «ssh-keyscan» desde otra computadora.</span></div>
+        <p class="aclara" data-t="ssh.host.saved">Queda en el archivo de acceso, para comprobarla cuando vuelvas a entrar.</p>
+      </div>
+      <div class="pie-v"><button class="enlace" data-t="ssh.host.no">No es igual: no seguir</button><button class="boton primario"><i data-ic="tilde"></i><span data-t="ssh.host.yes">Sí, es mi servidor</span></button></div>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>Elegís «Ya tengo un servidor» y completás dirección, puerto, usuario y llave.</li>
+      <li>Si tu llave tiene contraseña, la escribís; si falta, el error lo dice.</li>
+      <li>El instalador se conecta y te muestra la huella del servidor.</li>
+      <li>La comparás con la de tu proveedor y tocás «Sí, es mi servidor». Recién ahí se manda el script.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿Sumamos entrar con contraseña (muchos proveedores dan la de root), o dejamos solo llave y explicamos cómo hacerla?</li>
+      <li>¿La huella se confirma siempre, o solo se muestra y se sigue (como hace <code>ssh</code> la primera vez)?</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="acceso-nube">
+  <h3>7. Entrar a un servidor creado en una nube</h3>
+  <p class="falta">Resuelve: <q>Servers created in a cloud get no SSH access, so they can never be updated, restored, checked or switched to S3</q>.</p>
+  <p class="resumen">El instalador crea un par de llaves SSH y pone la pública en el script de instalación (sirve para las tres nubes y para «pegar un texto»). Al terminar, todo lo que hace falta para después va en un solo archivo de acceso, con instrucciones para Windows, macOS y Linux.</p>
+  <div class="maquetas">
+    <template data-maqueta="nube-listo" data-marco="ventana" data-riel="instalador" data-paso="4" data-titulo="El final, en una nube: guardar el archivo de acceso" data-nota="Lo principal es guardar el archivo. Al guardarlo, el botón pasa a «Abrir Urna Abierta» y aparece «Lo guardaste en Descargas». La llave de recuperación se sigue viendo en el archivo y en la pantalla anterior (propuesta 5).">
+      <h1 class="t1">Tu Urna Abierta ya está andando</h1>
+      <p class="bajada" data-t="done.cloud.text">Falta una cosa: guardá el archivo de acceso. Sin él no se puede actualizar el servidor ni recuperar una copia.</p>
+      <div class="cuerpo-v">
+        <ul class="tarjeta contenido-archivo">
+          <li><i data-ic="llave"></i><div><strong>Llave de recuperación</strong><span data-t="access.recovery.text">Abre tus copias de seguridad.</span></div></li>
+          <li><i data-ic="compu"></i><div><strong data-t="access.ssh">Llave para entrar al servidor</strong><span data-t="access.ssh.text">Para actualizarlo, ver cómo anda o restaurar una copia.</span></div></li>
+          <li><i data-ic="persona"></i><div><strong data-t="access.setup">Link para crear tu cuenta</strong><span data-t="access.setup.text">Sirve una sola vez.</span></div></li>
+          <li><i data-ic="nube"></i><div><strong>Dirección</strong><span>https://203.0.113.24</span></div></li>
+        </ul>
+        <p class="aclara" data-t="access.where">Guardalo en un pendrive o en un gestor de contraseñas. No lo mandes por chat: con esto se entra a tu servidor.</p>
+        <span hidden data-t="access.saved">Lo guardaste en Descargas.</span>
+      </div>
+      <div class="pie-v"><button class="boton primario"><i data-ic="descargar"></i><span data-t="done.saveFile">Guardar el archivo de acceso</span></button></div>
+    </template>
+    <template data-maqueta="nube-archivo" data-marco="archivo" data-archivo="urna-abierta-acceso.txt" data-titulo="Lo que trae el archivo de acceso" data-nota="Texto plano, en el idioma del instalador. Si es un .zip, este texto va como LEEME.txt y la llave en un archivo aparte, lista para «ssh -i».">
+<pre>URNA ABIERTA · ACCESO A TU SERVIDOR
+Guardalo en un lugar seguro. Con esto se entra a tu servidor.
+
+Dirección:                  https://203.0.113.24
+Link para crear tu cuenta:  https://203.0.113.24/#setup=K7Q2-9WXP-31LM   (sirve una sola vez)
+Llave de recuperación:      TIZA-URNA-4821-SOBRE-7730   (abre tus copias de seguridad)
+
+CÓMO ENTRAR AL SERVIDOR
+Usuario: ubuntu      Huella: SHA256:pX3c9Gq1Lw8eT0vBr2MhyKz4aN6dQ5sJ1fUe7oWbH0k
+1. Guardá la llave de abajo en un archivo llamado urna-abierta.key.
+2. En Windows abrí PowerShell; en macOS o Linux, la Terminal. Escribí:
+     ssh -i urna-abierta.key ubuntu@203.0.113.24
+3. Adentro:  sudo urna estado  ·  sudo urna actualizar  ·  sudo urna restaurar
+
+LLAVE PARA ENTRAR (no la compartas)
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACBlamVtcGxvLWRlLXVuYS1sbGF2ZS1pbnZlbnRhZGEtcGFyYS1taXJhcg==
+-----END OPENSSH PRIVATE KEY-----</pre>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>Elegís una nube, como hoy. El instalador arma la llave solo, sin preguntar nada.</li>
+      <li>Al terminar, tocás «Guardar el archivo de acceso».</li>
+      <li>Lo guardás en un pendrive o en un gestor de contraseñas, y abrís la app.</li>
+      <li>Para actualizar o restaurar, seguís los tres pasos del archivo.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿Un .txt con la llave adentro (más simple de guardar) o un .zip con LEEME.txt y la llave aparte (más simple de usar)?</li>
+      <li>¿La llave SSH va con contraseña? Es más segura, pero es una cosa más para guardar.</li>
+      <li>Más adelante, ¿querés que el instalador mismo sirva para actualizar con ese archivo, sin abrir una terminal?</li>
+    </ol></div>
+  </div>
+</section>
+</section>
+
+<!-- ======================================================================= -->
+<section class="grupo">
+<h2>IA externa para leer padrones</h2>
+<p>De punta a punta: qué se elige al instalar, cómo elige el lector, el aviso antes de que el padrón salga de la computadora, qué hace la app según el nivel de seguridad y qué queda escrito en el <code>.padron</code>. Leer en la computadora sigue siendo lo primero y lo recomendado.</p>
+
+<div class="caja" id="servicio-gratis">
+  <h4>8. El servicio gratis: decisión pendiente <span class="pendiente">la decidís vos</span></h4>
+  <p>En las maquetas, el nombre del servicio gratis aparece con un borde punteado (<span class="leyenda-hueco">así</span>): es un hueco que se llena cuando decidas. Lo sugerido y la otra opción:</p>
+  <ul>
+    <li><strong>Sugerido: OVHcloud AI Endpoints, sin clave.</strong> No pide cuenta ni clave, así que nadie tiene que registrarse. La empresa es de Francia; la Unión Europea figura como adecuada en la Disposición 60-E/2016 (a confirmar con el abogado). Sin clave hay un límite de pedidos por minuto (a medir): un padrón largo tarda más.</li>
+    <li><strong>Opción: Mistral.</strong> También de Francia. Pide crear una cuenta y sacar una clave, así que se parece más a «Con mi propia clave». Hay que revisar si su plan gratis usa lo que recibe para entrenar.</li>
+  </ul>
+  <p>Con cualquiera de los dos, <code>LEGAL.md</code> tiene que cambiar: hoy dice que la IA externa va «con tu cuenta», y el servicio sin clave no la usa.</p>
+</div>
+
+<section class="propuesta" id="ia-instalador">
+  <h3>9. El paso 2 del instalador</h3>
+  <p class="falta">Resuelve: <q>Installer step 2 ('how to read rolls') has no effect, and the own-AI option is disabled</q> y <q>No external AI with your own token, in the scanner or the installer</q>.</p>
+  <p class="resumen">Cuatro opciones, con «En esta computadora» marcada. Lo elegido pasa a ser lo que el lector de padrones propone primero (lo lee de <code>preferencias.json</code>), así que el paso deja de ser decorativo. Si elegís tu propia clave, se pide en una segunda pantalla.</p>
+  <div class="maquetas">
+    <template data-maqueta="ia-paso2" data-marco="ventana" data-riel="instalador" data-paso="1" data-titulo="¿Cómo leemos los padrones escaneados?" data-nota="La bajada explica qué hace esta elección: es lo que el lector va a proponer primero. El servicio gratis es el hueco pendiente.">
+      <p class="ojo">Paso 2 de 3</p>
+      <h1 class="t1">¿Cómo leemos los padrones escaneados?</h1>
+      <p class="bajada" data-t="vision.text">Es lo que el lector de padrones va a usar primero. Lo podés cambiar cada vez que leas uno.</p>
+      <div class="cuerpo-v"><div class="opciones">
+        <button class="opcion elegida"><span class="radio"></span><span><strong>En esta computadora</strong><small>El lector de padrones corre en tu computadora: es privado y gratis, y se baja aparte. Es lo recomendado, porque un padrón trae datos de personas.</small></span></button>
+        <button class="opcion"><span class="radio"></span><span><strong data-t="vision.free">Con un servicio gratis en internet</strong><small data-t="vision.free.text">Lee mejor la letra difícil. El padrón pasa por <span class="hueco">OVHcloud</span>, sin cuenta ni clave.</small></span></button>
+        <button class="opcion"><span class="radio"></span><span><strong data-t="vision.ai" data-antes="Con mi propia IA">Con mi propia clave</strong><small data-t="vision.ai.text" data-antes="Todavía no está disponible.">Mistral u otro servicio. Pegás tu clave, y paga tu cuenta.</small></span></button>
+        <button class="opcion"><span class="radio"></span><span><strong>Después</strong><small>Una planilla de Excel o CSV se carga directo en la app. Un PDF escaneado lo leés con el lector de padrones cuando haga falta.</small></span></button>
+      </div></div>
+      <div class="pie-v"><button class="boton primario"><i data-ic="flecha"></i><span>Seguir</span></button></div>
+    </template>
+    <template data-maqueta="ia-clave" data-marco="ventana" data-riel="instalador" data-paso="1" data-titulo="Tu propia clave" data-nota="Solo si elegiste «Con mi propia clave». Se prueba con un pedido chiquito, sin datos de nadie. La clave no viaja al servidor.">
+      <p class="ojo">Paso 2 de 3</p>
+      <h1 class="t1" data-t="vision.key.title">¿Con qué servicio?</h1>
+      <p class="bajada" data-t="vision.key.text">Tu clave queda guardada solo en esta computadora. No va a tu servidor ni a nadie más.</p>
+      <div class="cuerpo-v">
+        <div class="opciones">
+          <button class="opcion elegida"><span class="radio"></span><span><strong>Mistral</strong><small data-t="vision.key.mistral.text">Está en Francia. La clave se saca en su página.</small></span></button>
+          <button class="opcion"><span class="radio"></span><span><strong data-t="vision.key.other">Otro compatible con OpenAI</strong><small data-t="vision.key.other.text">Pegás la dirección del servicio y tu clave.</small></span></button>
+        </div>
+        <label class="campo"><span data-t="vision.key.field">Tu clave de Mistral</span><input type="password" value="abcdefghijklmnopqrstuvwx"></label>
+        <p class="resultado bien"><i data-ic="tilde"></i><span data-t="vision.key.ok">Probamos la clave y anda.</span></p>
+        <button class="enlace" data-t="vision.key.guide">Cómo sacar una clave de Mistral</button>
+      </div>
+      <div class="pie-v"><button class="boton primario"><i data-ic="flecha"></i><span>Seguir</span></button></div>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>En el paso 2, elegís cómo leer. Viene marcado «En esta computadora».</li>
+      <li>Si elegís tu propia clave, elegís el servicio, pegás la clave y el instalador la prueba.</li>
+      <li>Lo elegido queda en <code>preferencias.json</code>; la clave, solo en esta computadora.</li>
+      <li>Cuando abras el lector, va a proponer eso primero.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿Dónde guardamos la clave: en el llavero del sistema (más seguro, más código para cada sistema) o en <code>preferencias.json</code> con permisos solo para vos?</li>
+      <li>¿Qué servicios con clave sumamos de entrada? Propongo Mistral y «otro compatible con OpenAI».</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="ia-lector">
+  <h3>10. Elegir cómo leer, en el lector</h3>
+  <p class="falta">Resuelve: <q>No external AI with your own token, in the scanner or the installer</q>.</p>
+  <p class="resumen">Después de elegir el PDF, el lector pregunta cómo leerlo, con lo elegido al instalar ya marcado. Si es en esta computadora, sigue como hoy; si no, primero viene el aviso (propuesta 11). La estación «Leerlo» del riel deja de decir «Lo hace la computadora».</p>
+  <div class="maquetas">
+    <template data-maqueta="lector-elegir" data-marco="ventana" data-riel="lector" data-paso="1" data-titulo="¿Cómo leemos este padrón?" data-nota="La marca «Lo elegiste al instalar» dice de dónde sale lo marcado. Si no hay clave guardada, la tercera opción es «Con mi propia clave» y la pide ahí mismo.">
+      <p class="ojo">Paso 2 de 4</p>
+      <h1 class="t1" data-t="read.how.title">¿Cómo leemos este padrón?</h1>
+      <p class="bajada">padron-centro-2027.pdf · 42 páginas</p>
+      <div class="cuerpo-v">
+        <div class="opciones">
+          <button class="opcion elegida"><span class="radio"></span><span><strong data-t="read.how.local">En esta computadora</strong><small data-t="read.how.local.text">Privado: no sale de acá. Es lo que más tarda.</small><em class="ya-elegido" data-t="read.how.default">Lo elegiste al instalar</em></span></button>
+          <button class="opcion"><span class="radio"></span><span><strong data-t="read.how.free">Con un servicio gratis en internet</strong><small data-t="read.how.free.text">Más rápido. El padrón pasa por <span class="hueco">OVHcloud</span>.</small></span></button>
+          <button class="opcion"><span class="radio"></span><span><strong data-t="read.how.key">Con tu clave de Mistral</strong><small data-t="read.how.key.text">Más rápido. Pasa por Mistral, y paga tu cuenta.</small></span></button>
+        </div>
+        <p class="aclara" data-t="read.how.note">Según el nivel de seguridad de tu elección, la app puede no aceptar un padrón leído en internet.</p>
+        <span hidden data-t="rail.read.when" data-antes="Lo hace la computadora">Acá o en internet</span>
+        <span hidden data-t="read.how.key.none">Con mi propia clave</span>
+      </div>
+      <div class="pie-v"><button class="boton primario"><i data-ic="flecha"></i><span data-t="read.how.start">Leerlo</span></button></div>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>Abrís el lector y elegís el PDF, como hoy.</li>
+      <li>Te pregunta cómo leerlo, con lo que elegiste al instalar ya marcado.</li>
+      <li>Tocás «Leerlo». Si es en internet, antes ves el aviso.</li>
+      <li>Revisás y guardás como hoy; el <code>.padron</code> dice cómo se leyó.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿Mostramos cuánto tarda cada opción («unos 15 minutos»)? Habría que medirlo con padrones de verdad; por ahora dice solo «lo que más tarda» y «más rápido».</li>
+      <li>¿El lector debería saber el nivel de seguridad de la elección (por ejemplo, si el enlace de «Bajar el lector» lo lleva) para no ofrecer lo que la app va a rechazar?</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="ia-aviso">
+  <h3>11. El aviso antes de mandar el padrón</h3>
+  <p class="falta">Resuelve: <q>No external AI with your own token, in the scanner or the installer</q> (la parte del aviso de privacidad).</p>
+  <p class="resumen">Antes de que salga la primera página, una pantalla dice a quién va, qué trae y qué implica. Hay que marcar la casilla para seguir, y la salida fácil es «Mejor leerlo acá».</p>
+  <div class="maquetas">
+    <template data-maqueta="lector-aviso" data-marco="ventana" data-riel="lector" data-paso="1" data-titulo="El padrón va a salir de esta computadora" data-nota="Aparece cada vez, no solo la primera. Con una clave propia cambian dos frases: «Lo va a leer Mistral, con tu cuenta» y «Valen las condiciones de tu cuenta en Mistral».">
+      <p class="ojo">Paso 2 de 4</p>
+      <h1 class="t1" data-t="ai.warn.title">El padrón va a salir de esta computadora</h1>
+      <p class="bajada" data-t="ai.warn.text">Lo va a leer <span class="hueco">OVHcloud</span>, una empresa de Francia. Trae nombres y documentos de personas.</p>
+      <div class="cuerpo-v">
+        <ul class="tarjeta puntos">
+          <li data-t="ai.warn.pages">Se manda de a una página, solo para leerla.</li>
+          <li data-t="ai.warn.terms">No tenés un contrato con esa empresa: valen sus condiciones. Algunos servicios gratis aprenden de lo que reciben.</li>
+          <li data-t="ai.warn.mark">El archivo .padron va a decir que lo leyó una IA externa, y la app lo va a mostrar.</li>
+        </ul>
+        <label class="casilla"><input type="checkbox" checked><span data-t="ai.warn.accept">Entiendo que el padrón sale de esta computadora y que mi partido responde por eso.</span></label>
+        <span hidden data-t="ai.warn.text.key">Lo va a leer Mistral, con tu cuenta. Trae nombres y documentos de personas.</span>
+        <span hidden data-t="ai.warn.terms.key">Valen las condiciones de tu cuenta en Mistral. Fijate si tu plan usa lo que recibe para entrenar.</span>
+      </div>
+      <div class="pie-v"><button class="enlace" data-t="ai.warn.local">Mejor leerlo acá</button><button class="boton primario"><span data-t="ai.warn.send">Mandarlo y leerlo</span></button></div>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>Elegiste leer en internet y tocaste «Leerlo».</li>
+      <li>Lees a quién va y qué implica.</li>
+      <li>Marcás la casilla y tocás «Mandarlo y leerlo», o volvés con «Mejor leerlo acá».</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿El aviso sale cada vez, o una vez por computadora con un «no me lo muestres más»? Propongo cada vez: es un padrón distinto cada vez.</li>
+      <li>¿El botón va en rojo (como borrar) o en el color principal? Lo dejé en el principal porque no es irreversible para la app, aunque sí para el padrón.</li>
+    </ol></div>
+  </div>
+</section>
+
+<section class="propuesta" id="ia-nivel">
+  <h3>12. Lo que permite cada nivel de seguridad</h3>
+  <p class="falta">Resuelve: <q>Security profile values 'warn' and 'paid-only' do nothing; the only way to forbid external AI is the national profile</q>.</p>
+  <p class="resumen">Cada nivel dice en una línea qué hace con la IA externa, y la pantalla de subir el padrón lo cumple: con aviso, rechazando lo leído gratis o rechazando toda IA externa.</p>
+  <div class="caja">
+    <table>
+      <thead><tr><th>Nivel</th><th>Valor de hoy</th><th>Al subir un <code>.padron</code> leído con IA externa</th><th>Cómo se ve</th></tr></thead>
+      <tbody>
+        <tr><td>Facultad o centro de estudiantes</td><td><code>warn</code></td><td>Se carga, con un aviso de una línea que dice quién lo leyó.</td><td>Maqueta «Cargar con aviso».</td></tr>
+        <tr><td>Municipal o provincial</td><td><code>paid-only</code></td><td>Se carga si se leyó en la computadora o con <code>plan: "paid"</code>. Lo gratis, o sin <code>plan</code>, se rechaza.</td><td>Maqueta «Rechazado».</td></tr>
+        <tr><td>Nacional</td><td><code>forbidden</code></td><td>Solo se carga lo leído en la computadora.</td><td>Como hoy, con el texto nuevo de <code>roll.upload.aiForbidden</code>.</td></tr>
+      </tbody>
+    </table>
+    <h4 style="margin-top:14px">Lo que queda escrito en el <code>.padron</code></h4>
+    <p><code>external_ai</code> se queda como está, para que las versiones anteriores de la app lo sigan entendiendo (el manifiesto ya acepta campos de más). Se suman dos campos opcionales, en una versión menor del formato. Leído en la computadora: <code>external_ai: false</code> y nada más.</p>
+<pre>"extraction": {
+  "tool": "urna-padrones",
+  "external_ai": true,
+  "provider": "ovhcloud",
+  "plan": "free"
+}</pre>
+    <p>La app muestra <code>provider</code> en el resumen al subir el padrón. Lo gratis es <code>free</code>; con clave propia, el lector pregunta si el plan es pago (ver pregunta 2).</p>
+  </div>
+  <div class="maquetas" style="margin-top:24px">
+    <template data-maqueta="nivel-seguridad" data-marco="compu" data-titulo="Cada nivel dice qué hace con la IA externa" data-nota="Se suma una línea a cada opción, sin agregar otro control. Quien quiera otra combinación la ajusta en «Ver permisos», como lo demás.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <h1 class="t1">¿Qué tan delicada es tu elección?</h1>
+        <p class="bajada">Podés cambiarlo cuando quieras.</p>
+      </header>
+      <main class="cuerpo"><div class="opciones">
+        <button class="opcion"><span class="radio"></span><span><strong>Facultad o centro de estudiantes</strong><small>Lo básico, sin complicarle la vida a nadie.</small><small class="ia-linea" data-t="security.student.ai">IA externa para leer padrones: con un aviso.</small></span></button>
+        <button class="opcion elegida"><span class="radio"></span><span><strong>Municipal o provincial</strong><small>Más controles para los jefes.</small><small class="ia-linea" data-t="security.local.ai">IA externa: solo con un servicio pago.</small></span></button>
+        <button class="opcion"><span class="radio"></span><span><strong>Nacional</strong><small>Lo más estricto en todo.</small><small class="ia-linea" data-t="security.national.ai">IA externa: nunca.</small></span></button>
+      </div></main>
+      <footer class="pie"><button class="boton primario"><i data-ic="flecha"></i><span>Seguir</span></button></footer>
+    </template>
+    <template data-maqueta="nivel-aviso" data-marco="compu" data-titulo="Cargar con aviso (Facultad o centro de estudiantes)" data-nota="Un aviso suave, sin bloquear: dice quién lo leyó y que se puede cargar igual. El botón principal no cambia.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo">Padrón</p>
+        <h1 class="t1">Subí el padrón</h1>
+        <p class="bajada">Puede ser una planilla de Excel o CSV, o el archivo .padron.</p>
+      </header>
+      <main class="cuerpo">
+        <div class="tarjeta leido"><strong>3.120 personas</strong><span>14 filas quedan para que las mires.</span></div>
+        <div class="aviso-suave"><strong data-t="roll.upload.ai.warn.title">Lo leyó una IA externa: <span class="hueco">OVHcloud</span>, gratis.</strong><span data-t="roll.upload.ai.warn.text">Los nombres y documentos pasaron por esa empresa. Con el nivel Facultad o centro de estudiantes se puede cargar igual.</span></div>
+        <button class="enlace">Elegir otro</button>
+      </main>
+      <footer class="pie"><button class="boton primario"><i data-ic="tilde"></i><span>Cargarlo</span></button></footer>
+    </template>
+    <template data-maqueta="nivel-rechazo" data-marco="compu" data-titulo="Rechazado (Municipal o provincial, leído gratis)" data-nota="El aviso fuerte de siempre, y qué hacer en vez de eso. Con el nivel Nacional es igual, con el texto de roll.upload.aiForbidden.">
+      <header class="cabeza">
+        <button class="atras"><i data-ic="atras"></i><span>Volver</span></button>
+        <p class="ojo">Padrón</p>
+        <h1 class="t1">Subí el padrón</h1>
+        <p class="bajada">Puede ser una planilla de Excel o CSV, o el archivo .padron.</p>
+      </header>
+      <main class="cuerpo">
+        <p class="aviso-fuerte" data-t="roll.upload.ai.paidOnly">Este padrón lo leyó un servicio gratis en internet (<span class="hueco">OVHcloud</span>). Con el nivel Municipal o provincial solo se acepta si se leyó en tu computadora o con un servicio pago.</p>
+        <p class="aclara" data-t="roll.upload.ai.again">Volvé a leerlo con el lector de padrones, en tu computadora. Tarda más, pero el padrón no sale de ahí.</p>
+        <span hidden data-t="roll.upload.aiForbidden" data-antes="Este padrón se armó con una IA externa, y el nivel de seguridad de esta elección no lo permite.">Este padrón lo leyó una IA externa. Con el nivel Nacional solo se aceptan padrones leídos en tu computadora.</span>
+      </main>
+      <footer class="pie"><button class="boton primario"><span>Elegir otro</span></button></footer>
+    </template>
+  </div>
+  <div class="detalles">
+    <div><h4>Cómo se usa</h4><ol>
+      <li>Quien administra elige el nivel, como hoy, y ve qué hace cada uno con la IA externa.</li>
+      <li>Al subir un <code>.padron</code>, la app lee <code>external_ai</code>, <code>provider</code> y <code>plan</code>.</li>
+      <li>Según el nivel, lo carga, lo carga con aviso o lo rechaza diciendo qué hacer.</li>
+      <li>En el registro queda que se cargó un padrón leído con IA externa, y con cuál.</li>
+    </ol></div>
+    <div><h4>Textos nuevos o que cambian</h4><table class="textos"><thead><tr><th>Clave</th><th>Castellano</th><th>English</th></tr></thead><tbody></tbody></table></div>
+    <div><h4>Preguntas para vos</h4><ol>
+      <li>¿«Pago» alcanza para Municipal? Un plan pago no garantiza que no se guarden los datos; otra regla posible es «solo con tu propia clave».</li>
+      <li>¿Quién dice que el plan es pago? El lector no lo puede comprobar: o se lo pregunta a la persona, o se decide por servicio.</li>
+      <li>¿Querés que la IA externa se pueda prohibir aparte, sin subir a Nacional? Hoy sería en «Ver permisos».</li>
+    </ol></div>
+  </div>
+</section>
+</section>
+</div>
+
+<script>
+// Draws each mockup twice, in Aula light and dark, and fills the text tables from what the mockups say.
+(() => {
+  const IC = {
+    flecha: '<path d="M5 12h13M12 6l6 6-6 6"/>',
+    tilde: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+    atras: '<path d="M19 12H6M12 6l-6 6 6 6"/>',
+    lupa: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/>',
+    mas: '<path d="M12 5v14M5 12h14"/>',
+    descargar: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+    copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/>',
+    refrescar: '<path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/>',
+    llave: '<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l3 3M14 9l2 2"/>',
+    compu: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/>',
+    persona: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/>',
+    nube: '<path d="M7 18a4.5 4.5 0 01-.5-9A6 6 0 0118 8.5a4.5 4.5 0 01-.5 9.5z"/>',
+  };
+  const svg = (n) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
+  const LOGO = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg>';
+  const RIELES = {
+    instalador: [['Dónde va a vivir', 'Tu servidor'], ['Cómo leer los padrones', 'Con qué se leen'], ['Cómo se ve', 'Su apariencia'], ['Instalar', 'Lo hacemos solos']],
+    lector: [['Elegir el padrón', 'El PDF escaneado'], ['Leerlo', 'Acá o en internet'], ['Revisar', 'Lo que no quedó claro'], ['Guardar', 'El archivo para la app']],
+  };
+  const riel = (tipo, paso) => `<aside class="riel"><div class="marca-app">${LOGO}<span>Urna Abierta</span></div><ol class="plan">${RIELES[tipo].map(([texto, cuando], i) => {
+    const estado = i < paso ? 'hecho' : i === paso ? 'ahora' : '';
+    return `<li class="estacion ${estado}"><span class="punto">${estado === 'hecho' ? svg('tilde') : ''}</span><div><strong>${texto}</strong><span class="cuando">${estado === 'ahora' ? 'Estás acá' : estado === 'hecho' ? 'Hecho' : cuando}</span></div></li>`;
+  }).join('')}</ol></aside>`;
+
+  function marco(t, modo) {
+    const html = t.innerHTML.replace(/<i data-ic="(\w+)"><\/i>/g, (_, n) => svg(n));
+    const id = `${t.dataset.maqueta}-${modo}`;
+    const clase = `aula-${modo}`;
+    if (t.dataset.marco === 'compu') return `<div class="marco-compu" data-shot="${id}"><div class="barra-compu"><i></i><i></i><i></i><span>urna.agrupacion-ejemplo.ar</span></div><div class="pantalla ${clase}"><div class="pantalla-in">${html}</div></div></div>`;
+    if (t.dataset.marco === 'ventana') return `<div class="marco-ventana" data-shot="${id}"><div class="ventana ${clase}">${riel(t.dataset.riel, Number(t.dataset.paso))}<section class="ventana-derecha">${html}</section></div></div>`;
+    return `<div class="marco-archivo ${clase}" data-shot="${id}"><div class="barra-archivo">${t.dataset.archivo}</div>${html}</div>`;
+  }
+
+  const EN = {
+    'audit.text': 'Who saw or changed what. Nobody can delete or change it.',
+    'audit.filter.who': 'Who', 'audit.filter.who.all': 'The whole team', 'audit.filter.what': 'What', 'audit.filter.what.all': 'Saw or changed something',
+    'audit.filter.person': 'About whom: surname or document', 'audit.day': 'Today, Tuesday 6 April',
+    'audit.detail.corrected': 'Aguirre, Paula · Table 12. The name said “Aguire, Paula”.',
+    'action.semaphore.searched': 'Looked at the traffic light', 'audit.detail.people': '12 people from Table 12', 'audit.detail.seeWho': 'See who',
+    'audit.detail.person': 'Benítez, Tomás · Table 12', 'audit.detail.table': 'Table 12 · Escuela Normal 1 · 350 people',
+    'action.audit.viewed': 'Opened the log', 'audit.download': 'Download what is shown',
+    'audit.person.eyebrow': 'Log · Requests from people', 'audit.person.text': 'Everything seen or changed in their data, in Centro de estudiantes.',
+    'audit.person.seen': 'times someone saw their data', 'audit.person.changed': 'changes to their data', 'audit.today': 'Today 9:10',
+    'audit.person.searched': 'Looked up their data in Requests from people', 'audit.person.corrected': 'Corrected their name',
+    'audit.person.semaphoreSeen': 'Looked at their traffic light mark', 'audit.person.withOthers': 'Along with 11 other people from Table 12',
+    'audit.person.noted': 'Gave them a traffic light mark', 'audit.person.downloaded': 'Downloaded the roll of their table',
+    'audit.person.download': 'Download this list for their request',
+    'purge.eyebrow': 'New election', 'purge.title': 'How long do we keep the names?',
+    'purge.text': 'After the election, names, documents and traffic light marks are deleted. Only the totals stay.',
+    'purge.week': 'One week after', 'purge.week.text': 'Enough to check the count.', 'purge.month': 'One month after',
+    'purge.recommended': 'Recommended for your security level.', 'purge.months3': 'Three months after', 'purge.months3.text': 'In case there is a long dispute.',
+    'purge.other': 'Another date', 'purge.result': 'They are deleted on Saturday 8 May. We remind you a week before.',
+    'election.st.close.help': 'Delete the data before Saturday 8 May: 12 days left. Your party decided it. Only the totals stay.',
+    'election.st.close.when': 'Delete before 8 May', 'purge.change': 'Change the deadline',
+    'purge.reminder': '5 days left to delete the data of Centro de estudiantes. Your party chose to do it before Saturday 8 May.',
+    'purge.reminder.open': 'See the election', 'elections.purgeBy': 'Deleted on 8 May',
+    'purge.overdue': 'The deadline your party set to delete the data of Centro de estudiantes has passed. Delete them today.',
+    'persons.consent.given': 'Gave their consent', 'persons.consent.detail': 'On 2 March 2027, in writing, at the membership desk',
+    'persons.consent.revoke': 'Withdrew their consent', 'persons.consent.clear': 'Entered by mistake',
+    'persons.audit': 'See who saw or changed their data', 'persons.correct.open': 'Correct their data',
+    'persons.consent.revoked': 'Withdrew it on 26 April 2027, by email to the group',
+    'persons.consent.clearConfirm': 'Delete this consent? Use it only if it was entered by mistake. The log keeps that you deleted it.',
+    'persons.revoke.title': 'Did they withdraw their consent?', 'persons.revoke.text': 'We note when and how they asked. Their traffic light mark is deleted now.',
+    'persons.revoke.date': 'When did they ask?', 'persons.revoke.means': 'How did they ask?',
+    'persons.revoke.keeps': 'The log keeps that they gave it and withdrew it, with both dates. If they give it again, it is noted again.',
+    'persons.revoke.save': 'Note that they withdrew it',
+    'setup.responsibility.read': 'Read the full text', 'legal.eyebrow': 'Legal information', 'legal.title': 'Who answers for the data',
+    'legal.draft': 'This is a draft: a lawyer still has to review it. It is not legal advice.',
+    'legal.responsible.title': 'Your party is responsible',
+    'legal.responsible.text': 'The party that installs the app answers for its database and for complying with the law. It decides what is loaded, who sees it, where the server is and when it is deleted.',
+    'legal.project.title': 'The project does not touch your data', 'legal.project.text': 'It has no central server and receives nothing from this app. It cannot see your server or your rolls.',
+    'legal.law.title': 'What the law asks', 'legal.law.sensitive': 'Political opinions are sensitive data (Law 25,326, art. 2).',
+    'legal.law.rights': 'Each person can see, correct and delete their data (arts. 14 to 16).',
+    'legal.law.abroad': 'Free servers are usually outside the country, and that has limits (art. 12).',
+    'legal.more': 'The full text, with the licence, follows below.', 'legal.ok': 'Got it',
+    'slow.title': 'Your server is not answering yet',
+    'slow.text': 'We created it and it started, but its address has not answered for 20 minutes. It is almost always the certificate, which sometimes takes longer.',
+    'slow.status': 'https://203.0.113.24 · Last tried at 15:42', 'slow.what': 'What you can do',
+    'slow.what.text': 'Wait a few minutes and try again. If nothing changes, check that ports 80 and 443 are open in your cloud.',
+    'slow.key': 'Your recovery key already exists. Save it now, in case you close this window.',
+    'done.saveFile': 'Save the access file', 'slow.log': 'See what happened', 'slow.retry': 'Check again',
+    'done.setupLink': 'Link to create your account (works only once)', 'done.copyKey': 'Copy the key',
+    'done.responsibility': 'When you create your account, you will accept that your party answers for the data it loads.',
+    'done.responsibility.read': 'Read the full text',
+    'done.local.text': 'It can only be seen from this computer. This mode makes no backups, so there is no key to save.',
+    'ssh.port': 'Port', 'ssh.passphrase': 'Key passphrase, if it has one', 'ssh.passphrase.note': 'It is used only to log in now. It is not stored.',
+    'ssh.howKey': 'No key? How to make one', 'ssh.encrypted': 'This key has a passphrase. Type it in the field below.',
+    'ssh.bad_passphrase': 'That passphrase does not open the key.',
+    'ssh.host.title': 'Is this your server?',
+    'ssh.host.text': 'Before we send it anything, check that this fingerprint matches the one your provider shows. That way you know nobody is in the middle.',
+    'ssh.host.fingerprint': 'Server fingerprint (ED25519)', 'ssh.host.where': 'Where to see it',
+    'ssh.host.where.text': 'In your provider’s panel, in the server console, or with “ssh-keyscan” from another computer.',
+    'ssh.host.saved': 'It goes into the access file, so you can check it when you log in again.',
+    'ssh.host.no': 'It does not match: stop', 'ssh.host.yes': 'Yes, it is my server',
+    'done.cloud.text': 'One more thing: save the access file. Without it, the server cannot be updated and a backup cannot be restored.',
+    'access.recovery.text': 'Opens your backups.', 'access.ssh': 'Key to log in to the server', 'access.ssh.text': 'To update it, check on it or restore a backup.',
+    'access.setup': 'Link to create your account', 'access.setup.text': 'Works only once.',
+    'access.where': 'Keep it on a USB stick or in a password manager. Do not send it over chat: it lets anyone into your server.',
+    'access.saved': 'You saved it in Downloads.',
+    'vision.text': 'This is what the roll reader will use first. You can change it each time you read one.',
+    'vision.free': 'With a free online service', 'vision.free.text': 'Reads hard handwriting better. The roll goes through OVHcloud, with no account or key.',
+    'vision.ai': 'With my own key', 'vision.ai.text': 'Mistral or another service. You paste your key, and your account pays.',
+    'vision.key.title': 'Which service?', 'vision.key.text': 'Your key stays only on this computer. It does not go to your server or anyone else.',
+    'vision.key.mistral.text': 'Based in France. You get the key on its site.', 'vision.key.other': 'Another OpenAI-compatible service',
+    'vision.key.other.text': 'You paste the service address and your key.', 'vision.key.field': 'Your Mistral key',
+    'vision.key.ok': 'We tried the key and it works.', 'vision.key.guide': 'How to get a Mistral key',
+    'read.how.title': 'How should we read this roll?', 'read.how.local': 'On this computer', 'read.how.local.text': 'Private: it never leaves here. It is the slowest.',
+    'read.how.default': 'You chose this when installing', 'read.how.free': 'With a free online service', 'read.how.free.text': 'Faster. The roll goes through OVHcloud.',
+    'read.how.key': 'With your Mistral key', 'read.how.key.text': 'Faster. It goes through Mistral, and your account pays.',
+    'read.how.note': 'Depending on your election’s security level, the app may refuse a roll read online.',
+    'rail.read.when': 'Here or online', 'read.how.key.none': 'With my own key', 'read.how.start': 'Read it',
+    'ai.warn.title': 'The roll is going to leave this computer', 'ai.warn.text': 'OVHcloud, a company in France, will read it. It has people’s names and documents.',
+    'ai.warn.pages': 'It is sent one page at a time, only to read it.',
+    'ai.warn.terms': 'You have no contract with that company: its terms apply. Some free services learn from what they receive.',
+    'ai.warn.mark': 'The .padron file will say an external AI read it, and the app will show that.',
+    'ai.warn.accept': 'I understand the roll leaves this computer and that my party answers for it.',
+    'ai.warn.text.key': 'Mistral will read it, with your account. It has people’s names and documents.',
+    'ai.warn.terms.key': 'The terms of your Mistral account apply. Check whether your plan trains on what it receives.',
+    'ai.warn.local': 'Read it here instead', 'ai.warn.send': 'Send it and read it',
+    'security.student.ai': 'External AI to read rolls: with a warning.', 'security.local.ai': 'External AI: only with a paid service.', 'security.national.ai': 'External AI: never.',
+    'roll.upload.ai.warn.title': 'An external AI read it: OVHcloud, free.',
+    'roll.upload.ai.warn.text': 'The names and documents went through that company. With the University or student union level it can still be loaded.',
+    'roll.upload.ai.paidOnly': 'A free online service read this roll (OVHcloud). With the Municipal or provincial level it is accepted only if it was read on your computer or with a paid service.',
+    'roll.upload.ai.again': 'Read it again with the roll reader, on your computer. It takes longer, but the roll never leaves it.',
+    'roll.upload.aiForbidden': 'An external AI read this roll. With the National level, only rolls read on your computer are accepted.',
+  };
+
+  const limpio = (texto) => texto.replace(/\s+/g, ' ').trim();
+  for (const propuesta of document.querySelectorAll('.propuesta')) {
+    const filas = new Map();
+    for (const t of propuesta.querySelectorAll('template[data-maqueta]')) {
+      const figura = document.createElement('figure');
+      figura.className = 'maqueta';
+      figura.innerHTML = `<figcaption>${t.dataset.titulo}</figcaption><div class="par">${['claro', 'oscuro'].map((modo) => `<div class="lado"><span>${modo === 'claro' ? 'Claro' : 'Oscuro'}</span>${marco(t, modo)}</div>`).join('')}</div>${t.dataset.nota ? `<p class="nota">${t.dataset.nota}</p>` : ''}`;
+      t.before(figura);
+      for (const el of t.content.querySelectorAll('[data-t]')) {
+        const es = limpio(el.getAttribute('placeholder') ?? el.textContent);
+        if (!filas.has(el.dataset.t)) filas.set(el.dataset.t, { es, antes: el.dataset.antes });
+      }
+    }
+    const cuerpo = propuesta.querySelector('.textos tbody');
+    if (!cuerpo) continue;
+    cuerpo.innerHTML = [...filas].map(([clave, { es, antes }]) => `<tr><td>${clave.replaceAll('.', '.<wbr>')}</td><td>${es}${antes ? `<span class="antes">${antes}</span>` : ''}</td><td>${EN[clave] ?? '<em>falta</em>'}</td></tr>`).join('');
+  }
+})();
+</script>
+</body>
+</html>
