@@ -96,6 +96,24 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await setup({ code: 'codigo', name: 'Eva', accepted: true })).statusCode).toBe(409);
     });
 
+    it('the server may keep only a hash of the setup code, as the installer leaves it', async () => {
+      await pool.query('TRUNCATE users, role_assignments, devices CASCADE');
+      const { URNA_SETUP_CODE: before } = process.env;
+      delete process.env.URNA_SETUP_CODE;
+      process.env.URNA_SETUP_CODE_HASH = createHash('sha256').update('CODIGO123456').digest('hex');
+      try {
+        const setup = (code: string) => app.inject({ method: 'POST', url: '/api/setup', payload: { code, name: 'Ana', accepted: true } });
+        const theme = (code: string) => app.inject({ method: 'PUT', url: '/api/setup/theme', payload: { code, theme: {} } });
+        expect((await setup(process.env.URNA_SETUP_CODE_HASH)).statusCode).toBe(403);
+        expect((await theme('OTRO')).statusCode).toBe(403);
+        expect((await theme('CODIGO123456')).statusCode).toBe(422);
+        expect((await setup('CODIGO123456')).statusCode).toBe(200);
+      } finally {
+        delete process.env.URNA_SETUP_CODE_HASH;
+        if (before !== undefined) process.env.URNA_SETUP_CODE = before;
+      }
+    });
+
     it('a code brings a session to an installed app, once, and guessing gets blocked', async () => {
       const { code } = (await call('fiscal', 'POST', '/api/auth/handoff')).json();
       expect(code).toMatch(/^\d{8}$/);

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -23,14 +24,17 @@ export async function findEngine(): Promise<string | null> {
   return null;
 }
 
+/** Here the containers start from this computer, so it makes the keys a server would make for itself. */
+type LocalSecrets = Secrets & { postgresPassword: string; fieldKey: string };
+
 /** Trying it again keeps the same data and the same keys. */
-function savedSecrets(): Secrets {
+function savedSecrets(): LocalSecrets {
   const folder = process.env.URNA_CONFIG_DIR ?? join(homedir(), '.urna-abierta');
   const file = join(folder, 'prueba-local.json');
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
   } catch {
-    const secrets = newSecrets();
+    const secrets = { ...newSecrets(), postgresPassword: randomBytes(24).toString('hex'), fieldKey: randomBytes(32).toString('hex') };
     mkdirSync(folder, { recursive: true, mode: 0o700 });
     writeFileSync(file, JSON.stringify(secrets), { mode: 0o600 });
     return secrets;

@@ -43,6 +43,12 @@ Estos planes cambian seguido. Cada guía lleva la fecha en que se verificó y en
 - **Datos y ley:** los servidores gratuitos suelen estar fuera de Argentina. La guía avisa, y decidir corre por cuenta del
   partido.
 
+**Pendiente: copias con clave pública.** Hoy el servidor cifra cada copia con la llave de recuperación, así que la tiene en su `.env`
+y en el *user data* de la nube, que puede leer quien tenga acceso a esa cuenta; la guía de servidores dice cómo borrarlo o cambiar la
+llave. La alternativa es cifrar las copias con una clave pública, por ejemplo con `age` o GPG, cuya mitad privada sea la llave que se
+le muestra al partido: el servidor y la nube guardarían solo la mitad pública, que no abre nada, y restaurar pediría la privada. Cambia
+el formato de las copias, cómo se restauran las de antes y qué hace el instalador, así que queda para decidir.
+
 ## Instalación y landing
 
 La landing es una página estática que presenta la app y enlaza a un release de GitHub, con un instalador de escritorio para

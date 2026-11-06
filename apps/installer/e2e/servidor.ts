@@ -185,6 +185,8 @@ const first = await machine(`${name}-1`, port, port + 2);
 const secrets = newSecrets();
 const said = await installOn(first, secrets, { variables: s3Settings });
 record('instala por SSH en un Ubuntu', said.at(-1)?.startsWith('ready ') === true, said);
+const madeThere = podman('exec', first.name, 'cat', '/opt/urna-abierta/.env');
+record('la clave de la base y la de los campos se hacen en el servidor, y el código de instalación queda solo como resumen', /^POSTGRES_PASSWORD=[0-9a-f]{48}$/m.test(madeThere) && /^URNA_FIELD_KEY=[0-9a-f]{64}$/m.test(madeThere) && /^URNA_SETUP_CODE_HASH=[0-9a-f]{64}$/m.test(madeThere) && !madeThere.includes(secrets.setupCode));
 
 const pub = api(first, 'GET', '/public');
 record('la app responde, pide el primer administrador y usa el tema elegido', pub.setupNeeded === true && pub.party.theme === 'mate', pub);

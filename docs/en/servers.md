@@ -67,7 +67,27 @@ Choose **I prefer to paste a text**. At the end, the installer gives you a block
 
 The server installs itself in a few minutes, and asks a public service what its address is. Go back to the installer and type it.
 
-The block holds the keys of your installation. It stays stored in that cloud account: do not share it.
+The block holds the recovery key of your installation. It stays stored in that cloud account: do not share it, and read what
+follows.
+
+## What stays stored in the cloud
+
+When the installer creates the server, or when you paste the block, the cloud keeps that block as the machine's *user data*, and
+never deletes it. The **recovery key** goes there, because the server encrypts each backup with it, and so does the setup code, but
+only as a hash it cannot be read back from. The database password and the key of the sealed fields do not go there: the server makes
+them.
+
+Anyone with access to that cloud account, even read-only, can read the *user data*, and with the recovery key open every backup: those
+on the server and those in the bucket. So can any program running on the server, which asks the cloud for it. That is why, after the
+first boot, one of these two is advised:
+
+- **Delete the *user data*, where the cloud allows it.** On Google Cloud, by removing the `user-data` key from the VM's metadata. On
+  AWS, with the machine stopped, under **Actions**, **Instance settings**, **Edit user data**. Oracle Cloud does not allow changing it
+  once the machine exists.
+- **Change the key**, if it cannot be deleted or someone else may have seen it. Put a new one in the `URNA_BACKUP_KEY=` line of
+  `/opt/urna-abierta/.env` (the one `openssl rand -hex 16` gives will do), keep it next to the old one and run `sudo urna copia`.
+  Backups made from then on open with the new one; earlier ones, which stay on the server and in the bucket until they are deleted
+  on their own, with the old one.
 
 ## Maintaining it
 

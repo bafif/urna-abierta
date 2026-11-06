@@ -28,10 +28,16 @@ async function newDevice(pool: pg.Pool, userId: string, mayEnroll: boolean): Pro
   return token;
 }
 
-const sameText = (a: string, b: string) => {
-  const [x, y] = [Buffer.from(hashToken(a)), Buffer.from(hashToken(b))];
-  return timingSafeEqual(x, y);
-};
+/**
+ * The installer leaves on the server only the hash of the setup code, in URNA_SETUP_CODE_HASH: the cloud keeps what
+ * installs a server where its console shows it. A server started by hand may have the code itself, in URNA_SETUP_CODE.
+ */
+function isSetupCode(code: unknown): boolean {
+  const { URNA_SETUP_CODE: plain, URNA_SETUP_CODE_HASH: hashed } = process.env;
+  const expected = hashed ? hashed.toLowerCase() : plain ? hashToken(plain) : '';
+  if (typeof code !== 'string' || !/^[0-9a-f]{64}$/.test(expected)) return false;
+  return timingSafeEqual(Buffer.from(hashToken(code)), Buffer.from(expected));
+}
 
 interface StoredTheme {
   id: string;
@@ -78,10 +84,9 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** The first administrator: only with the code the installer showed. */
   app.post<{ Body: { code?: unknown; name?: unknown; phone?: unknown; accepted?: unknown } }>('/api/setup', async (request, reply) => {
     const { code, name, phone, accepted } = request.body ?? {};
-    const expected = process.env.URNA_SETUP_CODE;
     const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
     if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
-    if (!expected || typeof code !== 'string' || !sameText(code, expected)) return reply.code(403).send({ error: 'wrong_code' });
+    if (!isSetupCode(code)) return reply.code(403).send({ error: 'wrong_code' });
     if (typeof name !== 'string' || !name.trim() || name.length > 120) return reply.code(400).send({ error: 'invalid_name' });
     if (accepted !== true) return reply.code(400).send({ error: 'must_accept_responsibility' });
     const userId = randomUUID();
@@ -97,10 +102,9 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** The theme chosen in the installer, which arrives right after the server starts and before anyone gets in. */
   app.put<{ Body: { code?: unknown; theme?: unknown } }>('/api/setup/theme', { bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
     const { code, theme } = request.body ?? {};
-    const expected = process.env.URNA_SETUP_CODE;
     const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
     if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
-    if (!expected || typeof code !== 'string' || !sameText(code, expected)) return reply.code(403).send({ error: 'wrong_code' });
+    if (!isSetupCode(code)) return reply.code(403).send({ error: 'wrong_code' });
     const problems = themeProblems(theme);
     if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
     await addTheme(pool, theme as StoredTheme);

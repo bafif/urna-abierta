@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { assetText } from './assets.ts';
 
 export const VERSION = process.env.URNA_VERSION ?? 'latest';
@@ -15,12 +15,15 @@ export const images = (): Images => ({
   web: process.env.URNA_IMAGE_WEB ?? `ghcr.io/bafif/urna-abierta-web:${VERSION}`,
 });
 
+/**
+ * What the installer shows. The database password and the field key are not here: the server makes them, so that they
+ * never travel in the block that installs, which a cloud keeps where its console shows it.
+ */
 export interface Secrets {
+  /** Shown once, to create the first administrator. The server keeps only its hash. */
   setupCode: string;
   /** Opens the backups. It is shown once, and the party keeps it. */
   recoveryKey: string;
-  postgresPassword: string;
-  fieldKey: string;
 }
 
 /** Without letters that get mixed up when someone copies it by hand. */
@@ -41,8 +44,6 @@ export function newSecrets(): Secrets {
   return {
     setupCode: readable(12),
     recoveryKey: [group(), group(), group(), group(), group()].join('-'),
-    postgresPassword: randomBytes(24).toString('hex'),
-    fieldKey: randomBytes(32).toString('hex'),
   };
 }
 
@@ -107,11 +108,10 @@ export function withoutComments(script: string): string {
 /** One block that does the whole installation: what runs over SSH, and what gets pasted when creating a server. */
 export function renderScript({ secrets, site, cert, theme, images: chosen = images(), imagesTar, extraEnv = [] }: ScriptSettings): string {
   if (extraEnv.some((line) => !/^[A-Z_]+=/.test(line) || !SAFE_VALUE.test(line.slice(line.indexOf('=') + 1)))) throw new Error('unsafe extra setting');
+  // The recovery key goes as it is: the server encrypts each backup with it. The servers' guide says what that means.
   const settings = [
-    assign('POSTGRES_PASSWORD', secrets.postgresPassword),
-    assign('URNA_FIELD_KEY', secrets.fieldKey),
     assign('URNA_BACKUP_KEY', secrets.recoveryKey),
-    assign('URNA_SETUP_CODE', secrets.setupCode),
+    assign('URNA_SETUP_CODE_HASH', createHash('sha256').update(secrets.setupCode).digest('hex')),
     assign('URNA_TEMA', theme),
     assign('URNA_SITE', site),
     assign('URNA_CERT', cert),
