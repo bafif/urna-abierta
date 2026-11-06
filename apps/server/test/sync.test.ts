@@ -267,6 +267,29 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(stored.rows).toEqual([{ type: 'incident.reported', quarantined: true }]);
     });
 
+    it('the purge counts at once, also when phones were already sending after the close', async () => {
+      for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
+      // This one makes the server remember the election as closed.
+      const alert = { ...operation(table, 1), type: 'incident.reported', payload: { kind: 'urgent' } };
+      expect((await push('fiscal', table, [alert])).json().acked).toEqual([alert.id]);
+      expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(200);
+      const mark = operation(table, 2);
+      expect((await push('fiscal', table, [mark])).json().acked).toEqual([mark.id]);
+      const stored = await pool.query('SELECT type FROM operations WHERE table_id = $1', [table]);
+      expect(stored.rows).toEqual([{ type: 'incident.reported' }]);
+    });
+
+    it('naming someone of another table by the id of the roll says nothing about whether they are on it', async () => {
+      const other = demo.tables[1]!.table;
+      const theirs = (await pool.query('SELECT id, public_id FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 1', [other])).rows[0];
+      const real = operation(table, 1, theirs.id);
+      const invented = operation(table, 2, `${other}-nadie`);
+      expect((await push('fiscal', table, [real, invented])).json().acked).toHaveLength(2);
+      // Both come back as they were sent: a real person and an invented one look the same.
+      expect((await pullAll('fiscal', table)).map((item) => (item.payload as { elector: string }).elector)).toEqual([theirs.id, `${other}-nadie`]);
+      expect((await pool.query(`SELECT 1 FROM operations WHERE payload->>'elector' = $1`, [theirs.public_id])).rowCount).toBe(0);
+    });
+
     it('what arrives after the close is kept apart, not counted and not lost', async () => {
       await push('fiscal', table, [operation(table, 1)]);
       for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
