@@ -22,9 +22,17 @@ Para ver la propuesta de diseño alcanza con abrir `design/index.html` en el nav
 
 ## El instalador
 
-Se baja de la página de releases de GitHub, para Windows, macOS o Linux. Se abre en tu navegador y solo se ve desde tu computadora. Mientras
-no haya una versión publicada, se corre desde el código con `node apps/installer/src/main.ts`, y hay que tener las imágenes de los
-contenedores armadas.
+Se baja de la página de releases de GitHub, para Windows, macOS o Linux: [Bajarlo y abrirlo](#bajarlo-y-abrirlo) dice cuál. Se abre en tu
+navegador y solo se ve desde tu computadora.
+
+Mientras no haya una versión publicada, se corre desde el código, en la carpeta del repo, con Node 24 y Podman:
+
+```sh
+deploy/instalador.sh
+```
+
+Arma las imágenes del servidor y de la app con ese mismo código, y abre el instalador. Con esas imágenes anda la opción de probar en
+esta computadora; para instalar en un servidor hacen falta imágenes publicadas.
 
 Te hace tres preguntas y hace el resto.
 
