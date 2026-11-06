@@ -40,7 +40,7 @@
   </Pantalla>
 {:else if enrolment}
   <Pantalla accion="seguridad" titulo={t('second.title')} bajada={t('second.text')}>
-    <Keypad bind:value={code} />
+    <Keypad bind:value={code} code={true} />
     {#if problem}<p class="problema" role="alert">{problem}</p>{/if}
     {#snippet pie()}
       <button class="boton primario" disabled={code.length !== 6} onclick={verify}><Ic name="tilde" /><span>{t('second.confirm')}</span></button>
