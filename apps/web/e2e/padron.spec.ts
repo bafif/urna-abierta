@@ -1,38 +1,41 @@
 import { readFileSync } from 'node:fs';
-import { crc32 } from 'node:zlib';
+import { crc32, deflateRawSync } from 'node:zlib';
 import { expect, test, type Page } from '@playwright/test';
 import { seed } from './helpers.ts';
 
 const READER = 'https://github.com/bafif/urna-abierta-padrones#descargar';
 const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
 
-/** A ZIP without compression: enough for a .padron written by hand, broken on purpose. */
-function zip(files: Record<string, string>): Buffer {
+/** A ZIP written by hand: without compression, enough for a .padron broken on purpose; or compressed, as a spreadsheet program does. */
+function zip(files: Record<string, string>, { deflate = false } = {}): Buffer {
   const parts: Buffer[] = [];
   const directory: Buffer[] = [];
   let offset = 0;
   for (const [name, text] of Object.entries(files)) {
     const data = Buffer.from(text);
+    const packed = deflate ? deflateRawSync(data) : data;
     const fileName = Buffer.from(name);
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(deflate ? 8 : 0, 8);
     local.writeUInt32LE(crc32(data), 14);
-    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(packed.length, 18);
     local.writeUInt32LE(data.length, 22);
     local.writeUInt16LE(fileName.length, 26);
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4);
     central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(deflate ? 8 : 0, 10);
     central.writeUInt32LE(crc32(data), 16);
-    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(packed.length, 20);
     central.writeUInt32LE(data.length, 24);
     central.writeUInt16LE(fileName.length, 28);
     central.writeUInt32LE(offset, 42);
-    parts.push(local, fileName, data);
+    parts.push(local, fileName, packed);
     directory.push(central, fileName);
-    offset += 30 + fileName.length + data.length;
+    offset += 30 + fileName.length + packed.length;
   }
   const listing = Buffer.concat(directory);
   const end = Buffer.alloc(22);
@@ -56,6 +59,21 @@ function brokenPadron(): Buffer {
   ];
   const manifest = { format: 'padron-abierto', format_version: '0.1.0', files: { units: { path: 'units.jsonl', count: units.length }, electors: { path: 'electors.jsonl', count: electors.length + 1 } } };
   return zip({ 'manifest.json': JSON.stringify(manifest), 'units.jsonl': lines(units), 'electors.jsonl': lines(electors) });
+}
+
+/** An Excel file with `count` invented people, their documents starting with 99: as big as the roll of a whole university. */
+function bigSheet(count: number): Buffer {
+  const rel = (id: string, type: string, target: string) => `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`;
+  const rels = (content: string) => `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${content}</Relationships>`;
+  const text = (ref: string, value: string) => `<c r="${ref}" t="inlineStr"><is><t>${value}</t></is></c>`;
+  const rows = [`<row r="1">${text('A1', 'Apellido y nombre')}${text('B1', 'DNI')}</row>`];
+  for (let i = 1; i <= count; i += 1) rows.push(`<row r="${i + 1}">${text(`A${i + 1}`, `Prueba, Persona ${i}`)}<c r="B${i + 1}"><v>${99000000 + i}</v></c></row>`);
+  return zip({
+    '_rels/.rels': rels(rel('rId1', 'officeDocument', 'xl/workbook.xml')),
+    'xl/workbook.xml': '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Hoja1" sheetId="1" r:id="rIdS"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels': rels(rel('rIdS', 'worksheet', 'worksheets/sheet1.xml')),
+    'xl/worksheets/sheet1.xml': `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows.join('')}</sheetData></worksheet>`,
+  }, { deflate: true });
 }
 
 /** An administrator with a new election, on the screen to upload its roll. */
@@ -96,6 +114,31 @@ test('an Excel spreadsheet goes in as it is, header below a title and all', asyn
   await expect(page.locator('.estacion.ahora')).toContainText('Fiscales');
   // The server got a .padron built in the browser, never the spreadsheet.
   expect(sent).toEqual(['application/zip', 'application/zip']);
+});
+
+test('a big spreadsheet is read without freezing the page, which says it is reading meanwhile', async ({ page, request }) => {
+  await toUpload(page, request);
+  const sent: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().includes('/roll')) sent.push(r.headers()['content-type'] ?? '');
+  });
+  // A beat every 10 ms: the longest wait between two is how long the page stopped answering.
+  await page.evaluate(() => {
+    const beats = window as unknown as { longest: number };
+    beats.longest = 0;
+    let last = performance.now();
+    window.setInterval(() => {
+      const now = performance.now();
+      beats.longest = Math.max(beats.longest, now - last);
+      last = now;
+    }, 10);
+  });
+  await page.getByTestId('roll-file').setInputFiles({ name: 'grande.xlsx', mimeType: 'application/octet-stream', buffer: bigSheet(100_000) });
+  await expect(page.getByText('Leyendo…')).toBeVisible();
+  await expect(page.getByTestId('roll-summary')).toContainText(/100\.?000 personas/);
+  // Reading it on the page took seconds; in a worker the page never waits for it.
+  expect(await page.evaluate(() => (window as unknown as { longest: number }).longest)).toBeLessThan(1000);
+  expect(sent).toEqual(['application/zip']);
 });
 
 test('a scanned PDF is not uploaded: it says how to read it, with the reader a tap away', async ({ page, request }) => {
