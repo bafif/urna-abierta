@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { migrate } from '../src/app.ts';
+import { DATABASE_HOOK_TIMEOUT, ownDatabases } from './databases.ts';
 
 const url = process.env.TEST_DATABASE_URL;
 const first = new URL('../src/migrations/0001-inicial.sql', import.meta.url);
@@ -20,21 +21,15 @@ async function shape(pool: pg.Pool) {
   return { columns: columns.rows, constraints: constraints.rows, indexes: indexes.rows };
 }
 
-describe.skipIf(!url)('migrations, against a real Postgres', () => {
+describe.skipIf(!url)('migrations, against a real Postgres', { timeout: 60_000 }, () => {
   // Databases of their own, made and dropped here, so that this runs next to the other server tests.
-  const made: { name: string; pool: pg.Pool }[] = [];
-  let admin: pg.Pool;
+  let databases: ReturnType<typeof ownDatabases>;
   let folder: string;
+  let fresh: ReturnType<typeof shape> | undefined;
 
-  async function database(): Promise<pg.Pool> {
-    const name = `urna_migra_${process.pid}_${made.length}_${Date.now()}`;
-    await admin.query(`CREATE DATABASE ${name}`);
-    const own = new URL(url!);
-    own.pathname = `/${name}`;
-    const pool = new pg.Pool({ connectionString: own.toString(), max: 3 });
-    made.push({ name, pool });
-    return pool;
-  }
+  const database = () => databases.create();
+  /** The shape of a database that only ever ran the migrations, made once. */
+  const freshShape = () => (fresh ??= database().then(async (pool) => (await migrate(pool), shape(pool))));
   const versions = async (pool: pg.Pool) => (await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows.map((row) => row.version);
   const migrations = async (files: Record<string, string>) => {
     const dir = await mkdtemp(join(folder, 'migraciones-'));
@@ -43,17 +38,13 @@ describe.skipIf(!url)('migrations, against a real Postgres', () => {
   };
 
   beforeAll(async () => {
-    admin = new pg.Pool({ connectionString: url, max: 1 });
+    databases = ownDatabases(url!, 'migra');
     folder = await mkdtemp(join(tmpdir(), 'urna-migraciones-'));
   });
   afterAll(async () => {
-    for (const { name, pool } of made) {
-      await pool.end();
-      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-    }
-    await admin?.end();
+    await databases?.dropAll();
     await rm(folder, { recursive: true, force: true });
-  });
+  }, DATABASE_HOOK_TIMEOUT);
 
   it('makes a new database, records what it ran, and the second time does nothing', async () => {
     const pool = await database();
@@ -65,26 +56,22 @@ describe.skipIf(!url)('migrations, against a real Postgres', () => {
   });
 
   it('updates a database made by the current schema.sql before there were migrations, keeping its data', async () => {
-    const fresh = await database();
-    await migrate(fresh);
     const pool = await database();
     // What the server used to do on every start: run the whole schema.
     await pool.query(await readFile(first, 'utf8'));
     await pool.query(`INSERT INTO settings (key, value) VALUES ('party', '{"name":"Agrupación Ejemplo"}')`);
     expect(await migrate(pool)).toEqual([1]);
-    expect(await shape(pool)).toEqual(await shape(fresh));
+    expect(await shape(pool)).toEqual(await freshShape());
     expect((await pool.query(`SELECT value->>'name' AS name FROM settings WHERE key = 'party'`)).rows[0].name).toBe('Agrupación Ejemplo');
   });
 
   it('updates a database made by the previous schema.sql, from git, to the same schema as a new one', async () => {
-    const fresh = await database();
-    await migrate(fresh);
     const pool = await database();
     await pool.query(await readFile(previous, 'utf8'));
     await pool.query(`INSERT INTO elections (id, name, kind) VALUES ('0190f3a0-0000-7000-8000-000000000001', 'Simulacro', 'estudiantil')`);
-    expect(await shape(pool)).not.toEqual(await shape(fresh));
+    expect(await shape(pool)).not.toEqual(await freshShape());
     expect(await migrate(pool)).toEqual([1]);
-    expect(await shape(pool)).toEqual(await shape(fresh));
+    expect(await shape(pool)).toEqual(await freshShape());
     expect((await pool.query('SELECT name FROM elections')).rows).toEqual([{ name: 'Simulacro' }]);
   });
 
