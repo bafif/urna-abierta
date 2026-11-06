@@ -104,3 +104,5 @@ El instalador puede estar sin firmar, así que tu computadora te va a avisar. Es
 
 Bajalo solamente de la página de releases, y comprobá que su SHA-256 sea el publicado. Un instalador falso es la forma más fácil de
 robarle los datos a un partido.
+
+[Comprobar la descarga](comprobar-descarga.md) explica cómo, en Windows, macOS y Linux.

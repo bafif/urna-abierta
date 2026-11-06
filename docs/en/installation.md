@@ -102,3 +102,5 @@ The installer may be unsigned, so your computer will warn you. That is expected:
 
 Download it only from the releases page, and check that its SHA-256 matches the published one. A fake installer is the easiest way to
 steal a party's data.
+
+[Verifying the download](verify-download.md) explains how, on Windows, macOS and Linux.
