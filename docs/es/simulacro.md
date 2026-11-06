@@ -60,7 +60,8 @@ Cómo se usa cada herramienta está en la guía de [datos personales](datos-pers
       bajó se entiende sin explicación?
 - [ ] En **Registro** aparecen la búsqueda, la descarga, la corrección, el consentimiento y el borrado, con quién lo hizo.
 - [ ] Creá una categoría del semáforo marcada como sensible y anotá a alguien con ella. Alguien con «Anotar quién nos vota» no la tiene
-      que ver, ni poder cambiarla. Alguien con «Ver las categorías sensibles» la ve, y el registro dice «Miró categorías sensibles».
+      que ver: si le pone una categoría común o se la saca, la sensible sigue ahí, sin que nada le avise que estaba. Alguien con «Ver
+      las categorías sensibles» la ve, y el registro dice «Miró categorías sensibles».
 - [ ] Bajá el padrón de una mesa preparándola desde un teléfono, y una copia de seguridad desde la app: el registro tiene que decir quién
       lo hizo.
 - [ ] Pasá la seguridad a «Municipal o provincial». Todos menos los fiscales tienen que confirmar con un código, y el fiscal tiene que ver

@@ -7,7 +7,7 @@ export interface PersonData {
   person: { name: string; document: string | null; fileNumber: string | null; address: string | null; order: number | null; extra: Record<string, unknown>; toReview: boolean };
   table: { name: string; place: string } | null;
   consent: { date: string; means: string } | null;
-  semaphore: { category: string | null; sensitive: boolean; hidden: boolean; notedAt: string } | null;
+  semaphore: { category: string | null; sensitive: boolean; hidden: boolean; notedAt: string; under?: string } | null;
   markedVoted: string[];
   /** Other elections whose roll has the same document: this page is only about one. */
   others?: string[];
@@ -61,7 +61,8 @@ export function personDataPage(data: PersonData, say: Say, language: string, now
       ? paragraph(say('data.light.none'))
       : semaphore.hidden
         ? paragraph(say('data.light.hidden'))
-        : paragraph(say('data.light.category', { category: semaphore.category ?? '', when: when(semaphore.notedAt) })));
+        : paragraph(say('data.light.category', { category: semaphore.category ?? '', when: when(semaphore.notedAt) }))) +
+    (semaphore?.under ? paragraph(say('data.light.under', { category: semaphore.under })) : '');
 
   const agreed = consent ? paragraph(say('data.consent.yes', { date: day(consent.date), means: consent.means })) : paragraph(say('data.consent.no'));
 

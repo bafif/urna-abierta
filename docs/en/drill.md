@@ -58,8 +58,9 @@ How each tool is used is in the [personal data](personal-data.md) guide.
       record a consent and erase their data. Measure how long each step took: the law's deadlines are 10 calendar days and 5 business
       days. Can what was downloaded be understood without explanation?
 - [ ] The **Log** shows the search, the download, the correction, the consent and the erasure, with who did each.
-- [ ] Create a traffic light category marked as sensitive and note someone with it. Someone with “Note who votes for us” must not see it,
-      nor be able to change it. Someone with “See the sensitive categories” sees it, and the log says “Looked at sensitive categories”.
+- [ ] Create a traffic light category marked as sensitive and note someone with it. Someone with “Note who votes for us” must not see it:
+      if they give that person a plain category, or clear it, the sensitive one is still there, and nothing tells them it was. Someone
+      with “See the sensitive categories” sees it, and the log says “Looked at sensitive categories”.
 - [ ] Download the roll of a table by preparing it from a phone, and a backup from the app: the log has to say who did it.
 - [ ] Switch security to “Municipal or provincial”. Everyone except poll watchers has to confirm with a code, and the poll watcher has to
       see only the last 3 digits of each document. Then switch back.

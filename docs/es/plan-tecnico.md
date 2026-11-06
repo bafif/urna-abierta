@@ -175,8 +175,9 @@ puede ver.
   que entró con el link de un jefe queda como el fiscal que el jefe podía invitar: lo que esa persona reciba después, o lo
   que el partido les sume a los fiscales, no llega a ese teléfono, y tampoco activa el segundo paso de alguien que nunca
   lo activó. Para eso hace falta un link de quien maneja el equipo.
-- Las categorías sensibles del semáforo llevan un permiso aparte y se cifran por campo. Eso protege un volcado de la
-  base que salga sin el `.env`. No protege una copia del disco entero ni los backups, que llevan la clave, ni a un
+- Las categorías sensibles del semáforo llevan un permiso aparte y se cifran por campo. Quien no tiene ese permiso anota
+  solo una categoría común, que queda debajo de la sensible: nunca la cambia ni la saca, y le contestan lo mismo tenga la
+  persona una sensible o no. El cifrado protege un volcado de la base que salga sin el `.env`. No protege una copia del disco entero ni los backups, que llevan la clave, ni a un
   servidor en marcha.
 - Al borrar a una persona o purgar una elección, también se reemplaza su id del padrón, que suele ser el DNI. El
   registro nombra a cada persona por una referencia al azar, nunca por ese id, y esa referencia también se cambia al
