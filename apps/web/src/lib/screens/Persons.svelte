@@ -1,8 +1,9 @@
 <script lang="ts">
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
-  import { t } from '../i18n.svelte.ts';
-  import { API, session } from '../session.svelte.ts';
+  import { i18n, t } from '../i18n.svelte.ts';
+  import { personDataFile, personDataPage, type PersonData } from '../person-data.ts';
+  import { session } from '../session.svelte.ts';
 
   interface Person {
     election_id: string;
@@ -30,13 +31,14 @@
     people = (await session.api<{ people: Person[] }>(`/persons?q=${encodeURIComponent(query)}`)).people;
   }
 
-  /** What is held about the person, in one file, to hand over when they ask. Art. 14. */
+  /** What is held about the person, as a page they can read and print, to hand over when they ask. Arts. 14 and 15. */
   async function exportData() {
-    const response = await session.fetch(`${API}${base}/export`);
-    const url = URL.createObjectURL(await response.blob());
+    const data = await session.api<PersonData>(`${base}/export`);
+    const page = new Blob([personDataPage(data, t, i18n.language)], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(page);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `datos-${person!.id}.json`;
+    link.download = personDataFile(data.person.name);
     link.click();
     URL.revokeObjectURL(url);
     message = t('persons.exported');

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, auditView, can, canReachTable, erasedId, isErasedId, requires, seal, unseal, type Actor } from './actor.ts';
+import { audit, auditView, can, canReachTable, erasedId, getSetting, isErasedId, requires, seal, unseal, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
@@ -290,9 +290,19 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (row?.sealed && !hidden) await audit(pool, request.actor, 'semaphore.sensitive_viewed', ref, { people: [ref] });
     const category = row && !hidden ? (row.sealed ? unseal(row.sealed) : row.category_id) : null;
     const name = category && (await pool.query('SELECT name FROM semaphore_categories WHERE id = $1', [category])).rows[0]?.name;
-    const { search: _search, ref: _ref, ...data } = person.rows[0];
+    const found = person.rows[0];
+    const place = await pool.query(
+      'SELECT e.name, e.days, t.name AS table_name, t.place FROM elections e LEFT JOIN polling_tables t ON t.id = $2 WHERE e.id = $1',
+      [election, found.table_id],
+    );
+    const where = place.rows[0];
+    // Only what is held about the person, with names a person understands: the screen turns it into a page to hand over.
     return {
-      person: data,
+      party: (await getSetting<{ name: string }>(pool, 'party', { name: '' })).name,
+      election: { name: where.name, days: where.days.map((day: Date) => day.toISOString().slice(0, 10)) },
+      person: { name: found.full_name, document: found.document, fileNumber: found.file_number, address: found.address, order: found.order_number, extra: found.extra, toReview: found.needs_review },
+      table: where.table_name ? { name: where.table_name, place: where.place } : null,
+      consent: found.consent,
       semaphore: row ? { category: name ?? null, sensitive: Boolean(row.sealed), hidden, notedAt: row.noted_at } : null,
       markedVoted: voted.rows.map((r) => r.device_time),
     };
