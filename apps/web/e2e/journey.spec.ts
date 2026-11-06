@@ -357,27 +357,35 @@ test('the chief gets the alert, sees who is silent, and two different counts wai
 });
 
 test('the traffic light starts empty, and the numbers never show a name', async ({ page, browser, request }, info) => {
+  // Another election under way, like the ones earlier tests leave open: with several, the traffic light asks which one.
+  await seed(request, { size: 5 });
   const demo = await seed(request, { size: 10 });
+  // Categories belong to the party, which every run shares: a name of its own each time.
+  const category = `Puede ser ${info.project.name} ${Date.now().toString(36)}`;
   await page.goto(`/#invitacion=${demo.links.coordinacion}`);
   await useThis(page);
   await button(page, 'Más cosas').click();
   await page.getByRole('button', { name: /^Semáforo/ }).click();
-  await page.getByTestId('category-new').fill(`Puede ser ${test.info().project.name}`);
+  await page.getByTestId('category-new').fill(category);
   await button(page, 'Agregar categoría').click();
-  await expect(page.getByText(`Puede ser ${test.info().project.name}`)).toBeVisible();
+  await expect(page.getByText(category)).toBeVisible();
 
   const other = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });
   const light = await other.newPage();
+  // The list of elections comes late, as on a slow signal: until it does, there is no search box to type in.
+  await light.route('**/api/open-elections', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await route.continue();
+  });
   await enter(light, demo.links.semaforo!);
-  // The server keeps the elections of earlier tests open: with several under way, it asks which one, newest first.
   await pickNewest(light, light.getByRole('searchbox'));
   await light.getByRole('searchbox').fill('99000001');
   await light.getByTestId('light-person').first().click();
-  await light.getByRole('radio', { name: `Puede ser ${test.info().project.name}` }).click();
+  await light.getByRole('radio', { name: category }).click();
   await button(light, 'Guardar y seguir').click();
   await expect(light.getByRole('searchbox')).toHaveValue('');
   await light.getByRole('searchbox').fill('99000001');
-  await expect(light.getByTestId('light-person').first()).toContainText('Puede ser');
+  await expect(light.getByTestId('light-person').first()).toContainText(category);
   // And it comes off the same way.
   await light.getByTestId('light-person').first().click();
   await button(light, 'Sacarle la categoría').click();
