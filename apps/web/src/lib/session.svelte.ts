@@ -1,5 +1,6 @@
 import { resolve } from '$app/paths';
 import { isRole, permissionsOf, type Permission } from '@urna-abierta/domain';
+import { nav } from './nav.svelte.ts';
 import { ui, type Theme } from './ui.svelte.ts';
 
 export const API = `${resolve('/')}api`;
@@ -84,6 +85,11 @@ class Session {
       ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}),
     });
     const data = await response.json().catch(() => ({}));
+    // The level of care went up meanwhile, an election of another kind opened: the second step comes first, at the start.
+    if (response.status === 403 && data.error === 'second_factor_needed' && this.me) {
+      this.me = { ...this.me, secondFactorNeeded: true };
+      nav.home();
+    }
     if (!response.ok) throw new ApiError(response.status, data.error ?? 'failed', data.problems);
     return data as T;
   }

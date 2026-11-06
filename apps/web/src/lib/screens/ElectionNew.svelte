@@ -63,7 +63,9 @@
       const { id } = await session.api<{ id: string }>('/elections', { method: 'POST', body: { name, kind, days, categories: categories() } });
       // The server holds the level of care the election's kind asks for while it is open: this only shows it.
       await session.refresh();
-      nav.replace('election', { id });
+      // That level may ask this device for a second step: the start screen asks for it before anything else.
+      if (session.me?.secondFactorNeeded) nav.home();
+      else nav.replace('election', { id });
     } catch {
       failed = true;
     }
