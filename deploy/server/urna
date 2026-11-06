@@ -160,10 +160,18 @@ not_answering() {
   exit 3
 }
 
+# The first backup, in the background, so that a new server says it is in order from the start.
+first_backup() {
+  ls "$home"/copias/urna-*.tar.gpg >/dev/null 2>&1 && return
+  { systemctl --user start --no-block urna-copia.service || setsid "$0" copia; } </dev/null >/dev/null 2>&1 &
+}
+
 backup() {
   stamp=$(date -u +%Y%m%d-%H%M%S)
   work=$(mktemp -d)
-  trap 'rm -rf "$work"' EXIT
+  # Under another name until it is whole: a backup cut short never passes for one.
+  partial="$home/copias/urna-$stamp.tar.gpg.parcial"
+  trap 'rm -rf "$work" "$partial"' EXIT
   podman exec "$pod-db" pg_dump -U urna -Fc urna >"$work/base.dump"
   # The photos belong to the user inside the container, so it takes its namespace to read them.
   podman unshare tar -C "$home" -cf "$work/fotos.tar" fotos
@@ -174,8 +182,9 @@ backup() {
   mkdir -p "$home/copias"
   tar -C "$work" -cf - base.dump fotos.tar clave-campos |
     gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --symmetric --cipher-algo AES256 \
-      -o "$home/copias/urna-$stamp.tar.gpg"
-  chmod 644 "$home/copias/urna-$stamp.tar.gpg"
+      -o "$partial"
+  chmod 644 "$partial"
+  mv "$partial" "$home/copias/urna-$stamp.tar.gpg"
   # shellcheck disable=SC2012
   ls -1t "$home"/copias/urna-*.tar.gpg | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
   echo "$home/copias/urna-$stamp.tar.gpg"
@@ -382,7 +391,11 @@ case "${1:-estado}" in
     # Its systemd unit only starts the pod: a wait tied to the unit would make systemd stop every container when
     # the certificate takes long, as it does while the ports are closed. Whoever installs waits with a second «arrancar».
     [ "${2:-}" = sin-esperar ] && exit 0
-    wait_healthy || not_answering $?
+    answered=0
+    wait_healthy || answered=$?
+    # Also when it is only the certificate that is missing: the database is there, and a backup needs no certificate.
+    [ "$answered" = 2 ] || first_backup
+    [ "$answered" = 0 ] || not_answering "$answered"
     echo 'Andando.'
     ;;
   frenar) stop_all ;;

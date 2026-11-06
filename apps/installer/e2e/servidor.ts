@@ -200,13 +200,15 @@ const noted = api(first, 'PUT', `/elections/${election}/people/${encodeURICompon
 record('se puede cargar una elección de verdad', proposed.created === 3 && people.length > 0 && noted.ok === true, { mesas: proposed.created });
 
 const backup = urna(first, 'copia').split('\n').at(-1)!;
+const backupName = backup.split('/').pop()!;
 const encrypted = podman('exec', first.name, 'head', '-c', '2000000', backup);
 record('hace una copia cifrada: no se lee ningún nombre', !encrypted.includes('Inventada'), { archivo: backup });
+// The install made the first one, once the server answered.
 const listed = api(first, 'GET', '/backups', { token });
-record('la copia se puede bajar desde la app', listed.backups?.length === 1, listed.backups?.[0]);
+record('la copia se puede bajar desde la app, junto a la primera, que hizo la instalación', listed.backups?.length === 2 && listed.backups[0]?.name === backupName, listed.backups);
 const sent = await raw.list('fotos/backups/');
-const inBucket = sent.length === 1 ? await raw.get(sent[0]!) : null;
-record('la copia también sale del servidor, al bucket, cifrada', sent[0] === `fotos/backups/${backup.split('/').pop()}` && inBucket !== null && !inBucket.includes('Inventada'), sent);
+const inBucket = sent.includes(`fotos/backups/${backupName}`) ? await raw.get(`fotos/backups/${backupName}`) : null;
+record('las dos también salen del servidor, al bucket, cifradas', sent.length === 2 && inBucket !== null && !inBucket.includes('Inventada'), sent);
 
 const state = attempt('exec', first.name, 'urna', 'estado').said;
 record('«urna estado» dice que está todo bien, y que las copias van al bucket', state.includes('Todo en orden') && state.includes(`bien   las copias también van al bucket ${bucket.name}`) && state.includes('versión: anterior'), state.split('\n'));
@@ -236,7 +238,7 @@ const migrations = asUrna(first, 'podman', 'exec', 'urna-db', 'psql', '-U', 'urn
 record('trae las imágenes y los comandos de esa versión, y la base se pone al día', env.includes(`URNA_IMAGE_SERVER=${next.server}`) && env.includes(`URNA_IMAGE_WEB=${next.web}`) && commands === '# versión nueva' && migrations === '9999', { commands, migrations });
 const afterUpdate = api(first, 'GET', '/elections', { token }).elections;
 const backupsNow = api(first, 'GET', '/backups', { token }).backups;
-record('después de actualizar están los datos, siguen las sesiones y hay una copia de antes', afterUpdate?.[0]?.name === 'Simulacro' && afterUpdate[0].people === 30 && backupsNow?.length === 2, afterUpdate?.[0]);
+record('después de actualizar están los datos, siguen las sesiones y hay una copia de antes', afterUpdate?.[0]?.name === 'Simulacro' && afterUpdate[0].people === 30 && backupsNow?.length === 3, afterUpdate?.[0]);
 const closedNow = fromThePod(first);
 record('«urna actualizar» le pide la clave también a una base que confiaba en el pod', trusting.ok && trusting.said.trim() === '1' && !closedNow.ok && closedNow.said.includes('no password supplied'), [trusting.said.trim(), closedNow.said.trim()]);
 const withNew = fromThePod(first, newPassword);

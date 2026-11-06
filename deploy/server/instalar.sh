@@ -160,7 +160,7 @@ if [ -d "/run/user/$uid" ] && run_as_urna systemctl --user daemon-reload 2>/dev/
   run_as_urna systemctl --user enable --now urna-copia.timer >/dev/null 2>&1 || true
   run_as_urna systemctl --user enable --now urna-abierta.service >/dev/null 2>&1 || true
 fi
-# Starts what systemd did not, and waits for it to answer. A slow certificate, as while the
+# Starts what systemd did not, waits for it to answer and makes the first backup. A slow certificate, as while the
 # cloud's firewall keeps 80 and 443 closed, stops nothing: everything keeps running, and «urna estado» says what is missing.
 answered=0
 run_as_urna "$home/urna" arrancar || answered=$?

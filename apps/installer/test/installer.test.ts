@@ -48,7 +48,7 @@ describe('the script that installs a server', () => {
     expect(caddyfile).toMatch(/^\tdefault_sni \{\$URNA_SNI:localhost\}$/m);
   });
 
-  it('starts through systemd without waiting for the certificate, and waits apart', () => {
+  it('starts through systemd without waiting for the certificate, and waits and makes the first backup apart', () => {
     const installer = readFileSync(new URL('../../../deploy/server/instalar.sh', import.meta.url), 'utf8');
     const urna = readFileSync(new URL('../../../deploy/server/urna', import.meta.url), 'utf8');
     // A wait inside the unit would make systemd stop every container when the certificate is slow.
@@ -56,6 +56,9 @@ describe('the script that installs a server', () => {
     expect(urna).toContain('[ "${2:-}" = sin-esperar ] && exit 0');
     // Slow is not broken: the installer says it is still waiting, and only a server that stops right away fails it.
     expect(installer).toMatch(/run_as_urna "\$home\/urna" arrancar \|\| answered=\$\?\ncase "\$answered" in\n  0\) say "ready \$URNA_SITE" ;;\n  3\) say "still_waiting \$URNA_SITE" ;;\n  \*\) exit 1 ;;\n/);
+    expect(urna).toMatch(/\[ "\$answered" = 2 \] \|\| first_backup\n/);
+    // A backup is only one under its own name once it is whole.
+    expect(urna).toContain('mv "$partial" "$home/copias/urna-$stamp.tar.gpg"');
   });
 
   it('leaves out comment lines, but keeps the top block and what goes inside files', () => {
