@@ -495,8 +495,16 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"nacional"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
       await pool.query('UPDATE devices SET second_factor_at = now()');
       forgetActors();
-      const res = await upload(id, writePadron({ electors: people(2) as never, externalAi: true }));
+      const withAi = writePadron({ electors: people(2) as never, externalAi: true });
+      const res = await upload(id, withAi);
       expect(res.json().error).toBe('external_ai_forbidden');
+      // The other levels let it in, and say so before it is loaded.
+      const fileProblems = async () => (await upload(id, withAi, true)).json().problems.filter((item: { where: string }) => item.where === 'file');
+      await pool.query(`UPDATE settings SET value = '"local"' WHERE key = 'security_profile'`);
+      expect(await fileProblems()).toEqual([{ where: 'file', problem: 'external_ai_paid_only' }]);
+      await pool.query(`UPDATE settings SET value = '"estudiantil"' WHERE key = 'security_profile'`);
+      expect(await fileProblems()).toEqual([{ where: 'file', problem: 'external_ai' }]);
+      expect((await upload(id, writePadron({ electors: people(2) as never }), true)).json().problems).toEqual([]);
     });
   });
 

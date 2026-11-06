@@ -255,9 +255,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!read.padron) return reply.code(422).send({ error: 'cannot_read', problems: read.problems });
     const { manifest } = read.padron;
     const { profile } = await securityProfile(pool);
-    if (manifest.extraction?.external_ai === true && SECURITY_PROFILES[profile].externalAi === 'forbidden') {
-      return reply.code(422).send({ error: 'external_ai_forbidden' });
-    }
+    const externalAi = manifest.extraction?.external_ai === true ? SECURITY_PROFILES[profile].externalAi : null;
+    if (externalAi === 'forbidden') return reply.code(422).send({ error: 'external_ai_forbidden' });
+    // The other profiles let it in, saying so before it is loaded.
+    if (externalAi) read.problems.push({ where: 'file', problem: externalAi === 'paid-only' ? 'external_ai_paid_only' : 'external_ai' });
     const existing = await pool.query('SELECT id, corrected_at IS NOT NULL AS corrected FROM electors WHERE election_id = $1', [election]);
     // Whoever asked to be erased is not loaded again, and what someone corrected stays corrected.
     const erased = new Set(existing.rows.filter((row) => isErasedId(row.id)).map((row) => row.id));
