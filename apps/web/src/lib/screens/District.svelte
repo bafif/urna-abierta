@@ -43,6 +43,8 @@
   let showAll = $state(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let gone = false;
+  /** What a refresh brings after this panel left does not reach the icon or the title. */
+  let turn = 0;
 
   async function load() {
     try {
@@ -52,7 +54,7 @@
       }
       if (election) {
         tables = (await session.api<{ tables: Table[] }>(`/district/${election.id}`)).tables;
-        alertWatch.update(election.id, tables.flatMap((table) => table.incidents.map((incident) => incident.id)));
+        alertWatch.update(turn, election.id, tables.flatMap((table) => table.incidents.map((incident) => incident.id)));
       }
       offline = false;
     } catch {
@@ -76,6 +78,7 @@
   }
 
   onMount(() => {
+    turn = alertWatch.watch();
     void load().then(again);
     document.addEventListener('visibilitychange', back);
   });
@@ -83,7 +86,7 @@
     gone = true;
     clearTimeout(timer);
     document.removeEventListener('visibilitychange', back);
-    alertWatch.leave();
+    alertWatch.leave(turn);
   });
 
   /** Only while it is being voted: at night, or once its day was closed, silence says nothing. */
