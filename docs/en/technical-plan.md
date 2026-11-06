@@ -10,10 +10,10 @@
 | Data on the phone | IndexedDB with Dexie |
 | Server | TypeScript on Node, with Fastify |
 | Database | Postgres, with a versioned SQL schema |
-| Tally sheet photos | Server disk; S3 compatible as an option |
+| Tally sheet photos | Server disk, or S3-compatible storage, where they arrive encrypted (see [servers](servers.md)) |
 | Installation | A rootless Podman pod with app, Postgres and Caddy (automatic TLS), which a script leaves running on Ubuntu or Debian |
 | Installer | A single executable for Windows, macOS and Linux, published on GitHub Releases. It is Node with its files inside: it opens its screens in the browser, shares the themes with the app, and could be tested end to end |
-| Scanner | Python CLI, with local text recognition |
+| Scanner | A roll reader in Python for scanned PDFs, which runs on the computer with local text recognition |
 
 I chose a PWA to avoid depending on app stores or a central account: each party serves it from its own domain, and poll
 watchers join with a link or a QR code. If a phone treats it badly, it can be packaged with Capacitor without a rewrite: on
@@ -180,6 +180,8 @@ specification is published in the scanner repository, under CC0.
 - What a roll carries but does not change who may vote goes in `extra`, and poll watchers do not see it.
 - There is no field for political data: the traffic light lives only in the app.
 - Doubtful rows are imported flagged for review; they are never silently dropped.
+- The app also loads an Excel (`.xlsx`) or CSV spreadsheet: it turns it into a `.padron` in the browser, with the same rules, and does
+  not read the columns it does not know. A scanned PDF goes through the roll reader first, on the computer.
 - Examples in the repository carry invented data only.
 
 ## Languages

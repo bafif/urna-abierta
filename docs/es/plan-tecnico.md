@@ -10,10 +10,10 @@
 | Datos en el teléfono | IndexedDB con Dexie |
 | Servidor | TypeScript en Node, con Fastify |
 | Base de datos | Postgres, con esquema SQL versionado |
-| Fotos de actas | Disco del servidor; S3 compatible como opción |
+| Fotos de actas | Disco del servidor, o un almacenamiento compatible con S3, adonde llegan cifradas (ver [servidores](servidores.md)) |
 | Instalación | Un pod de Podman sin root con app, Postgres y Caddy (TLS automático), que un script deja andando en un Ubuntu o Debian |
 | Instalador | Un solo ejecutable para Windows, macOS y Linux, publicado en GitHub Releases. Es Node con sus archivos adentro: abre sus pantallas en el navegador, comparte los temas con la app, y se pudo probar de punta a punta |
-| Escáner | CLI en Python, con reconocimiento de texto local |
+| Escáner | Lector de padrones en Python para los PDF escaneados, que corre en la computadora con reconocimiento de texto local |
 
 Elegí una PWA para no depender de tiendas ni de una cuenta central: cada partido la sirve desde su propio dominio y el
 fiscal entra con un link o un QR. Si un teléfono la trata mal, se empaqueta con Capacitor sin reescribirla: en Android es
@@ -177,6 +177,8 @@ La especificación se publica en el repo del escáner, con licencia CC0.
 - Lo que el padrón trae pero no cambia quién puede votar va en `extra`, y no se le muestra al fiscal.
 - No hay campo para datos políticos: el semáforo vive solo en la app.
 - Las filas dudosas se importan marcadas para revisar; nunca se descartan en silencio.
+- La app también carga una planilla de Excel (`.xlsx`) o CSV: la convierte en `.padron` en el navegador, con las mismas reglas, y
+  no lee las columnas que no conoce. Un PDF escaneado pasa antes por el lector de padrones, en la computadora.
 - Los ejemplos del repo llevan solo datos falsos.
 
 ## Idiomas

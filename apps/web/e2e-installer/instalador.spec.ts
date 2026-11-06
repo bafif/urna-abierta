@@ -61,6 +61,9 @@ test('every theme can be seen in light and dark before choosing', async ({ page 
   await button(page, 'Seguir').click();
   await button(page, 'Seguir').click();
   await expect(page.getByRole('radio', { name: /Con mi propia IA/ })).toBeDisabled();
+  // It says what each option really means: the reader is a separate download, and a spreadsheet needs nothing else.
+  await expect(page.getByRole('radio', { name: /En esta computadora/ })).toContainText('se baja aparte');
+  await expect(page.getByRole('radio', { name: /Después/ })).toContainText('se carga directo en la app');
   await button(page, 'Seguir').click();
   await expect(page.getByTestId('previews').locator('.pantalla')).toHaveCount(2);
   const names = ['Aula', 'Vidrio', 'Feria', 'Tablero', 'Mate'];
@@ -166,6 +169,10 @@ test('on this computer: from the first screen to the first administrator, with t
   const key = await page.getByTestId('recovery-key').innerText();
   expect(key).toMatch(/^[A-Z2-9]{5}(-[A-Z2-9]{5}){4}$/);
   await expect(page.getByTestId('address')).toHaveText(/^http:\/\/localhost:\d+$/);
+  const reader = page.getByTestId('reader-link');
+  await expect(reader).toHaveText('bajá el lector de padrones');
+  await expect(reader).toHaveAttribute('href', 'https://github.com/bafif/urna-abierta-padrones#descargar');
+  await expect(reader).toHaveAttribute('target', '_blank');
 
   const { result } = await (await page.request.get('api/job')).json();
   const app = await (await browser.newContext()).newPage();

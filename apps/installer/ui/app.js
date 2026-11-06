@@ -68,9 +68,9 @@
       'local.retry': 'Fijarme de nuevo',
       'vision.title': '¿Cómo leemos los padrones escaneados?',
       'vision.local': 'En esta computadora',
-      'vision.local.text': 'Privado y gratis. Un padrón trae datos de personas: es lo recomendado.',
+      'vision.local.text': 'El lector de padrones corre en tu computadora: es privado y gratis, y se baja aparte. Es lo recomendado, porque un padrón trae datos de personas.',
       'vision.later': 'Después',
-      'vision.later.text': 'Se puede elegir al cargar el primer padrón.',
+      'vision.later.text': 'Una planilla de Excel o CSV se carga directo en la app. Un PDF escaneado lo leés con el lector de padrones cuando haga falta.',
       'vision.ai': 'Con mi propia IA',
       'vision.ai.text': 'Todavía no está disponible.',
       'theme.title': '¿Cómo querés que se vea?',
@@ -114,6 +114,8 @@
       'done.open': 'Abrir Urna Abierta',
       'done.saved': 'Ya guardé la llave',
       'done.themeFailed': 'No se pudo cargar tu tema propio. Cargalo desde la app, en Ajustes.',
+      'done.reader': 'Si tus padrones son PDF escaneados:',
+      'done.reader.link': 'bajá el lector de padrones',
     },
     en: {
       'hello.title': 'Let’s install Urna Abierta',
@@ -182,9 +184,9 @@
       'local.retry': 'Check again',
       'vision.title': 'How do we read scanned rolls?',
       'vision.local': 'On this computer',
-      'vision.local.text': 'Private and free. A roll has people’s data: this is the recommended way.',
+      'vision.local.text': 'The roll reader runs on your computer: private and free, and a separate download. A roll has people’s data: this is the recommended way.',
       'vision.later': 'Later',
-      'vision.later.text': 'You can choose when loading the first roll.',
+      'vision.later.text': 'An Excel or CSV spreadsheet loads straight into the app. Read a scanned PDF with the roll reader whenever you need it.',
       'vision.ai': 'With my own AI',
       'vision.ai.text': 'Not available yet.',
       'theme.title': 'How do you want it to look?',
@@ -228,10 +230,16 @@
       'done.open': 'Open Urna Abierta',
       'done.saved': 'I saved the key',
       'done.themeFailed': 'Your own theme could not be loaded. Load it from the app, in Settings.',
+      'done.reader': 'If your rolls are scanned PDFs:',
+      'done.reader.link': 'download the roll reader',
     },
   };
 
   const GUIDE = 'https://github.com/bafif/urna-abierta/blob/main/docs/es/servidores.md';
+  const READER = {
+    es: 'https://github.com/bafif/urna-abierta-padrones#descargar',
+    en: 'https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download',
+  };
   const REGIONS = { oracle: 'sa-saopaulo-1', aws: 'sa-east-1' };
   const LOGO = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg>';
   const ICONS = { flecha: '<path d="M5 12h13M12 6l6 6-6 6"/>', tilde: '<path d="M5 12.5l4.5 4.5L19 7"/>', atras: '<path d="M19 12H6M12 6l-6 6 6 6"/>' };
@@ -374,7 +382,8 @@
     done: () => ({
       title: t('done.title'), text: t('done.text'),
       body: `<div class="tarjeta llave"><span>${t('done.address')}</span><strong data-testid="address">${escape(state.result?.address)}</strong><span>${t('done.key')}</span><strong class="mono" data-testid="recovery-key">${escape(state.result?.recoveryKey)}</strong></div>
-        ${state.result?.themeFailed ? `<p class="problema" role="alert" data-testid="theme-failed">${t('done.themeFailed')}</p>` : ''}`,
+        ${state.result?.themeFailed ? `<p class="problema" role="alert" data-testid="theme-failed">${t('done.themeFailed')}</p>` : ''}
+        <p class="aclara">${t('done.reader')} <a class="enlace ayuda-enlace" href="${READER[state.language]}" target="_blank" rel="noreferrer" data-testid="reader-link">${t('done.reader.link')}</a></p>`,
       next: ['done.open', 'openApp'],
     }),
   };

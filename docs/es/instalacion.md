@@ -37,9 +37,9 @@ Te hace tres preguntas y hace el resto.
 | Pegar un texto | Pegar un bloque al crear el servidor, sin darle ninguna credencial al instalador |
 | Probar en esta computadora | Podman o Docker abierto. Solo se ve desde ahí |
 
-**2. ¿Cómo leemos los padrones escaneados?** En tu computadora, que es lo recomendado porque un padrón trae datos de personas, o lo
-decidís después. Usar tu propia IA todavía no está disponible. Hoy el [lector de padrones](https://github.com/bafif/urna-abierta-padrones)
-se usa desde una terminal y arma el archivo `.padron` que se sube a la app. La app también acepta una planilla CSV.
+**2. ¿Cómo leemos los padrones escaneados?** En tu computadora, con el lector de padrones, que es lo recomendado porque un padrón
+trae datos de personas, o lo decidís después. Usar tu propia IA todavía no está disponible. El lector se baja aparte y solo hace falta
+para los PDF escaneados: lo explica [Cargar el padrón](#cargar-el-padrón).
 
 **3. ¿Cómo querés que se vea?** Elegís uno de los temas, viéndolos antes en claro y en oscuro. Cada persona lo puede cambiar después en
 su teléfono. También podés [hacer el tuyo](temas.md) y cargarlo acá, arrastrando el archivo.
@@ -48,6 +48,33 @@ Al terminar te da la dirección de tu servidor y una llave de recuperación para
 asistente para el partido, el equipo y la primera elección.
 
 **Guardá esa llave.** Es lo único que abre tus copias de seguridad, y no se puede volver a generar.
+
+## Cargar el padrón
+
+En cada elección, en el paso «Padrón», tocás «Subir el padrón» y elegís el archivo. Antes de cargar nada, la app te muestra cuántas
+personas entendió y qué cambia respecto de lo que ya estaba.
+
+| Lo que tenés | Qué hacer |
+|---|---|
+| Una planilla de Excel (`.xlsx`) o CSV | La subís directo. Se usa la primera hoja, y la fila de títulos puede estar debajo de un título. Tiene que tener una columna «Apellido y nombre», «Nombre» o «Apellido», y puede tener «Nombres», «DNI» o «Documento», «Legajo», «N°» u «Orden», «Mesa» y «Domicilio». Las demás columnas no se leen |
+| Una planilla `.xls` u `.ods` | La abrís y la guardás como `.xlsx` o CSV |
+| Un PDF escaneado | Primero lo abrís con el [lector de padrones](https://github.com/bafif/urna-abierta-padrones#descargar), que corre en tu computadora sin mandar el padrón a ningún lado. Te da un archivo `.padron` |
+| Un archivo `.padron` | Lo subís directo |
+
+Hasta que se publique la primera versión del lector en su página de Releases, el lector se usa desde una terminal: su
+[README](https://github.com/bafif/urna-abierta-padrones#readme) explica cómo.
+
+Una planilla de Excel se convierte en `.padron` en tu teléfono o tu computadora, antes de mandarla al servidor. Si un PDF se sube
+directo, la app no lo manda y te explica cómo leerlo.
+
+Si algo no se puede leer, la app dice dónde está el problema (la fila, o la línea del archivo) y qué le pasa, sin mostrar lo que dice
+esa fila. Junta los problemas iguales en un solo renglón. En una planilla, una fila sin nombre, o con el DNI o el legajo de una fila
+anterior, queda afuera, y el resto se puede cargar igual. Una fila con un documento que no tiene 7 u 8 números se carga igual, marcada
+para revisar.
+
+Cuando el lector no está seguro de una fila, la marca para revisar. Esas personas se cargan igual que las demás, y la elección muestra
+«Hay N personas del padrón para revisar». Al tocarlo ves cada una con su nombre y su documento: corregís lo que esté mal, o confirmás
+que está bien.
 
 ## Qué servidor elegir
 
