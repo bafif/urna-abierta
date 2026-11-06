@@ -63,6 +63,37 @@ test('the first run: code, party, team, security, and a second step when the pro
   });
 });
 
+test('creating an election that asks for a second step leads to it, not to an empty screen', async ({ page, request }) => {
+  const demo = await seed(request, { size: 5 });
+  await page.goto(`/#invitacion=${demo.links.coordinacion}`);
+  await useThis(page);
+  await button(page, 'Crear una elección').click();
+  await page.getByRole('radio', { name: /Municipal o provincial/ }).click();
+  await page.getByTestId('election-name').fill('Concejo');
+  await button(page, 'Seguir').click();
+  const today = await page.evaluate(() => new Date().getDate());
+  await page.getByTestId('day').nth(today - 1).click();
+  await button(page, 'Seguir').click();
+  await page.getByTestId('category-name').fill('Concejales');
+  await page.getByTestId('category-lists').fill('Lista Azul');
+  await button(page, 'Crear la elección').click();
+
+  const secret = await page.getByTestId('totp-secret').innerText();
+  await button(page, 'Seguir').click();
+  for (const digit of totp(secret)) await page.locator('.tecla', { hasText: new RegExp(`^${digit}$`) }).click();
+  await button(page, 'Confirmar').click();
+  await expect(button(page, 'Crear una elección')).toBeVisible();
+
+  // Closed again, so that the rest of the tests keep the student level.
+  await page.evaluate(async () => {
+    const api = (path: string, init: RequestInit = {}) =>
+      fetch(`/api${path}`, { ...init, headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('urna-abierta-token')}` } }).then((response) => response.json());
+    const { elections } = await api('/elections');
+    const { id } = elections.find((election: { name: string }) => election.name === 'Concejo');
+    for (const status of ['jornada', 'escrutinio', 'cerrada']) await api(`/elections/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) });
+  });
+});
+
 test('a whole election: from the empty party to erasing the names', async ({ page, browser, request }, info) => {
   test.setTimeout(180_000);
   const demo = await seed(request, { size: 5 });
