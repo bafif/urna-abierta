@@ -1,5 +1,6 @@
 import { tick } from 'svelte';
 import { dayIn, fakeRoll, MarkState, MAX_PHOTO_BYTES, parseOperation, SCHEMA_VERSION, uuidv7, type Operation, type RollEntry } from '@urna-abierta/domain';
+import { CLOCK_WARNING_MS, offsetAfterJump } from './clock.ts';
 import { PhotoState, QueueState, storeFor, UrnaDatabase } from './db.ts';
 import { t } from './i18n.svelte.ts';
 import { API, session, type TableInfo } from './session.svelte.ts';
@@ -15,8 +16,6 @@ const SHRINK_AGAIN_LIMIT_MS = 10_000;
 const ALERT_LIMIT_MS = 8_000;
 /** Who this is and their table are asked again this often while there is signal: they say if the roll changed. */
 const ME_EVERY_MS = 5 * 60_000;
-/** Past this, the phone's clock is far enough off to say so. */
-const CLOCK_WARNING_MS = 3 * 3_600_000;
 /** A smaller difference is not worth writing down again. */
 const CLOCK_NOTICE_MS = 60_000;
 /** A phone that never heard the election closed still lets go of the roll, once everything was sent. */
@@ -29,6 +28,8 @@ const ROOM_CHECK_LIMIT_MS = 8_000;
 /** Browsers take a while to notice freed space, so the check repeats by itself until then. */
 const ROOM_RETRY_MS = 20_000;
 const PREPARED_KEY = 'urna-abierta-prepared';
+/** When the phone's clock was last looked at, while it was off: it may get fixed with the app closed. */
+const CLOCK_SEEN_KEY = 'urna-abierta-reloj-visto';
 
 /**
  * Whether the phone has room left, found by writing to a separate store. It cannot be asked:
@@ -144,6 +145,8 @@ class AppState {
   private readonly store: SyncStore = { ...storeFor(this.db, (operations) => this.applyRemote(operations)), serverTime: (offset) => this.noteClock(offset) };
   private deviceId = '';
   private lastMeAt = Date.now();
+  /** The phone's clock and the time that passed, the last time they were looked at. */
+  private clockSeen = { wall: Date.now(), mono: performance.now() };
   private deviceSeq = 0;
   private order = 0;
   private failures = 0;
@@ -330,6 +333,8 @@ class AppState {
       this.online = false;
     });
     document.addEventListener('visibilitychange', () => {
+      // Leaving to the phone's settings and coming back is how the clock gets fixed.
+      this.watchClock();
       if (document.visibilityState === 'visible') {
         void this.checkRoom();
         void this.sync();
@@ -341,6 +346,8 @@ class AppState {
     this.deviceSeq = (await this.db.getMeta<number>('deviceSeq')) ?? 0;
     if (!this.practice) this.tableId = (await this.db.getMeta<string>('tableId')) ?? '';
     this.clockOffset = (await this.db.getMeta<number>('clockOffset')) ?? 0;
+    const seen = Number(localStorage.getItem(CLOCK_SEEN_KEY));
+    if (seen && !this.practice) this.useClockOffset(offsetAfterJump(this.clockOffset, Date.now() - seen));
     this.refusedPhotos = new Set(await this.db.photos.where('sent').equals(PhotoState.Refused).primaryKeys());
 
     this.electors = await this.db.electors.toArray();
@@ -396,8 +403,33 @@ class AppState {
 
   private noteClock(offset: number): void {
     if (Math.abs(offset - this.clockOffset) < CLOCK_NOTICE_MS) return;
+    this.useClockOffset(offset);
+  }
+
+  private useClockOffset(offset: number): void {
+    this.clockSeen = { wall: Date.now(), mono: performance.now() };
+    if (offset === this.clockOffset) return;
     this.clockOffset = offset;
     void this.db.setMeta('clockOffset', offset).catch(() => undefined);
+  }
+
+  /**
+   * The difference with the server is only measured with signal. If the phone's clock jumped since the last look by
+   * about what it was off, someone fixed it, and the day has to stay right without waiting for signal.
+   */
+  private watchClock(): void {
+    if (this.practice) return;
+    const wall = Date.now();
+    const mono = performance.now();
+    const jump = wall - this.clockSeen.wall - (mono - this.clockSeen.mono);
+    this.clockSeen = { wall, mono };
+    this.useClockOffset(offsetAfterJump(this.clockOffset, jump));
+    try {
+      if (this.clockWrong) localStorage.setItem(CLOCK_SEEN_KEY, String(wall));
+      else localStorage.removeItem(CLOCK_SEEN_KEY);
+    } catch {
+      // Without it, a clock fixed with the app closed waits for the next sync.
+    }
   }
 
   private applyLocally(operation: Operation): void {
@@ -691,6 +723,7 @@ class AppState {
 
   /** One at a time. Whoever asks during a send gets another one after it, which sees what that one missed. */
   async sync(): Promise<void> {
+    this.watchClock();
     if (this.practice || !this.tableId) return;
     if (this.running) {
       await this.running;
