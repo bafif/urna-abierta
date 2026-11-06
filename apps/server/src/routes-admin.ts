@@ -4,7 +4,7 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
+import { DEFAULT_TIME_ZONE, foldText, isRole, isSecurityProfile, isTimeZone, storedPhone, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 import { audit, authenticated, can, forgetActors, getSetting, requires, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
@@ -137,7 +137,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     if (!isRole(role)) return reply.code(400).send({ error: 'invalid_role' });
     const userId = randomUUID();
-    await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name, typeof phone === 'string' ? phone : null]);
+    await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name, storedPhone(phone)]);
     const shift = Array.isArray(days) ? days.filter((day) => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day)) : null;
     // Whoever only looks at the numbers does not keep access for good.
     const expires = typeof expiresAt === 'string' ? expiresAt : role === 'estadistico' ? new Date(Date.now() + STATS_ROLE_DAYS * 86_400_000).toISOString() : null;
@@ -195,15 +195,16 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { elections: rows.rows };
   });
 
-  app.post<{ Body: { name?: unknown; kind?: unknown; days?: unknown; categories?: unknown } }>('/api/elections', { preHandler: manageElection }, async (request, reply) => {
-    const { kind, days, categories } = request.body ?? {};
+  app.post<{ Body: { name?: unknown; kind?: unknown; days?: unknown; categories?: unknown; timeZone?: unknown } }>('/api/elections', { preHandler: manageElection }, async (request, reply) => {
+    const { kind, days, categories, timeZone } = request.body ?? {};
     const name = text(request.body?.name);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     if (typeof kind !== 'string' || !KINDS.includes(kind)) return reply.code(400).send({ error: 'invalid_kind' });
     const dates = Array.isArray(days) ? days.filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) : [];
     if (dates.length === 0) return reply.code(400).send({ error: 'no_days' });
+    if (timeZone !== undefined && !isTimeZone(timeZone)) return reply.code(400).send({ error: 'invalid_time_zone' });
     const id = randomUUID();
-    await pool.query('INSERT INTO elections (id, name, kind, days, categories) VALUES ($1, $2, $3, $4::date[], $5)', [id, name, kind, dates, JSON.stringify(Array.isArray(categories) ? categories : [])]);
+    await pool.query('INSERT INTO elections (id, name, kind, days, categories, time_zone) VALUES ($1, $2, $3, $4::date[], $5, $6)', [id, name, kind, dates, JSON.stringify(Array.isArray(categories) ? categories : []), timeZone ?? DEFAULT_TIME_ZONE]);
     await audit(pool, request.actor, 'election.created', id);
     return { id };
   });

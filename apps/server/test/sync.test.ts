@@ -8,6 +8,7 @@ import pg from 'pg';
 import { uuidv7, writePadron, type Operation } from '@urna-abierta/domain';
 import { forgetActors, totpCode } from '../src/actor.ts';
 import { buildApp, migrate, seedDemo } from '../src/app.ts';
+import { clock } from '../src/clock.ts';
 import { diskPhotoStore, photoStoreFromEnv, PhotoStoreUnavailable, s3PhotoStore, type PhotoStore } from '../src/photo-store.ts';
 import { fakeS3 } from './fake-s3.ts';
 
@@ -292,6 +293,97 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('jefe', 'POST', `/api/incidents/${alert.id}/resolve`)).statusCode).toBe(200);
       const detail = (await call('jefe', 'GET', `/api/tables/${table}/detail`)).json();
       expect(detail.incidents).toEqual([]);
+    });
+
+    it('an alert that arrives after the close shows on the panel and on the table, said so, and can be resolved', async () => {
+      for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
+      const alert = { ...operation(table, 1), type: 'incident.reported', payload: { kind: 'urgent' } };
+      await push('fiscal', table, [alert]);
+      const panel = async () => (await call('jefe', 'GET', `/api/district/${demo.election}`)).json().tables.find((t: { id: string }) => t.id === table);
+      expect((await panel()).incidents).toHaveLength(1);
+      expect((await call('jefe', 'GET', `/api/tables/${table}/detail`)).json().incidents).toEqual([{ id: alert.id, at: alert.device_time, kind: 'urgent', late: true }]);
+      expect((await call('jefe', 'POST', `/api/incidents/${alert.id}/resolve`)).statusCode).toBe(200);
+      expect((await call('jefe', 'GET', `/api/tables/${table}/detail`)).json().incidents).toEqual([]);
+      expect((await panel()).incidents).toEqual([]);
+    });
+
+    it('the plan B goes to someone with a phone: the chief of the table, one of the whole election, then coordination', async () => {
+      const contact = async () => (await call('fiscal', 'GET', '/api/me')).json().contact;
+      expect(await contact()).toEqual({ name: 'Rubén', phone: '+54 9 341 000-0000' });
+      await pool.query(`UPDATE users SET phone = '' WHERE name = 'Rubén'`);
+      expect((await contact()).name).toBe('Coordinación');
+      // A chief of the whole election has no district.
+      expect((await call('coordinacion', 'POST', '/api/users', { name: 'Toda la elección', role: 'jefe', phone: '0341 15 333-3333' })).statusCode).toBe(200);
+      expect(await contact()).toEqual({ name: 'Toda la elección', phone: '+5493413333333' });
+      await pool.query(`UPDATE users SET phone = NULL WHERE name IN ('Toda la elección', 'Coordinación')`);
+      // Nobody has a phone: the chief of the table, at least by name.
+      expect(await contact()).toEqual({ name: 'Rubén', phone: '' });
+    });
+
+    it('a phone is kept in international form, so that WhatsApp opens; one with no area code stays as typed', async () => {
+      const add = async (phone: string) => {
+        const { id } = (await call('coordinacion', 'POST', '/api/users', { name: `Tel ${phone}`, role: 'fiscal', table, phone })).json();
+        return (await pool.query('SELECT phone FROM users WHERE id = $1', [id])).rows[0].phone;
+      };
+      expect(await add('0341 15 555-1234')).toBe('+5493415551234');
+      expect(await add('+54 9 11 5555-1234')).toBe('+5491155551234');
+      expect(await add('15 555-1234')).toBe('15 555-1234');
+      expect(await add('')).toBeNull();
+    });
+
+    it('at ten at night in Argentina it is still that day: the poll watcher keeps their table and the chief calls them', async () => {
+      const id = (await call('coordinacion', 'POST', '/api/elections', { name: 'Dos días', kind: 'estudiantil', days: ['2027-04-06', '2027-04-07'] })).json().id;
+      expect((await call('coordinacion', 'POST', '/api/elections', { name: 'Sin zona', kind: 'estudiantil', days: ['2027-04-06'], timeZone: 'Marte/Olympus' })).statusCode).toBe(400);
+      const file = writePadron({ electors: Array.from({ length: 20 }, (_, i) => ({ id: `n-${i}`, full_name: `Noche${String(i).padStart(2, '0')}, Ana` })) as never });
+      await app.inject({ method: 'POST', url: `/api/elections/${id}/roll`, payload: Buffer.from(file), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'application/zip' } });
+      await call('coordinacion', 'POST', `/api/elections/${id}/tables/propose`, { size: 10 });
+      const [first, second] = (await call('coordinacion', 'GET', `/api/elections/${id}/tables`)).json().tables.map((t: { id: string }) => t.id);
+      await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status: 'jornada' });
+      // One person, a different table each day; and on the first table, someone else the second day.
+      const night = (await call('coordinacion', 'POST', '/api/users', { name: 'Nocturna', role: 'fiscal', table: first, days: ['2027-04-06'] })).json();
+      await pool.query(`INSERT INTO role_assignments (id, user_id, role, table_id, days) VALUES (gen_random_uuid(), $1, 'fiscal', $2, '{2027-04-07}')`, [night.id, second]);
+      await call('coordinacion', 'POST', '/api/users', { name: 'Mañanera', role: 'fiscal', table: first, days: ['2027-04-07'] });
+      forgetActors();
+      tokens.nocturna = await redeem(night.invitation);
+      const real = clock.now;
+      try {
+        clock.now = () => new Date('2027-04-07T01:00:00Z');
+        expect((await call('nocturna', 'GET', '/api/me')).json().table).toMatchObject({ id: first, timeZone: 'America/Argentina/Buenos_Aires' });
+        const panel = (await call('coordinacion', 'GET', `/api/district/${id}`)).json().tables;
+        expect(panel.find((t: { id: string }) => t.id === first).fiscal.name).toBe('Nocturna');
+        expect((await call('coordinacion', 'GET', `/api/tables/${first}/detail`)).json().fiscal.name).toBe('Nocturna');
+        // At midnight there, the next day starts.
+        clock.now = () => new Date('2027-04-07T03:30:00Z');
+        expect((await call('nocturna', 'GET', '/api/me')).json().table.id).toBe(second);
+        expect((await call('coordinacion', 'GET', `/api/tables/${first}/detail`)).json().fiscal.name).toBe('Mañanera');
+        // An election somewhere else says so.
+        await pool.query(`UPDATE elections SET time_zone = 'UTC' WHERE id = $1`, [id]);
+        clock.now = () => new Date('2027-04-07T01:00:00Z');
+        expect((await call('nocturna', 'GET', '/api/me')).json().table.id).toBe(second);
+      } finally {
+        clock.now = real;
+      }
+    });
+
+    it('once the election closes, a poll watcher hears that it ended, not that they have no table yet', async () => {
+      expect((await call('fiscal', 'GET', '/api/me')).json()).toMatchObject({ ended: false, table: { id: table } });
+      for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
+      expect((await call('fiscal', 'GET', '/api/me')).json()).toMatchObject({ ended: true, table: null });
+    });
+
+    it('/me says when the roll of the table changed, with the same mark the roll itself carries', async () => {
+      const me = async () => (await call('fiscal', 'GET', '/api/me')).json().table.rollRevision as string;
+      const bundle = async () => (await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).json();
+      const before = await me();
+      expect((await bundle()).revision).toBe(before);
+      expect(await me()).toBe(before);
+      const person = (await pool.query('SELECT id FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 1', [table])).rows[0];
+      expect((await call('coordinacion', 'PUT', `/api/elections/${demo.election}/electors/${person.id}`, { full_name: 'Corregida, Ana' })).statusCode).toBe(200);
+      const after = await me();
+      expect(after).not.toBe(before);
+      const { revision, electors } = await bundle();
+      expect(revision).toBe(after);
+      expect(electors.some((elector: { name: string }) => elector.name === 'Corregida, Ana')).toBe(true);
     });
 
     it('compares the nightly envelope count with what was crossed out', async () => {
