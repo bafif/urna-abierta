@@ -14,7 +14,8 @@ const GUESS_WINDOW_MS = 15 * 60_000;
 
 /**
  * `by` is who asks for it, or null for the demo of whoever runs the server. A device that comes from the link of
- * someone who does not manage people does not set up the second step of a person who never did.
+ * someone who does not manage people works only as the poll watcher the link was for (see loadActor), and does not set
+ * up the second step of a person who never did.
  */
 export async function createInvitation(pool: pg.Pool, userId: string, by: Actor | null): Promise<string> {
   const token = newToken();

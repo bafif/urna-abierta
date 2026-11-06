@@ -20,7 +20,10 @@ export interface Actor {
   assignments: Assignment[];
   /** This device already proved the second step. */
   verified: boolean;
-  /** This device may set up the second step of a person who never did: see invitations.may_enroll. */
+  /**
+   * This device came from the link of someone who manages people: see invitations.may_enroll. One that did not works
+   * only as the poll watcher the link was made for, and does not set up the second step of a person who never did.
+   */
   mayEnroll: boolean;
 }
 
@@ -57,10 +60,12 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
      WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())`,
     [row.user_id],
   );
-  const assignments = roles.rows.filter((r) => isRole(r.role)) as Assignment[];
+  // A device that came from a chief's link, for instance, stays the poll watcher the chief could invite: whatever the
+  // person gets later, and whatever the party adds to poll watchers, would otherwise reach whoever made the link.
+  const assignments = (roles.rows.filter((r) => isRole(r.role)) as Assignment[]).filter((a) => row.may_enroll || (a.role === 'fiscal' && a.table_id !== null));
   const unique = [...new Set(assignments.map((a) => a.role))];
   edited ??= await getSetting<RoleOverrides>(pool, 'role_permissions', {});
-  const permissions = permissionsOf(unique, edited);
+  const permissions = row.may_enroll ? permissionsOf(unique, edited) : permissionsOf(unique, edited).filter((permission) => permissionsOf(['fiscal'], {}).includes(permission));
   const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, mayEnroll: row.may_enroll, assignments, roles: unique, permissions };
   if (actors.size > 5_000) actors.clear();
   actors.set(key, { until: Date.now() + ACTOR_MEMORY_MS, actor });

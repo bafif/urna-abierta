@@ -175,8 +175,9 @@ fixed list; roles are editable combinations. The server checks every request and
 - Whoever does statistics sees only aggregates, in groups of 5 people or more, and their role expires by itself.
 - An invitation gets whoever has it in as that person. Someone who does not manage the team, such as a chief, invites only
   poll watchers of the tables they see, if their role gives them nothing the chief lacks; anyone else is invited by whoever
-  manages the team. A phone that came in with a chief's link does not turn on the second step for someone who never did:
-  that takes a link from whoever manages the team.
+  manages the team. A phone that came in with a chief's link stays the poll watcher the chief could invite: what that
+  person gets later, or what the party adds to poll watchers, does not reach that phone, nor does it turn on the second
+  step for someone who never did. That takes a link from whoever manages the team.
 - Sensitive categories of the traffic light need a separate permission and are encrypted per field. That protects a
   dump of the database taken without the `.env`. It does not protect a copy of the whole disk or the backups, which carry
   the key, nor a running server.

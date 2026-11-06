@@ -172,8 +172,9 @@ puede ver.
 - Quien hace estadísticas ve solo agregados, con grupos de 5 personas o más, y su rol vence solo.
 - Una invitación hace entrar como esa persona. Quien no maneja el equipo, como un jefe, invita solo a fiscales de las mesas
   que ve, si su rol no les da nada que él no tenga; a cualquier otra persona la invita quien maneja el equipo. Un teléfono
-  que entró con el link de un jefe no activa el segundo paso de alguien que nunca lo activó: para eso hace falta un link
-  de quien maneja el equipo.
+  que entró con el link de un jefe queda como el fiscal que el jefe podía invitar: lo que esa persona reciba después, o lo
+  que el partido les sume a los fiscales, no llega a ese teléfono, y tampoco activa el segundo paso de alguien que nunca
+  lo activó. Para eso hace falta un link de quien maneja el equipo.
 - Las categorías sensibles del semáforo llevan un permiso aparte y se cifran por campo. Eso protege un volcado de la
   base que salga sin el `.env`. No protege una copia del disco entero ni los backups, que llevan la clave, ni a un
   servidor en marcha.
