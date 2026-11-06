@@ -63,8 +63,9 @@ cargaste el teléfono), «Compartir» o «Copiar el link». Cada link sirve una 
 | Los fiscales pueden ver el semáforo de su mesa, si lo activás | Sí | No | No |
 
 Con el código, la app muestra «Un paso más de seguridad»: cada persona escanea un dibujo con una app de códigos, como Google
-Authenticator o Aegis, y escribe los seis números. Eso te incluye a vos. Si después creás una elección municipal, provincial o nacional,
-la app sube sola el nivel; nunca lo baja. Se cambia en **Más cosas**, **Seguridad**.
+Authenticator o Aegis, y escribe los seis números. Eso te incluye a vos. Mientras haya una elección municipal, provincial o nacional
+abierta, el servidor aplica al menos su nivel y no deja bajarlo; cuando se cierra, vuelve el que elegiste. Se cambia en **Más cosas**,
+**Seguridad**.
 
 ## 3. La elección
 
@@ -87,8 +88,9 @@ escaneado está en [Cargar el padrón](instalacion.md#cargar-el-padrón).
 
 Si aparece «Hay N personas del padrón para revisar», tocalo: corregí lo que esté mal o tocá «Está bien».
 
-Subí el padrón definitivo antes de que los fiscales preparen su mesa. Lo que cambies después no les llega a los teléfonos que ya la
-prepararon.
+Conviene subir el padrón definitivo antes de que los fiscales preparen su mesa. Si después lo corregís o lo volvés a subir, el cambio les
+llega a los teléfonos que ya la prepararon la próxima vez que tengan señal, y el fiscal ve «Se actualizó el padrón de tu mesa.». Volver a
+subirlo no deshace lo que corregiste ni a quien borraste a pedido.
 
 ## 5. Las mesas y los distritos
 
@@ -122,7 +124,8 @@ Antes de empezar, bajá una copia en **Más cosas**, **Copias de seguridad**, y 
 
 Tocá «Abrir la votación». Desde ahí, «Ver cómo va» muestra primero las mesas que necesitan algo:
 
-- «aviso urgente»: un fiscal avisó que algo anda mal. Tocá la mesa, llamalo, y cuando esté resuelto tocá «Ya está resuelto»;
+- «aviso urgente»: un fiscal avisó que algo anda mal. Tocá la mesa, llamalo, y cuando esté resuelto tocá «Ya está resuelto». Mientras
+  «Ver cómo va» está en pantalla, un aviso nuevo hace vibrar el teléfono, suena y aparece en el ícono de la app;
 - «los sobres no coinciden»: al contar los sobres, el número no dio con los tachados;
 - «sin datos»: la mesa no manda nada hace un rato. Puede ser falta de señal: llamá al fiscal.
 
@@ -137,7 +140,8 @@ Si dos fiscales cargan números distintos en la misma mesa, aparece «dos escrut
 la que corresponde.
 
 Antes de cerrar, revisá mesa por mesa que estén el escrutinio y la foto, y que los fiscales vean «Todo llegó bien». Después tocá «Cerrar
-la elección»: lo que llegue después queda aparte y no cuenta.
+la elección»: lo que llegue después queda aparte y no cuenta. Desde ese momento, fiscales y jefes ya no ven el padrón; cada teléfono lo
+borra apenas mandó todo, y el fiscal ve «La elección terminó. Gracias».
 
 ## 9. Borrar los datos
 
@@ -158,7 +162,8 @@ que llame: no hay que esperar a la app.
 Se nota porque nadie puede entrar, los teléfonos juntan cosas «sin enviar» y el panel muestra todas las mesas «sin datos».
 
 1. Abrí la dirección desde una computadora con internet. Si no carga, el problema es el servidor.
-2. Entrá por SSH y corré `sudo urna estado`. Cada renglón dice `bien`, `espera` o `FALLA`, y qué hacer:
+2. Entrá por SSH y corré `sudo urna estado`. Cada renglón dice `bien`, `aviso`, `espera` o `FALLA`, y qué hacer. Un `aviso` no es una
+   falla: vale la pena saberlo, pero todo anda.
 
    | Dice | Qué hacer |
    |---|---|
@@ -166,6 +171,7 @@ Se nota porque nadie puede entrar, los teléfonos juntan cosas «sin enviar» y 
    | `FALLA  el servidor responde: no contesta` | Mirá lo último que dijo el servidor, con el comando de abajo |
    | `FALLA  disco: quedan N MB` | Bajá la última copia desde la app y borrá copias viejas de `/opt/urna-abierta/copias` |
    | `FALLA  copias: no hay una reciente` | `sudo urna copia` |
+   | `FALLA  copias en el bucket` | `sudo urna copia`, y fijate qué dice. Lo explica [Copias fuera del servidor](servidores.md#copias-fuera-del-servidor) |
    | `FALLA  hora` | `sudo timedatectl set-ntp true`. Sin la hora bien, fallan el certificado y los códigos |
    | `FALLA  certificado` | Abrí los puertos 80 y 443 en la nube, como dice la [guía de servidores](servidores.md#sin-darle-ninguna-clave-al-instalador) |
    | `FALLA  fotos` | Lo explica [Fotos en un almacenamiento S3](servidores.md#fotos-en-un-almacenamiento-s3) |
@@ -204,7 +210,8 @@ En **Ajustes**, «Copiar informe» arma un informe técnico del teléfono, sin d
 La foto queda guardada en el teléfono hasta que llega, y cuenta entre lo que falta enviar. El jefe ve «Avisaron que hay una foto del acta,
 pero todavía no llegó. Aparece sola cuando llegue.»
 
-1. Que el fiscal deje la app abierta un rato con señal. Una foto pesa bastante más que un tachado, y con poca señal tarda.
+1. Que el fiscal deje la app abierta un rato con señal. Una foto pesa bastante más que un tachado, y con poca señal tarda. Si el
+   teléfono dice «El servidor no aceptó la foto del acta. Sacala de nuevo.», que saque otra: lo demás sigue saliendo.
 2. Si no sube la de ningún teléfono, corré `sudo urna estado` y mirá los renglones `fotos` y `disco`.
 3. Mientras tanto, que saque otra foto del acta con la cámara del teléfono y se la mande a su jefe por WhatsApp. La de la app sigue
    esperando y entra sola.
@@ -237,7 +244,7 @@ Esta lista es de noviembre de 2026. Una versión nueva puede resolver alguno: fi
 - Una elección no se puede editar desde la app después de crearla: revisá los días y las listas antes de «Crear la elección».
 - A una persona del equipo no se le puede cambiar la tarea, ni darle una segunda: hay que sacarla y sumarla de nuevo. Por eso, «Ver las
   categorías sensibles» todavía no sirve: necesita ir junto con «Anotar quién nos vota».
-- De las mesas se puede cambiar solo el nombre y dónde quedan.
+- De las mesas se puede cambiar solo el nombre y dónde quedan, y solo hasta cerrar la elección.
 - No hay una vista con todas las mesas a la vez para el escrutinio: se revisa mesa por mesa.
-- Cerrar la elección no le corta al fiscal el acceso al padrón de su mesa.
+- Un aviso urgente suena y vibra solo con «Ver cómo va» en pantalla: desde otra pantalla, como el detalle de una mesa, no.
 - La app no te recuerda cuándo purgar.

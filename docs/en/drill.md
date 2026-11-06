@@ -77,7 +77,7 @@ How each tool is used is in the [personal data](personal-data.md) guide.
         podman exec urna-db pg_dump -U urna urna | grep -cw '9900[0-9]\{4\}'
       ```
 
-      If it gives more, write it down: it is one of the [limits of this version](personal-data.md#limits-of-this-version).
+      If it gives more, it is a bug in the app: write it down and report it as the [security policy](../../SECURITY.en.md) says.
 - [ ] Delete the backups from before the purge, on the server and on your computer, as [Backups](personal-data.md#backups) says.
 - [ ] Delete the server. Check in the cloud console that nothing is left charging.
 

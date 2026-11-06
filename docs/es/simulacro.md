@@ -79,7 +79,7 @@ Cómo se usa cada herramienta está en la guía de [datos personales](datos-pers
         podman exec urna-db pg_dump -U urna urna | grep -cw '9900[0-9]\{4\}'
       ```
 
-      Si da más, anotalo: es uno de los [límites de esta versión](datos-personales.md#límites-de-esta-versión).
+      Si da más, es un error de la app: anotalo y avisá como dice la [política de seguridad](../../SECURITY.md).
 
 - [ ] Borrá las copias de seguridad anteriores a la purga, en el servidor y en tu computadora, como dice
       [Las copias de seguridad](datos-personales.md#las-copias-de-seguridad).

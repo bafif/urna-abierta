@@ -63,8 +63,9 @@ the phone), “Share” or “Copy the link”. Each link works only once, only 
 | Poll watchers can see the traffic light of their table, if you turn it on | Yes | No | No |
 
 With the code, the app shows “One more security step”: each person scans a code with an authenticator app, such as Google Authenticator
-or Aegis, and types the six digits. That includes you. If you later create a municipal, provincial or national election, the app raises
-the level by itself; it never lowers it. It is changed in **More**, **Security**.
+or Aegis, and types the six digits. That includes you. While a municipal, provincial or national election is open, the server applies at
+least its level and does not let anyone lower it; once it is closed, the one you chose comes back. It is changed in **More**,
+**Security**.
 
 ## 3. The election
 
@@ -87,8 +88,9 @@ PDF is read is in [Loading the roll](installation.md#loading-the-roll).
 
 If “N people of the roll need a look” appears, tap it: correct what is wrong or tap “It is fine”.
 
-Upload the final roll before poll watchers prepare their table. What you change afterwards does not reach the phones that already
-prepared it.
+It is best to upload the final roll before poll watchers prepare their table. If you correct it or upload it again afterwards, the change
+reaches the phones that already prepared it the next time they have signal, and the poll watcher sees “The roll of your table was
+updated.”. Uploading it again does not undo what you corrected, nor bring back whoever was erased on request.
 
 ## 5. Tables and districts
 
@@ -122,7 +124,8 @@ Before starting, download a backup in **More**, **Backups**, and another one eac
 
 Tap “Open the vote”. From then on, “See how it goes” shows first the tables that need something:
 
-- “urgent alert”: a poll watcher said something is wrong. Tap the table, call them, and once it is solved tap “It is resolved”;
+- “urgent alert”: a poll watcher said something is wrong. Tap the table, call them, and once it is solved tap “It is resolved”. While
+  “See how it goes” is on screen, a new alert makes the phone vibrate, beeps and shows on the app's icon;
 - “envelopes do not match”: when counting the envelopes, the number did not match the crossed-out names;
 - “no data”: the table has not sent anything for a while. It may just be missing signal: call the poll watcher.
 
@@ -137,7 +140,8 @@ If two poll watchers enter different numbers at the same table, “two different
 stands” on the right one.
 
 Before closing, check table by table that the count and the photo are there, and that poll watchers see “Everything arrived”. Then tap
-“Close the election”: what arrives later is kept apart and does not count.
+“Close the election”: what arrives later is kept apart and does not count. From then on, poll watchers and chiefs no longer see the roll;
+each phone deletes it as soon as it has sent everything, and the poll watcher sees “The election is over. Thank you”.
 
 ## 9. Erasing the data
 
@@ -158,8 +162,8 @@ urgent does not go out, they call: there is no need to wait for the app.
 You notice because nobody can get in, phones pile up items “not sent” and the panel shows every table with “no data”.
 
 1. Open the address from a computer with internet. If it does not load, the problem is the server.
-2. Connect over SSH and run `sudo urna estado`. Each line says `bien` (fine), `espera` (wait) or `FALLA` (failure), and what to do. The
-   server speaks Spanish:
+2. Connect over SSH and run `sudo urna estado`. Each line says `bien` (fine), `aviso` (notice), `espera` (wait) or `FALLA` (failure), and
+   what to do. A notice is not a failure: it is worth knowing, but everything works. The server speaks Spanish:
 
    | It says | What to do |
    |---|---|
@@ -167,6 +171,7 @@ You notice because nobody can get in, phones pile up items “not sent” and th
    | `FALLA  el servidor responde: no contesta` | Look at what the server said last, with the command below |
    | `FALLA  disco: quedan N MB` | Download the latest backup from the app and delete old backups from `/opt/urna-abierta/copias` |
    | `FALLA  copias: no hay una reciente` | `sudo urna copia` |
+   | `FALLA  copias en el bucket` | `sudo urna copia`, and look at what it says. [Backups off the server](servers.md#backups-off-the-server) explains it |
    | `FALLA  hora` | `sudo timedatectl set-ntp true`. Without the right time, the certificate and the codes fail |
    | `FALLA  certificado` | Open ports 80 and 443 in the cloud, as the [servers guide](servers.md#without-giving-the-installer-any-key) says |
    | `FALLA  fotos` | [Photos in S3 storage](servers.md#photos-in-s3-storage) explains it |
@@ -207,7 +212,8 @@ The photo stays saved on the phone until it arrives, and counts among what is le
 announced, but it has not arrived yet. It appears by itself when it does.”
 
 1. The poll watcher leaves the app open for a while with signal. A photo weighs much more than a crossed-out name, and with weak signal it
-   takes time.
+   takes time. If the phone says “The server did not accept the photo of the tally sheet. Take it again.”, they take another one: the
+   rest keeps going out.
 2. If no phone's photo goes up, run `sudo urna estado` and look at the `fotos` and `disco` lines.
 3. Meanwhile, they take another photo of the sheet with the phone's camera and send it to their chief by WhatsApp. The one in the app keeps
    waiting and gets in by itself.
@@ -242,7 +248,7 @@ This list is from November 2026. A new version may solve some of them: check its
 - An election cannot be edited from the app after it is created: check the days and the lists before “Create the election”.
 - A team member's task cannot be changed, nor can they get a second one: remove them and add them again. That is why “See the sensitive
   categories” does not work yet: it has to go together with “Note who votes for us”.
-- Only a table's name and where it is can be changed.
+- Only a table's name and where it is can be changed, and only until the election is closed.
 - There is no view with every table at once for the vote count: it is checked table by table.
-- Closing the election does not cut the poll watcher's access to the roll of their table.
+- An urgent alert beeps and vibrates only with “See how it goes” on screen: from another screen, such as a table's detail, it does not.
 - The app does not remind you when to purge.

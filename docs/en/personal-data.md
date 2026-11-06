@@ -17,14 +17,14 @@ data law”. What is loaded, who sees it, where the server is and when it is era
 
 | What | Where it comes from | Who sees it |
 |---|---|---|
-| Roll: name, document, student number, order number, table and address, if the file has them | The file you upload | Coordination sees everything. The poll watcher sees only their table and, depending on security, the full document or its last 3 digits |
+| Roll: name, document, student number, order number, table and address, if the file has them | The file you upload | Coordination sees everything. The poll watcher sees only their table until the election is closed and, depending on security, the full document or its last 3 digits. Their phone knows each person by a random identifier, never by their document |
 | Who voted and at what time | The poll watchers' phones | The poll watcher of that table, and coordination when handling a request. Everyone else sees only how many |
 | Traffic light: one category per person | Whoever notes down in the traffic light | Whoever has that task. Sensitive categories, only whoever has the separate permission |
 | Consent: date and how it was given | You enter it | Coordination |
 | Team: name and phone of each person, and their devices | You enter it when adding someone | Coordination and system |
 | Log: who did what and when | The server, by itself | Coordination and system |
 | Photos of the tally sheets | The poll watchers | The chief of that table and coordination |
-| Backups: all of the above | The server, every 6 hours | Whoever holds the recovery key |
+| Backups: all of the above | The server, every 6 hours. If you set up S3 storage, they also go there | Whoever holds the recovery key |
 
 The server checks every request and hands over only what that person may see. What each task can do is in **More**, **Permissions**.
 
@@ -90,8 +90,9 @@ erasure goes into the **Log**, with who did it and when.
    person is worse than not answering.
 2. **Find them.** Type at least three letters of the surname, or the document, and tap “Search”. It searches every election that was not
    purged, and shows up to 25 people, each with their election. If they appear in several elections, handle each one.
-3. **If they ask to see their data.** Tap “Download everything we hold”. A file downloads with their roll row, their traffic light
-   category, their consent and the times they were crossed out. Deadline: 10 calendar days.
+3. **If they ask to see their data.** Tap “Download everything we hold”. A page downloads, in the language of the screen, to send or
+   print: their roll data, where they vote, whether they voted, their traffic light category, their consent and their rights. Deadline:
+   10 calendar days.
 4. **If they ask to correct it.** In “Correct their data”, change the name or the document and tap “Save the correction”. Deadline: 5
    business days.
 5. **If they ask to erase it.** Tap “Erase their data” and confirm. Their name, document, student number, address, consent and traffic
@@ -101,11 +102,15 @@ erasure goes into the **Log**, with who did it and when.
 
 Three things to keep in mind:
 
-- **The file from “Download everything we hold” is technical** (JSON). The law asks for clear information without codes, so turn it into
-  a note anyone can read before handing it over.
-- **Phones that already prepared the table keep the roll as they downloaded it.** Correcting or erasing someone on the server does not
-  change it on those phones. Each phone deletes its roll the first time the app opens a week after the last voting day, if it has sent
-  everything.
+- **The page covers a single election.** If the same document is in other rolls, the page names them: handle each one. A sensitive
+  category shows only if whoever downloads the page has the task “See the sensitive categories”; otherwise the page says there is one
+  and that someone with that permission has to prepare it.
+- **A correction or an erasure reaches the phones that already prepared the table** the next time they have signal: each one checks every
+  5 minutes whether the roll of its table changed, and downloads it again. Uploading the roll again undoes neither corrections nor
+  erasures.
+- **Each phone deletes its roll when the election is closed,** as soon as it hears so and has sent everything. A phone that does not hear
+  it, for lack of signal, deletes it after 6 in the morning of the day after the last voting day, plus the hours the security level allows:
+  12 in a university election, 6 in a municipal or provincial one, none in a national one.
 - **The law has cases where erasure does not apply** (art. 16, sec. 5). If someone asks to leave the roll during the vote, ask before
   touching anything.
 
@@ -130,6 +135,7 @@ sensitive: it says something about their ideas or affiliation…” makes it:
 
 - visible only to whoever has the task “See the sensitive categories”;
 - logged as “Looked at sensitive categories” each time someone looks at it;
+- changed or removed only by whoever has that task;
 - stored encrypted in the database, with a key that is not in the database.
 
 The safest choice is not to note the political opinions of anyone who has not consented. If you use sensitive categories, record each
@@ -145,10 +151,10 @@ Only totals remain. This cannot be undone.” The election becomes “Finished, 
 
 | Erased | Kept |
 |---|---|
-| Names, documents, student numbers and addresses of the roll | Each table's totals: envelopes and vote count |
+| Names, documents, student numbers and addresses of the roll, and each person's identifiers and order numbers | Each table's totals: envelopes and vote count |
 | Traffic light marks and consents | The photos of the tally sheets |
 | Who voted and at what time | The team: name and phone of each person |
-| | The log |
+| | The log, which names each person by a reference that no longer leads to anyone |
 | | Backups made before, until they rotate |
 
 - **Decide the date before the election,** with the lawyer: for example, once no claim about the result is possible anymore. The app does
@@ -161,8 +167,9 @@ Only totals remain. This cannot be undone.” The election becomes “Finished, 
 ## Backups
 
 The server makes a backup every 6 hours, encrypted with the recovery key, and keeps the last 28: one week. They live on the same server,
-in `/opt/urna-abierta/copias`, and the app cannot delete them. Each backup carries the whole database, the photos on disk and the key that
-opens the sensitive categories.
+in `/opt/urna-abierta/copias`, and the app cannot delete them. If you set up S3 storage, each backup also goes to the `backups/` folder
+of the bucket, which keeps the newest 28 (the [servers guide](servers.md#backups-off-the-server) explains it). Each backup carries the
+whole database, the photos on disk and the key that opens the sensitive categories.
 
 **Purging or erasing a person does not touch the backups.** Their data stays there until those backups rotate, a week later, and in every
 backup you downloaded to a computer, for good.
@@ -171,7 +178,8 @@ To avoid waiting that week, after purging and once you are sure you will not nee
 
 1. Connect to the server over SSH and list the backups: `sudo ls -l /opt/urna-abierta/copias`. The time in the name is UTC: three hours
    ahead of Argentina.
-2. Delete the ones from before the purge, one by one: `sudo rm /opt/urna-abierta/copias/urna-YYYYMMDD-HHMMSS.tar.gpg`.
+2. Delete the ones from before the purge, one by one: `sudo rm /opt/urna-abierta/copias/urna-YYYYMMDD-HHMMSS.tar.gpg`. If backups go to
+   a bucket, delete them there too, from the provider's page.
 3. Make a new backup, now without personal data: `sudo urna copia`.
 4. Delete the backups you downloaded from the app, from your computer and from any cloud drive or trash where you put them.
 
@@ -186,8 +194,9 @@ already had.
 - **Each person gets in with their own single-use link,** which expires after 14 days. There are no passwords to guess or share.
 - **The security level** is chosen in **More**, **Security**. In a municipal, provincial or national election, everyone except poll
   watchers confirms with a code from an app such as Google Authenticator or Aegis, and the poll watcher sees only the last 3 digits of
-  each document.
-- **The log cannot be changed from the app.** It records downloads of the roll, of people's data and of backups.
+  each document. While an election of that kind is open, the server applies at least that level and does not let anyone lower it.
+- **The log cannot be changed from the app,** and the database refuses to edit, delete or empty it. It records downloads of the roll, of
+  people's data and of backups, and who searched for or looked at whom, by a random reference, without names or documents.
 - **Backups are encrypted,** and they do not open without the recovery key.
 - **Tell poll watchers and chiefs that what they see is confidential** (art. 10), and remove from the team whoever no longer needs it.
 
@@ -195,14 +204,14 @@ already had.
 
 This list is from November 2026. A new version may solve some of them: check its notes.
 
-- In a real roll, each person's internal identifier carries their full document. That identifier stays after erasing them or purging, in
-  the database and in the log, and it reaches the poll watcher's phone even though the screen shows only 3 digits.
-- Uploading the roll again can undo corrections and erasures made on request. After erasing someone, do not upload another roll; if there
-  is no other way, erase them again.
-- Closing the election does not cut the poll watcher's server access to the roll of their table.
-- “Download everything we hold” also shows sensitive categories to whoever handles requests, even without the separate permission.
+- Until the purge, the internal identifier of an erased person comes from their document with the field key, so that they are known
+  again if the roll is uploaded again. Whoever has that key, which travels in the backups, can try every document until theirs matches.
+  The erased row stays at its table and with its order number, without name or document, until the purge.
+- Correcting a person's document does not change their internal identifier, which often carries the document the file had: the old one
+  stays there until they are erased or the election is purged.
 - A category can be marked sensitive only when it is created, and a person gets a single task from the app.
 - Consent cannot be withdrawn or cleared from the app: it is replaced by another one, or the data is erased.
 - The encryption of sensitive categories protects a copy of the database taken without the `.env` file. It does not protect a copy of the
   whole disk, nor a backup opened with the key, because the key travels with them.
-- Backups do not leave the server by themselves: if you want one elsewhere, download it from the app.
+- Backups leave the server by themselves only if you set up S3 storage, and one over 5 GB does not fit. Otherwise, to have one elsewhere,
+  download it from the app.
