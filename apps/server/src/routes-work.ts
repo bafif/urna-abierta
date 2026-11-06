@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, auditView, can, canReachTable, erasedId, getSetting, requires, seal, unseal, type Actor } from './actor.ts';
+import { audit, auditView, can, canReachTable, erasedId, getSetting, requires, rollKey, seal, unseal, type Actor } from './actor.ts';
 import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
 
@@ -46,7 +46,7 @@ export async function eraseElector(pool: pg.Pool, election: string, id: string):
     await client.query('BEGIN');
     // A mark a phone sends meanwhile is either stored before, and renamed here, or after, and renamed on the way in.
     await lockTables(client, election);
-    const found = await client.query('SELECT ref, erased_at IS NOT NULL AS erased FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
+    const found = await client.query('SELECT ref, search, corrected_at IS NOT NULL AS corrected, erased_at IS NOT NULL AS erased FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
     const row = found.rows[0];
     if (!row || row.erased) {
       await client.query('ROLLBACK');
@@ -56,9 +56,10 @@ export async function eraseElector(pool: pg.Pool, election: string, id: string):
     await client.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
     await client.query(
       `UPDATE electors SET id = $3, ref = gen_random_uuid(), erased_at = now(), full_name = 'Borrado a pedido', search = '', document = NULL, file_number = NULL, address = NULL,
-         extra = '{}', needs_review = false, review = NULL, consent = NULL
+         extra = '{}', needs_review = false, review = NULL, consent = NULL, source_key = COALESCE(source_key, $4)
        WHERE election_id = $1 AND id = $2`,
-      [election, id, renamed],
+      // What the file said about them stays, keyed: the same file loaded again knows them even if their id was a position.
+      [election, id, renamed, row.corrected || !row.search ? null : rollKey(row.search)],
     );
     await client.query(
       `UPDATE operations SET payload = jsonb_set(payload, '{elector}', to_jsonb($3::text))

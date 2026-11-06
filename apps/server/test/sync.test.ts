@@ -495,6 +495,29 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await pool.query(`SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND full_name <> ''`, [id])).rows[0].n).toBe(0);
     });
 
+    it('a roll without DNI or legajo names people by their row: a row added on top moves no erasure and no correction to someone else', async () => {
+      const id = await newElection();
+      const csv = (text: string, preview = false) =>
+        app.inject({ method: 'POST', url: `/api/elections/${id}/roll${preview ? '?preview=1' : ''}`, payload: Buffer.from(text), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'text/csv' } });
+      const first = 'Apellido y nombre;DNI\nAlfa, Ana;123456\nBeta, Bea;654321\nGama, Gus;111222\n';
+      expect((await csv(first)).statusCode).toBe(200);
+      const rows = async () => (await pool.query('SELECT id, full_name, document FROM electors WHERE election_id = $1 AND erased_at IS NULL ORDER BY full_name', [id])).rows;
+      expect((await rows()).map((row) => row.id)).toEqual(['f-1', 'f-2', 'f-3']);
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${id}/f-2`)).statusCode).toBe(200);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/f-3`, { full_name: 'Gama, Gustavo' })).statusCode).toBe(200);
+
+      const second = 'Apellido y nombre;DNI\nCero, Ceci;222333\nAlfa, Ana;123456\nBeta, Bea;654321\nGama, Gus;111222\n';
+      expect((await csv(second, true)).json()).toMatchObject({ people: 3, added: 1, kept: 2, missing: 0, erased: 1, corrected: 1 });
+      expect((await csv(second)).statusCode).toBe(200);
+      // Each one keeps their own id, the new person takes nobody's, and whoever asked to be erased stays out.
+      expect(await rows()).toEqual([
+        { id: 'f-1', full_name: 'Alfa, Ana', document: '123456' },
+        { id: 'f-5', full_name: 'Cero, Ceci', document: '222333' },
+        { id: 'f-3', full_name: 'Gama, Gustavo', document: '111222' },
+      ]);
+      expect((await csv(first, true)).json()).toMatchObject({ people: 2, added: 0, kept: 2, missing: 1, erased: 1, corrected: 1 });
+    });
+
     it('refuses what it cannot read, and a roll made with an external AI if the election forbids it', async () => {
       const id = await newElection();
       expect((await upload(id, new TextEncoder().encode('nada'))).statusCode).toBe(422);

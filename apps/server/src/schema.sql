@@ -95,6 +95,8 @@ ALTER TABLE electors ADD COLUMN IF NOT EXISTS ref uuid NOT NULL DEFAULT gen_rand
 ALTER TABLE electors ADD COLUMN IF NOT EXISTS corrected_at timestamptz;
 -- Someone who asked to be erased: the row stays, with nothing of them, so that the totals of the table still add up.
 ALTER TABLE electors ADD COLUMN IF NOT EXISTS erased_at timestamptz;
+-- Who the person was in the file, keyed with the field key: a roll without DNI or legajo names people by their row.
+ALTER TABLE electors ADD COLUMN IF NOT EXISTS source_key text;
 CREATE INDEX IF NOT EXISTS electors_table ON electors (table_id, order_number);
 CREATE INDEX IF NOT EXISTS electors_document ON electors (document);
 

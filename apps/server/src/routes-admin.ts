@@ -4,8 +4,8 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, requires, securityProfile, setSetting, type Actor } from './actor.ts';
+import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronElector, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
+import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, requires, rollKey, securityProfile, setSetting, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -35,6 +35,62 @@ export async function correctElector(pool: pg.Pool, actor: Actor, election: stri
   if (!corrected.rows[0]) return 'not_found';
   await audit(pool, actor, 'elector.corrected', corrected.rows[0].ref);
   return 'ok';
+}
+
+const POSITION_ID = /^f-(\d+)$/;
+const documentOf = (e: PadronElector) => e.identifiers?.find((x) => x.type.toUpperCase() !== 'LEGAJO')?.value ?? null;
+const searchOf = (e: PadronElector) => foldText(`${e.full_name} ${documentOf(e) ?? ''}`);
+
+interface LoadedElector {
+  id: string;
+  corrected: boolean;
+  erased: boolean;
+  source_key: string | null;
+  search: string;
+}
+
+/**
+ * Who in a new file is who in the roll already loaded. Most ids say it by themselves: d-<DNI>, l-<legajo>, a scanner's.
+ * A position id, f-<row>, does not: one row added at the top moves everyone below it. Those people are matched by what
+ * the file said about them, kept keyed in source_key, so that an erasure or a correction stays with its person and
+ * someone new never takes the id of someone already loaded.
+ */
+function matchRoll(incoming: PadronElector[], loaded: LoadedElector[]): { electors: PadronElector[]; erased: number } {
+  const erasedIds = new Set(loaded.filter((row) => row.erased).map((row) => row.id));
+  const erasedKeys = new Map<string, number>();
+  const sameKey = new Map<string, string[]>();
+  for (const row of loaded) {
+    if (row.erased) {
+      if (row.source_key) erasedKeys.set(row.source_key, (erasedKeys.get(row.source_key) ?? 0) + 1);
+    } else if (POSITION_ID.test(row.id)) {
+      // Loaded before the key was kept: what the row says is what the file said, unless someone corrected it.
+      const key = row.source_key ?? (row.corrected ? null : rollKey(row.search));
+      if (key) sameKey.set(key, [...(sameKey.get(key) ?? []), row.id]);
+    }
+  }
+  const taken = new Set(loaded.map((row) => row.id));
+  let next = [...taken, ...incoming.map((e) => e.id)].reduce((most, id) => Math.max(most, Number(POSITION_ID.exec(id)?.[1] ?? 0)), 0) + 1;
+  let erased = 0;
+  const electors: PadronElector[] = [];
+  for (const elector of incoming) {
+    if (!POSITION_ID.test(elector.id)) {
+      if (erasedIds.size > 0 && erasedIds.has(erasedId(elector.id))) erased += 1;
+      else electors.push(elector);
+      continue;
+    }
+    const key = rollKey(searchOf(elector));
+    const left = erasedKeys.get(key) ?? 0;
+    if (left > 0) {
+      erasedKeys.set(key, left - 1);
+      erased += 1;
+      continue;
+    }
+    const same = sameKey.get(key) ?? [];
+    const id = same.includes(elector.id) ? elector.id : (same[0] ?? (taken.has(elector.id) ? `f-${next++}` : elector.id));
+    sameKey.set(key, same.filter((other) => other !== id));
+    electors.push(id === elector.id ? elector : { ...elector, id });
+  }
+  return { electors, erased };
 }
 
 /** Once an election closes, its roll and its tables stay as they are: what remains is reviewing it and purging it. */
@@ -274,19 +330,18 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (externalAi === 'forbidden') return reply.code(422).send({ error: 'external_ai_forbidden' });
     // The other profiles let it in, saying so before it is loaded.
     if (externalAi) read.problems.push({ where: 'file', problem: externalAi === 'paid-only' ? 'external_ai_paid_only' : 'external_ai' });
-    const existing = await pool.query('SELECT id, corrected_at IS NOT NULL AS corrected, erased_at IS NOT NULL AS erased FROM electors WHERE election_id = $1', [election]);
+    const existing = await pool.query<LoadedElector>('SELECT id, corrected_at IS NOT NULL AS corrected, erased_at IS NOT NULL AS erased, source_key, search FROM electors WHERE election_id = $1', [election]);
     // Whoever asked to be erased is not loaded again, and what someone corrected stays corrected.
-    const erased = new Set(existing.rows.filter((row) => row.erased).map((row) => row.id));
+    const { electors, erased } = matchRoll(read.padron.electors, existing.rows);
     const known = new Set(existing.rows.filter((row) => !row.erased).map((row) => row.id));
-    const corrected = new Set(existing.rows.filter((row) => row.corrected).map((row) => row.id));
-    const electors = read.padron.electors.filter((e) => erased.size === 0 || !erased.has(erasedId(e.id)));
+    const corrected = new Set(existing.rows.filter((row) => row.corrected && !row.erased).map((row) => row.id));
     const incoming = new Set(electors.map((e) => e.id));
     const summary = {
       people: electors.length,
       added: electors.filter((e) => !known.has(e.id)).length,
       kept: electors.filter((e) => known.has(e.id)).length,
       missing: [...known].filter((id) => !incoming.has(id)).length,
-      erased: read.padron.electors.length - electors.length,
+      erased,
       corrected: electors.filter((e) => corrected.has(e.id)).length,
       toReview: electors.filter((e) => e.review?.status === 'pending' && !corrected.has(e.id)).length,
       withoutTable: electors.filter((e) => !e.table).length,
@@ -310,11 +365,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       for (let i = 0; i < electors.length; i += 500) {
         const part = electors.slice(i, i + 500);
         const value = (fn: (e: (typeof part)[number]) => unknown) => part.map(fn);
-        const documentOf = (e: (typeof part)[number]) => e.identifiers?.find((x) => x.type.toUpperCase() !== 'LEGAJO')?.value ?? null;
         await client.query(
-          `INSERT INTO electors (election_id, id, table_id, order_number, full_name, search, document, file_number, address, extra, needs_review, review)
-           SELECT $1, * FROM unnest($2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::jsonb[], $11::boolean[], $12::jsonb[])
-           ON CONFLICT (election_id, id) DO UPDATE SET
+          `INSERT INTO electors (election_id, id, table_id, order_number, full_name, search, document, file_number, address, extra, needs_review, review, source_key)
+           SELECT $1, * FROM unnest($2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::jsonb[], $11::boolean[], $12::jsonb[], $13::text[])
+           ON CONFLICT (election_id, id) DO UPDATE SET source_key = EXCLUDED.source_key,
              table_id = COALESCE(EXCLUDED.table_id, electors.table_id), order_number = COALESCE(EXCLUDED.order_number, electors.order_number),
              full_name = CASE WHEN electors.corrected_at IS NULL THEN EXCLUDED.full_name ELSE electors.full_name END,
              search = CASE WHEN electors.corrected_at IS NULL THEN EXCLUDED.search ELSE electors.search END,
@@ -328,13 +382,14 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
             value((e) => (e.table ? named.get(e.table) : null)),
             value((e) => e.order ?? null),
             value((e) => e.full_name),
-            value((e) => foldText(`${e.full_name} ${documentOf(e) ?? ''}`)),
+            value(searchOf),
             value(documentOf),
             value((e) => e.identifiers?.find((x) => x.type.toUpperCase() === 'LEGAJO')?.value ?? null),
             value((e) => e.address ?? null),
             value((e) => JSON.stringify(e.extra ?? {})),
             value((e) => e.review?.status === 'pending'),
             value((e) => (e.review ? JSON.stringify(e.review) : null)),
+            value((e) => rollKey(searchOf(e))),
           ],
         );
       }
