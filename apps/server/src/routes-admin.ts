@@ -27,10 +27,15 @@ export async function correctElector(pool: pg.Pool, actor: Actor, election: stri
   const name = text(body?.full_name);
   if (!name) return 'invalid_name';
   const document = typeof body?.document === 'string' ? body.document.replace(/\D/g, '') || null : null;
+  // A row loaded before what the file said was kept keyed still says it, until this correction: it is kept now, so
+  // that the same file loaded again knows them, even by a position id. Only if nobody changed the row meanwhile.
+  const before = await pool.query('SELECT search FROM electors WHERE election_id = $1 AND id = $2 AND erased_at IS NULL AND corrected_at IS NULL AND source_key IS NULL', [election, elector]);
+  const search: string | null = before.rows[0]?.search || null;
   const corrected = await pool.query(
-    `UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5 || COALESCE(' ' || COALESCE($4, document), ''), needs_review = false, corrected_at = now()
+    `UPDATE electors SET full_name = $3, document = COALESCE($4, document), search = $5 || COALESCE(' ' || COALESCE($4, document), ''), needs_review = false, corrected_at = now(),
+       source_key = COALESCE(source_key, CASE WHEN corrected_at IS NULL AND search = $6 THEN $7 END)
      WHERE election_id = $1 AND id = $2 AND erased_at IS NULL RETURNING ref`,
-    [election, elector, name, document, foldText(name)],
+    [election, elector, name, document, foldText(name), search, search ? rollKey(search) : null],
   );
   if (!corrected.rows[0]) return 'not_found';
   await audit(pool, actor, 'elector.corrected', corrected.rows[0].ref);
@@ -53,19 +58,25 @@ interface LoadedElector {
  * Who in a new file is who in the roll already loaded. Most ids say it by themselves: d-<DNI>, l-<legajo>, a scanner's.
  * A position id, f-<row>, does not: one row added at the top moves everyone below it. Those people are matched by what
  * the file said about them, kept keyed in source_key, so that an erasure or a correction stays with its person and
- * someone new never takes the id of someone already loaded.
+ * someone new never takes the id of someone already loaded. Rows loaded before that key was kept, and erased or
+ * corrected without it, have only their id left: a row of the file that matches nobody else by what it says, and has
+ * that id, is them.
  */
 function matchRoll(incoming: PadronElector[], loaded: LoadedElector[]): { electors: PadronElector[]; erased: number } {
   const erasedIds = new Set(loaded.filter((row) => row.erased).map((row) => row.id));
   const erasedKeys = new Map<string, number>();
   const sameKey = new Map<string, string[]>();
+  const erasedUnkeyed = new Set<string>();
+  const correctedUnkeyed = new Set<string>();
   for (const row of loaded) {
     if (row.erased) {
       if (row.source_key) erasedKeys.set(row.source_key, (erasedKeys.get(row.source_key) ?? 0) + 1);
+      else erasedUnkeyed.add(row.id);
     } else if (POSITION_ID.test(row.id)) {
       // Loaded before the key was kept: what the row says is what the file said, unless someone corrected it.
       const key = row.source_key ?? (row.corrected ? null : rollKey(row.search));
       if (key) sameKey.set(key, [...(sameKey.get(key) ?? []), row.id]);
+      else correctedUnkeyed.add(row.id);
     }
   }
   const taken = new Set(loaded.map((row) => row.id));
@@ -86,7 +97,12 @@ function matchRoll(incoming: PadronElector[], loaded: LoadedElector[]): { electo
       continue;
     }
     const same = sameKey.get(key) ?? [];
-    const id = same.includes(elector.id) ? elector.id : (same[0] ?? (taken.has(elector.id) ? `f-${next++}` : elector.id));
+    if (same.length === 0 && erasedUnkeyed.size > 0 && erasedUnkeyed.delete(erasedId(elector.id))) {
+      erased += 1;
+      continue;
+    }
+    const own = same.length === 0 && correctedUnkeyed.delete(elector.id);
+    const id = own || same.includes(elector.id) ? elector.id : (same[0] ?? (taken.has(elector.id) ? `f-${next++}` : elector.id));
     sameKey.set(key, same.filter((other) => other !== id));
     electors.push(id === elector.id ? elector : { ...elector, id });
   }
