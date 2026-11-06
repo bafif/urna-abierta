@@ -461,7 +461,8 @@ test('whoever only looks after the system lands on what they can do, and sees no
   // The team is theirs to manage, but inviting is not: there is no button the server would refuse.
   await page.getByRole('button', { name: 'Volver' }).click();
   await page.getByRole('button', { name: /^Tu equipo/ }).click();
-  await page.getByTestId('team-person').filter({ hasText: 'Marta' }).click();
+  // The first one on the list joined before them: it is never themselves.
+  await page.getByTestId('team-person').first().click();
   await expect(page.getByRole('button', { name: 'Sacar del equipo' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Mandar otra invitación' })).toHaveCount(0);
 });
