@@ -292,6 +292,51 @@ describe('when creating a server fails, nothing is left charging', () => {
   });
 });
 
+describe('what the failure screen says', () => {
+  const ui = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const patterns = new Function(`return ${/const WHY = (\[[\s\S]*?\n {2}\]);/.exec(ui)![1]}`)() as [RegExp, string][];
+  const why = (problem: string) => patterns.find(([pattern]) => pattern.test(problem))?.[1] ?? 'unknown';
+  const keys = (language: 'es' | 'en') => new Set([...ui.slice(ui.indexOf(`    ${language}: {`)).matchAll(/^ {6}'([\w.]+)':/gm)].map((match) => match[1]));
+
+  it('explains the usual failures from what the clouds, SSH and the server say', () => {
+    expect(why('oracle_no_capacity: oracle_POST_instances: InternalError Out of host capacity.')).toBe('oracle_capacity');
+    expect(why('oracle_POST_vcns: NotAuthenticated The required information to complete authentication was not provided.')).toBe('oracle_auth');
+    expect(why('oracle_POST_publicIps: NotAuthorizedOrNotFound Authorization failed or requested resource not found.')).toBe('oracle_region');
+    expect(why('aws_AllocateAddress: AuthFailure AWS was not able to validate the provided access credentials')).toBe('aws_auth');
+    expect(why('aws_RunInstances: UnauthorizedOperation You are not authorized to perform this operation.')).toBe('aws_permission');
+    expect(why('aws_AllocateAddress: AddressLimitExceeded The maximum number of addresses has been reached.')).toBe('aws_limit');
+    expect(why('aws_no_default_network')).toBe('aws_network');
+    expect(why('google_login: Invalid JWT Signature.')).toBe('google_auth');
+    expect(why('google_POST: Compute Engine API has not been used in project 123 before or it is disabled.')).toBe('google_api');
+    expect(why('google_POST: This API method requires billing to be enabled.')).toBe('google_billing');
+    expect(why('google_operation: ZONE_RESOURCE_POOL_EXHAUSTED')).toBe('google_capacity');
+    expect(why('aws_server_did_not_start')).toBe('slow_cloud');
+    expect(why('script_failed: urna-abierta: needs_debian')).toBe('needs_debian');
+    expect(why('script_failed: E: Could not get lock /var/lib/dpkg/lock-frontend')).toBe('apt');
+    expect(why('script_failed: Error: something else | exit')).toBe('script');
+    expect(why('All configured authentication methods failed')).toBe('ssh');
+    expect(why('connect ECONNREFUSED 203.0.113.24:22')).toBe('ssh');
+    expect(why('Command failed: podman pull ghcr.io/bafif/urna-abierta-server:latest\nError: unauthorized')).toBe('pull');
+    expect(why('no_engine')).toBe('no_engine');
+    expect(why('algo que nadie esperaba')).toBe('unknown');
+  });
+
+  it('has every explanation and every server step in both languages', () => {
+    const es = keys('es');
+    const en = keys('en');
+    for (const name of [...new Set(patterns.map(([, key]) => key)), 'unknown']) {
+      expect(es.has(`why.${name}`), `why.${name} en castellano`).toBe(true);
+      expect(en.has(`why.${name}`), `why.${name} in English`).toBe(true);
+    }
+    const steps = [...readFileSync(new URL('../../../deploy/server/instalar.sh', import.meta.url), 'utf8').matchAll(/\bsay '(\w+)'|\bsay "(\w+) /g)].map((match) => match[1] ?? match[2]);
+    expect(steps.length).toBeGreaterThan(5);
+    for (const step of steps.filter((each) => each !== 'needs_debian')) {
+      expect(es.has(`server.${step}`), `server.${step} en castellano`).toBe(true);
+      expect(en.has(`server.${step}`), `server.${step} in English`).toBe(true);
+    }
+  });
+});
+
 describe('sending the theme of a file', () => {
   it('goes with the installation code, and says when it could not', async () => {
     const { request, calls } = fakeCloud(() => ({ ok: true }));
