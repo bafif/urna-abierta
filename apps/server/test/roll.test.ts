@@ -27,6 +27,8 @@ describe.skipIf(!url)('loading a roll, against a real Postgres', () => {
     const own = new URL(url!);
     own.pathname = `/${name}`;
     pool = new pg.Pool({ connectionString: own.toString(), max: 4 });
+    // Dropping the database at the end can still catch a connection on its way out: that is not a failure.
+    pool.on('error', () => undefined);
     await migrate(pool);
     process.env.URNA_FIELD_KEY = 'clave de prueba';
     app = buildApp(pool);
