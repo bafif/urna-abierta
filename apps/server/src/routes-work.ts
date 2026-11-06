@@ -110,10 +110,17 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
          ORDER BY o.device_time DESC`,
         [scope],
       ),
-      pool.query(`SELECT table_id, type, payload FROM operations WHERE table_id = ANY($1) AND type IN ('envelopes.counted', 'tally.submitted') AND NOT quarantined ORDER BY seq`, [scope]),
+      pool.query(`SELECT table_id, type, payload, received_at FROM operations WHERE table_id = ANY($1) AND type IN ('envelopes.counted', 'tally.submitted') AND NOT quarantined ORDER BY seq`, [scope]),
     ]);
-    const decided = await pool.query('SELECT table_id, category FROM tally_decisions WHERE table_id = ANY($1)', [scope]);
-    const settled = new Set(decided.rows.map((row) => `${row.table_id}:${row.category}`));
+    const decided = await pool.query(
+      `SELECT d.table_id, d.category, d.decided_at, o.payload->'results' AS results FROM tally_decisions d JOIN operations o ON o.id = d.operation_id WHERE d.table_id = ANY($1)`,
+      [scope],
+    );
+    const decisionOf = new Map(decided.rows.map((row) => [`${row.table_id}:${row.category}`, row]));
+    const settled = (table: string, category: string) => {
+      const decision = decisionOf.get(`${table}:${category}`);
+      return Boolean(decision) && !correctedSince(decision, counts.rows.filter((row) => row.table_id === table && row.type === 'tally.submitted' && row.payload.category === category));
+    };
     const needsReview = (table: string) => {
       const own = counts.rows.filter((row) => row.table_id === table);
       const envelopes = own.filter((row) => row.type === 'envelopes.counted').at(-1)?.payload;
@@ -126,7 +133,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         // A table that counted its envelopes has closed for the day: its silence says nothing.
         countedDays: own.filter((row) => row.type === 'envelopes.counted').map((row) => row.payload.day),
         envelopesDiffer: Boolean(envelopes && envelopes.envelopes !== envelopes.marked),
-        talliesDiffer: [...versions].some(([category, distinct]) => distinct.size > 1 && !settled.has(`${table}:${category}`)),
+        talliesDiffer: [...versions].some(([category, distinct]) => distinct.size > 1 && !settled(table, category)),
       };
     };
     const sizeOf = new Map(sizes.rows.map((row) => [row.table_id, row.total]));
@@ -154,11 +161,14 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     await auditView(pool, request.actor, 'table.viewed', table);
     // An alert that came after the close shows too, said so, like in the district: otherwise nobody could ever resolve it.
     const operations = await pool.query(
-      `SELECT id, type, payload, device_time, author, quarantined FROM operations
+      `SELECT id, type, payload, device_time, author, quarantined, received_at FROM operations
        WHERE table_id = $1 AND type IN ('incident.reported', 'envelopes.counted', 'tally.submitted', 'tally.photo') AND (NOT quarantined OR type = 'incident.reported') ORDER BY seq`,
       [table],
     );
-    const decisions = await pool.query('SELECT category, operation_id FROM tally_decisions WHERE table_id = $1', [table]);
+    const decisions = await pool.query(
+      `SELECT d.category, d.operation_id, d.decided_at, o.payload->'results' AS results FROM tally_decisions d JOIN operations o ON o.id = d.operation_id WHERE d.table_id = $1`,
+      [table],
+    );
     const states = await pool.query('SELECT operation_id FROM incident_states WHERE operation_id = ANY($1)', [operations.rows.filter((o) => o.type === 'incident.reported').map((o) => o.id)]);
     const resolved = new Set(states.rows.map((row) => row.operation_id));
     const tallies = new Map<string, { id: string; results: Record<string, number>; at: string }[]>();
@@ -167,7 +177,12 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       list.push({ id: op.id, results: op.payload.results, at: op.device_time });
       tallies.set(op.payload.category, list);
     }
-    const chosen = new Map(decisions.rows.map((row) => [row.category, row.operation_id]));
+    // A choice that a later correction contradicts no longer holds: the chief chooses again.
+    const chosen = new Map(
+      decisions.rows
+        .filter((row) => !correctedSince(row, operations.rows.filter((o) => o.type === 'tally.submitted' && o.payload.category === row.category)))
+        .map((row) => [row.category, row.operation_id]),
+    );
     return {
       ...info.rows[0],
       voted: (await votesPerTable(pool, [table])).get(table) ?? 0,
@@ -474,4 +489,13 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     );
     return { entries: rows.rows };
   });
+}
+
+/**
+ * Whether a tally that arrived after the chief chose says something else than what was chosen. A correction is one
+ * more version, and a person decides again: nothing replaces the chosen one by itself.
+ */
+function correctedSince(decision: { decided_at: Date; results: unknown }, versions: { received_at: Date; payload: { results: unknown } }[]): boolean {
+  const chosen = JSON.stringify(decision.results);
+  return versions.some((version) => version.received_at > decision.decided_at && JSON.stringify(version.payload.results) !== chosen);
 }
