@@ -54,10 +54,16 @@
           <button type="button" class="tema-boton" data-tema-elegir="feria" aria-pressed="false"><i></i>Feria</button>
           <button type="button" class="tema-boton" data-tema-elegir="tablero" aria-pressed="false"><i></i>Tablero</button>
           <button type="button" class="tema-boton" data-tema-elegir="mate" aria-pressed="false"><i></i>Mate</button>
+          <span class="separador" aria-hidden="true"></span>
+          <button type="button" class="tema-boton modo" data-modo-elegir="claro" aria-pressed="true" aria-label="Claro"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Claro</button>
+          <button type="button" class="tema-boton modo" data-modo-elegir="oscuro" aria-pressed="false" aria-label="Oscuro"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 019.4 3.5a8.5 8.5 0 1011.1 11.1z" fill="currentColor"/></svg>Oscuro</button>
         </div>
         <p class="nota">Para Windows, macOS y Linux. Gratis. Está en desarrollo: su primera prueba real es en abril de 2027, así que antes de usarla hacé un <a href="https://github.com/bafif/urna-abierta/blob/main/docs/es/simulacro.md">simulacro</a>.</p>
         <p class="nota cerca">Si tu padrón es un PDF o una foto, el <a href="#lector">lector de padrones</a> lo convierte en tu computadora.</p>
-        <img src="img/portada.png" alt="Tres pantallas de la app de fiscales, en tres temas distintos" width="1600" />
+        <div class="portada-viva">
+          <div class="portada-texto-viva"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg><p class="portada-nombre">Urna Abierta</p><p>Fiscalizar una elección no debería depender de tener un aparato enorme.</p></div>
+          <img data-telefonos="img/" src="img/telefonos-aula-claro.webp" alt="Tres pantallas de la app de fiscales, en el tema elegido" width="1580" height="1280" />
+        </div>
       </div>
 
       <section>
@@ -107,10 +113,8 @@
               <li><div><h3>Revisás lo dudoso</h3><p>Fila por fila, con la imagen arriba y los datos abajo. Lo que no revises queda pendiente para la app.</p></div></li>
               <li><div><h3>Lo subís a la app</h3><p>Guardás el archivo <code>.padron</code> y en Urna Abierta tocás «Subir el padrón».</p></div></li>
             </ol>
-            <picture>
-              <source srcset="img/lector-revisar-oscuro.png" media="(prefers-color-scheme: dark)" />
-              <img src="img/lector-revisar.png" alt="El lector mostrando una fila dudosa: la imagen de la fila arriba y sus datos abajo, con el DNI marcado para corregir" width="1280" height="800" />
-            </picture>
+            <img class="solo-claro" src="img/lector-revisar.png" alt="El lector mostrando una fila dudosa: la imagen de la fila arriba y sus datos abajo, con el DNI marcado para corregir" width="1280" height="800" />
+            <img class="solo-oscuro" src="img/lector-revisar-oscuro.png" alt="El lector mostrando una fila dudosa: la imagen de la fila arriba y sus datos abajo, con el DNI marcado para corregir" width="1280" height="800" loading="lazy" />
           </div>
           <div class="rejilla">
             <div class="tarjeta"><h3>Qué lee</h3><p>PDF escaneados o con texto, con las columnas que nombre su encabezado, como «Apellido y nombre» y «DNI», y las mesas si las trae. También fotos. Una planilla no lo necesita: se sube directo en la app.</p></div>
@@ -129,6 +133,8 @@
         <div class="envase">
           <h2>Con la cara que quieras</h2>
           <p>Cinco temas, en claro y en oscuro. Se eligen con vista previa al instalarla, y cada persona lo puede cambiar en su teléfono. También podés hacer el tuyo. Tocá uno y mirá cómo cambia esta página.</p>
+          <div class="demo-padron" role="img" aria-label="Así se ve el padrón de una mesa con este tema"><p class="demo-titulo">Mesa 12 · faltan 3 de 5</p><ol><li class="fila tachada" data-sello="VOTÓ"><span class="num">24</span><span class="nombre"><span class="nombre-t">Acuña, Martín</span></span><span class="doc">…066</span><svg class="tilde" viewBox="0 0 30 30" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M15 0a15 15 0 110 30 15 15 0 010-30zm7 9.5L13 19l-5-5-2 2 7 7 11-11z"/></svg></li><li class="fila"><span class="num">25</span><span class="nombre"><span class="nombre-t">Aguirre, Paula</span></span><span class="doc">…406</span></li><li class="fila tachada" data-sello="VOTÓ"><span class="num">26</span><span class="nombre"><span class="nombre-t">Álvarez, Inés</span></span><span class="doc">…812</span><svg class="tilde" viewBox="0 0 30 30" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M15 0a15 15 0 110 30 15 15 0 010-30zm7 9.5L13 19l-5-5-2 2 7 7 11-11z"/></svg></li><li class="fila"><span class="num">27</span><span class="nombre"><span class="nombre-t">Benítez, Tomás</span></span><span class="doc">…173</span></li><li class="fila"><span class="num">28</span><span class="nombre"><span class="nombre-t">Cáceres, Belén</span></span><span class="doc">…590</span></li></ol></div>
+          <div class="probar-tema" role="group" aria-label="Claro u oscuro"><button type="button" class="tema-boton modo" data-modo-elegir="claro" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Claro</button><button type="button" class="tema-boton modo" data-modo-elegir="oscuro" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 019.4 3.5a8.5 8.5 0 1011.1 11.1z" fill="currentColor"/></svg>Oscuro</button></div>
           <div class="temas" role="group" aria-label="Los cinco temas">
             <button type="button" class="tema-tarjeta" data-tema-elegir="aula" aria-pressed="true"><span class="muestras"><i></i><i></i><i></i></span><strong>Aula</strong><small>Un cuaderno rayado de día y un pizarrón de noche. La letra está hecha para quien ve poco. Es el que viene.</small></button>
             <button type="button" class="tema-tarjeta" data-tema-elegir="vidrio" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Vidrio</strong><small>Paneles que dejan pasar la luz, sobre celeste y blanco. El más vistoso.</small></button>

@@ -106,3 +106,78 @@ html[data-material="almohada"] .tarjeta, html[data-material="almohada"] .tema-ta
   .marca span { white-space: nowrap; }
   .arriba-enlaces { justify-content: flex-start; }
 }
+
+/* ---------- Light or dark, chosen on the page ---------- */
+.tema-boton.modo svg { width: 18px; height: 18px; }
+.separador { width: 2px; height: 28px; background: var(--linea); margin: 0 4px; }
+.solo-oscuro { display: none; }
+html[data-modo="oscuro"] .solo-claro { display: none; }
+html[data-modo="oscuro"] .solo-oscuro { display: block; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-modo]) .solo-claro { display: none; }
+  html:not([data-modo]) .solo-oscuro { display: block; }
+}
+
+/* ---------- The cover: the theme's panel next to its phones ---------- */
+.portada-viva { display: grid; grid-template-columns: 38% 1fr; background: var(--panel, #123E31); color: var(--sobre-panel, #F3F6EC); border-radius: var(--radio, 0); overflow: hidden; }
+.portada-texto-viva { padding: 44px 8px 28px 40px; }
+.portada-texto-viva svg { width: 64px; height: 64px; }
+.portada-nombre { font-family: var(--f-titulo, inherit); font-weight: var(--peso-titulo, 800); text-transform: var(--caja-titulo, none); letter-spacing: var(--tracking-titulo, -0.02em); font-size: clamp(32px, 4.2vw, 50px); line-height: 1; margin: 18px 0 12px; }
+.portada-texto-viva p:last-child { font-size: clamp(18px, 2vw, 23px); line-height: 1.3; opacity: 0.9; margin: 0; }
+.portada-viva img { align-self: end; }
+@media (max-width: 720px) { .portada-viva { grid-template-columns: 1fr; } .portada-texto-viva { padding: 28px 24px 4px; } }
+
+/* ---------- A table's roll, crossed out the way each theme does it in the app ---------- */
+.demo-padron { display: none; background: var(--superficie); border: var(--borde, 2px) solid var(--linea); border-radius: var(--radio, 12px); max-width: 480px; margin: 4px 0 22px; overflow: hidden; }
+html[data-tema] .demo-padron { display: block; }
+.demo-titulo { margin: 0; padding: 12px 18px; font-weight: 700; font-size: 16px; color: var(--suave); border-bottom: 1.5px solid var(--linea); }
+.demo-padron ol { list-style: none; margin: 0; padding: 0; position: relative; }
+.demo-padron .fila { display: grid; grid-template-columns: 48px 1fr auto; gap: 14px; align-items: center; min-height: 54px; padding: 0 18px; border-bottom: 1px solid var(--linea); position: relative; }
+.demo-padron .fila:last-child { border-bottom: 0; }
+.demo-padron .num { font-family: var(--f-numero, inherit); font-weight: 800; font-size: 20px; }
+.demo-padron .nombre-t { position: relative; }
+.demo-padron .doc { font-size: 15px; color: var(--suave); }
+.demo-padron .tilde { display: none; position: absolute; right: 16px; top: 50%; width: 28px; height: 28px; margin-top: -14px; color: var(--bien); }
+html[data-fondo="cuaderno"] .demo-padron ol::before { content: ''; position: absolute; left: 62px; top: 0; bottom: 0; width: 2px; background: var(--margen); opacity: 0.75; }
+html[data-tachado="lapicera"] .fila.tachada .nombre-t::after { content: ''; position: absolute; left: -5px; right: -7px; top: 50%; height: 3px; margin-top: -1.5px; border-radius: 2px; background: var(--marca); }
+html[data-tachado="sello"] .fila.tachada .doc { visibility: hidden; }
+html[data-tachado="sello"] .fila.tachada .nombre { color: var(--suave); }
+html[data-tachado="sello"] .fila.tachada::after { content: attr(data-sello); position: absolute; right: 16px; top: 50%; margin-top: -17px; padding: 2px 8px; font-family: var(--f-titulo, inherit); font-size: 17px; font-weight: 800; letter-spacing: 0.04em; color: var(--marca); border: 3px solid var(--marca); border-radius: 7px; transform: rotate(-7deg); }
+html[data-tachado="linea"] .fila.tachada .nombre-t { text-decoration: line-through 3px var(--marca); color: var(--suave); }
+html[data-tachado="linea"] .fila.tachada .num { color: var(--marca); }
+html[data-tachado="suave"] .fila.tachada .num, html[data-tachado="suave"] .fila.tachada .nombre { opacity: 0.55; }
+html[data-tachado="suave"] .fila.tachada .doc { visibility: hidden; }
+html[data-tachado="suave"] .fila.tachada .tilde { display: block; }
+
+/* ---------- Aula: a lined notebook with its red margin by day, a blackboard at night ---------- */
+html[data-fondo="cuaderno"] body { background-image: linear-gradient(to bottom, transparent 33px, var(--linea) 33px, var(--linea) 34px, transparent 34px); background-size: 100% 34px; }
+html[data-fondo="cuaderno"] body::before { content: ''; position: fixed; top: 0; bottom: 0; left: max(10px, calc(50% - var(--ancho) / 2 - 6px)); width: 2px; background: var(--margen); opacity: 0.7; pointer-events: none; }
+html[data-fondo="cuaderno"][data-modo="oscuro"] body { background-image: linear-gradient(to bottom, transparent 33px, color-mix(in srgb, var(--linea) 60%, transparent) 33px, color-mix(in srgb, var(--linea) 60%, transparent) 34px, transparent 34px); }
+
+/* ---------- Feria: every section with the colour of a task, and its shapes ---------- */
+html[data-cabecera="banda"] main > section > .envase > h2 { position: relative; overflow: hidden; padding: 18px 24px; border-radius: var(--radio, 20px); background: var(--banda-n); color: var(--sobre-banda-n); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+1) { --banda-n: var(--banda-1); --sobre-banda-n: var(--sobre-banda-1); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+2) { --banda-n: var(--banda-2); --sobre-banda-n: var(--sobre-banda-2); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+3) { --banda-n: var(--banda-3); --sobre-banda-n: var(--sobre-banda-3); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+4) { --banda-n: var(--banda-4); --sobre-banda-n: var(--sobre-banda-4); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+5) { --banda-n: var(--banda-5); --sobre-banda-n: var(--sobre-banda-5); }
+html[data-decor="formas"] main > section > .envase > h2::before { content: ''; position: absolute; right: -40px; top: -60px; width: 150px; height: 150px; border-radius: 50%; background: currentColor; opacity: 0.14; }
+html[data-decor="formas"] main > section > .envase > h2::after { content: ''; position: absolute; right: 120px; bottom: -34px; width: 64px; height: 64px; background: currentColor; opacity: 0.1; transform: rotate(18deg); }
+html[data-cabecera="banda"] section { border-top: 0; }
+
+/* ---------- Tablero: no boxes, thin rules, and the number in charge ---------- */
+html[data-material="filete"] main { counter-reset: seccion; }
+html[data-material="filete"] main > section > .envase > h2::before { counter-increment: seccion; content: counter(seccion, decimal-leading-zero); display: block; margin-bottom: 4px; font-size: clamp(56px, 8vw, 96px); line-height: 0.9; color: var(--marca); }
+html[data-material="filete"] section { border-top: 4px solid var(--texto); }
+html[data-material="filete"] .tarjeta, html[data-material="filete"] .tema-tarjeta { background: transparent; border: 0; border-top: 3px solid var(--texto); border-radius: 0; padding: 14px 0 4px; }
+html[data-material="filete"] .rejilla { gap: 28px; }
+
+/* ---------- Mate: soft, round, and plenty of air ---------- */
+html[data-material="almohada"] section { border-top: 0; padding: 64px 0; }
+html[data-material="almohada"] .tarjeta, html[data-material="almohada"] .tema-tarjeta, html[data-material="almohada"] .demo-padron { padding: 22px 24px; }
+html[data-material="almohada"] .demo-padron { padding: 0; border-color: transparent; box-shadow: 0 8px 22px var(--almohada); }
+html[data-material="almohada"] .boton.principal, html[data-material="almohada"] .portada-viva { box-shadow: 0 12px 30px var(--almohada); }
+
+/* ---------- Vidrio: glass over the aurora, the cover too ---------- */
+html[data-material="vidrio"] .demo-padron { background: color-mix(in srgb, var(--superficie) 72%, transparent); border-color: var(--vidrio-borde); backdrop-filter: blur(14px); }
+html[data-material="vidrio"] .boton.principal { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 12px 24px var(--vidrio-sombra); }

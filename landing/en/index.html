@@ -54,10 +54,16 @@
           <button type="button" class="tema-boton" data-tema-elegir="feria" aria-pressed="false"><i></i>Feria</button>
           <button type="button" class="tema-boton" data-tema-elegir="tablero" aria-pressed="false"><i></i>Tablero</button>
           <button type="button" class="tema-boton" data-tema-elegir="mate" aria-pressed="false"><i></i>Mate</button>
+          <span class="separador" aria-hidden="true"></span>
+          <button type="button" class="tema-boton modo" data-modo-elegir="claro" aria-pressed="true" aria-label="Light"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Light</button>
+          <button type="button" class="tema-boton modo" data-modo-elegir="oscuro" aria-pressed="false" aria-label="Dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 019.4 3.5a8.5 8.5 0 1011.1 11.1z" fill="currentColor"/></svg>Dark</button>
         </div>
         <p class="nota">For Windows, macOS and Linux. Free. It is in development: its first real test is in April 2027, so before using it run a <a href="https://github.com/bafif/urna-abierta/blob/main/docs/en/drill.md">drill</a>.</p>
         <p class="nota cerca">If your roll is a PDF or a photo, the <a href="#reader">roll reader</a> converts it on your computer.</p>
-        <img src="../img/portada-en.png" alt="Three screens of the poll watcher app, in three different themes" width="1600" />
+        <div class="portada-viva">
+          <div class="portada-texto-viva"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15v21a6 6 0 006 6h22a6 6 0 006-6V15" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/><rect x="17" y="4" width="14" height="22" rx="2" fill="currentColor" transform="rotate(8 24 15)"/></svg><p class="portada-nombre">Urna Abierta</p><p>Watching over an election should not depend on having a huge political machine.</p></div>
+          <img data-telefonos="../img/" src="../img/telefonos-aula-claro.webp" alt="Three screens of the poll watchers' app, in the chosen theme" width="1580" height="1280" />
+        </div>
       </div>
 
       <section>
@@ -107,10 +113,8 @@
               <li><div><h3>You check the doubtful rows</h3><p>Row by row, with the picture above and the data below. What you do not check stays pending for the app.</p></div></li>
               <li><div><h3>You upload it to the app</h3><p>You save the <code>.padron</code> file and, in Urna Abierta, tap “Upload the roll”.</p></div></li>
             </ol>
-            <picture>
-              <source srcset="../img/lector-revisar-oscuro.png" media="(prefers-color-scheme: dark)" />
-              <img src="../img/lector-revisar.png" alt="The reader showing a doubtful row: the picture of the row above and its data below, with the document marked to fix" width="1280" height="800" />
-            </picture>
+            <img class="solo-claro" src="../img/lector-revisar.png" alt="The reader showing a doubtful row: the picture of the row above and its data below, with the document marked to fix" width="1280" height="800" />
+            <img class="solo-oscuro" src="../img/lector-revisar-oscuro.png" alt="The reader showing a doubtful row: the picture of the row above and its data below, with the document marked to fix" width="1280" height="800" loading="lazy" />
           </div>
           <div class="rejilla">
             <div class="tarjeta"><h3>What it reads</h3><p>Scanned PDFs or PDFs with text, with the columns their header names, such as “Apellido y nombre” and “DNI”, and the tables when it has them. Photos too. A spreadsheet does not need it: it goes straight into the app.</p></div>
@@ -129,6 +133,8 @@
         <div class="envase">
           <h2>With the look you want</h2>
           <p>Five themes, in light and dark. You choose with a preview when installing, and each person can change it on their phone. You can also make your own. Tap one and watch this page change.</p>
+          <div class="demo-padron" role="img" aria-label="What a table's roll looks like with this theme"><p class="demo-titulo">Table 12 · 3 of 5 to go</p><ol><li class="fila tachada" data-sello="VOTED"><span class="num">24</span><span class="nombre"><span class="nombre-t">Acuña, Martín</span></span><span class="doc">…066</span><svg class="tilde" viewBox="0 0 30 30" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M15 0a15 15 0 110 30 15 15 0 010-30zm7 9.5L13 19l-5-5-2 2 7 7 11-11z"/></svg></li><li class="fila"><span class="num">25</span><span class="nombre"><span class="nombre-t">Aguirre, Paula</span></span><span class="doc">…406</span></li><li class="fila tachada" data-sello="VOTED"><span class="num">26</span><span class="nombre"><span class="nombre-t">Álvarez, Inés</span></span><span class="doc">…812</span><svg class="tilde" viewBox="0 0 30 30" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M15 0a15 15 0 110 30 15 15 0 010-30zm7 9.5L13 19l-5-5-2 2 7 7 11-11z"/></svg></li><li class="fila"><span class="num">27</span><span class="nombre"><span class="nombre-t">Benítez, Tomás</span></span><span class="doc">…173</span></li><li class="fila"><span class="num">28</span><span class="nombre"><span class="nombre-t">Cáceres, Belén</span></span><span class="doc">…590</span></li></ol></div>
+          <div class="probar-tema" role="group" aria-label="Light or dark"><button type="button" class="tema-boton modo" data-modo-elegir="claro" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>Light</button><button type="button" class="tema-boton modo" data-modo-elegir="oscuro" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.5 8.5 0 019.4 3.5a8.5 8.5 0 1011.1 11.1z" fill="currentColor"/></svg>Dark</button></div>
           <div class="temas" role="group" aria-label="The five themes">
             <button type="button" class="tema-tarjeta" data-tema-elegir="aula" aria-pressed="true"><span class="muestras"><i></i><i></i><i></i></span><strong>Aula</strong><small>A lined notebook by day and a blackboard at night. Its typeface is made for people who see little. The default.</small></button>
             <button type="button" class="tema-tarjeta" data-tema-elegir="vidrio" aria-pressed="false"><span class="muestras"><i></i><i></i><i></i></span><strong>Vidrio</strong><small>Panels that let light through, over light blue and white. The showiest one.</small></button>
