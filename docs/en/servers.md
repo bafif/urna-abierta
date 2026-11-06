@@ -126,8 +126,8 @@ Backups are made every 6 hours and stay on the server's disk: the last 28, one w
 account, they are lost with it. To always have one elsewhere:
 
 - **Download them from the app**, in **More**, **Backups**, now and then and above all before the election.
-- **Send them to S3 storage.** If you set one up for the photos (below), each backup also goes to the bucket, to the `backups/` folder,
-  and the 28 newest stay there. They are still encrypted with the recovery key: the provider keeps something it cannot open. To delete
+- **Send them to S3 storage.** If you set one up for the photos (below), each backup also goes to the bucket, to a `backups/` folder
+  inside the photos one (`fotos/backups/`, unless you changed `URNA_S3_PREFIX`), and the 28 newest stay there. They are still encrypted with the recovery key: the provider keeps something it cannot open. To delete
   the old ones, the access key needs permission to list the bucket; without it they are still sent, but they pile up. A bucket from a
   different provider than the server's is better, so the backup survives if that account closes.
 
@@ -152,7 +152,7 @@ backup, the recovery key and those settings, which you set again on the new serv
 | `URNA_S3_REGION` | The region of the bucket. If empty, `us-east-1`. |
 | `URNA_S3_ACCESS_KEY_ID` | The public part of the access key. |
 | `URNA_S3_SECRET_ACCESS_KEY` | The secret part. |
-| `URNA_S3_PREFIX` | The folder inside the bucket. If empty, `fotos/`. If it does not end in `/`, one is added. |
+| `URNA_S3_PREFIX` | The folder inside the bucket. If empty, `fotos/`. If it does not end in `/`, one is added. If two installations use the same bucket, a trial one and the real one for example, each needs its own: otherwise they delete each other's backups. |
 
 Photos go to the bucket only when both `URNA_S3_ENDPOINT` and `URNA_S3_BUCKET` are set; with both empty, they go to disk. With only one
 of them, or without the access keys, the server does not start and says what is missing. Addresses are path-style
@@ -176,7 +176,7 @@ the bucket. If you later go back to disk, the ones left in the bucket can no lon
 
 **The photos in the bucket are not in the backup.** The backup carries the database and the photo folder on disk, which with S3 stays
 empty or holds the older ones. The photos in the bucket are looked after by the provider; for more safety, turn on versioning for the
-bucket. The backups themselves do go to the bucket, to `backups/`: see [Backups off the server](#backups-off-the-server).
+bucket. The backups themselves do go to the bucket, to `fotos/backups/`: see [Backups off the server](#backups-off-the-server).
 
 Address and region for each provider:
 
@@ -203,5 +203,5 @@ The server is seasonal. Purge the data from the app, download the last backup if
 in the cloud's console. If you do not delete them, they may keep charging.
 
 If the photos went to S3 storage, neither purging nor deleting the server touches them: they stay in the bucket, along with the backups
-in `backups/`, and the provider keeps charging for them. When you no longer need them, empty the bucket in the provider's console (every version, if you turned on
+in `fotos/backups/`, and the provider keeps charging for them. When you no longer need them, empty the bucket in the provider's console (every version, if you turned on
 versioning), delete it and delete the access key you created for the server.

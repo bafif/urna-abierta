@@ -180,9 +180,9 @@ const encrypted = podman('exec', first.name, 'head', '-c', '2000000', backup);
 record('hace una copia cifrada: no se lee ningún nombre', !encrypted.includes('Inventada'), { archivo: backup });
 const listed = api(first, 'GET', '/backups', { token });
 record('la copia se puede bajar desde la app', listed.backups?.length === 1, listed.backups?.[0]);
-const sent = await raw.list('backups/');
+const sent = await raw.list('fotos/backups/');
 const inBucket = sent.length === 1 ? await raw.get(sent[0]!) : null;
-record('la copia también sale del servidor, al bucket, cifrada', sent[0] === `backups/${backup.split('/').pop()}` && inBucket !== null && !inBucket.includes('Inventada'), sent);
+record('la copia también sale del servidor, al bucket, cifrada', sent[0] === `fotos/backups/${backup.split('/').pop()}` && inBucket !== null && !inBucket.includes('Inventada'), sent);
 
 const state = attempt('exec', first.name, 'urna', 'estado').said;
 record('«urna estado» dice que está todo bien, y que las copias van al bucket', state.includes('Todo en orden') && state.includes(`bien   las copias también van al bucket ${bucket.name}`) && state.includes('versión: anterior'), state.split('\n'));
