@@ -189,6 +189,13 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(body.hours).toEqual([]);
       expect(JSON.stringify(body)).not.toMatch(/Acuña|document/);
     });
+
+    it('hours come in a form every browser reads', async () => {
+      await push('fiscal', table, Array.from({ length: 5 }, (_, i) => operation(table, i + 1)));
+      const { hours } = (await call('estadistico', 'GET', `/api/elections/${demo.election}/stats`)).json();
+      expect(hours).toEqual([{ hour: '2027-04-06T12:00:00Z', marks: 5 }]);
+      expect(new Date(hours[0].hour).getTime()).toBe(Date.UTC(2027, 3, 6, 12));
+    });
   });
 
   describe('sync', () => {

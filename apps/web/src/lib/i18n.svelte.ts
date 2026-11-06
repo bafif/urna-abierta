@@ -682,6 +682,9 @@ const es = {
   'roll.problem.external_ai': 'Este padrón se armó con una IA externa: los nombres pasaron por un servicio de afuera. Con el nivel de seguridad de esta elección se puede cargar igual.',
   'roll.problem.external_ai_paid_only': 'Este padrón se armó con una IA externa. Con el nivel de seguridad de esta elección, cargalo solo si fue un servicio pago que no guarda los datos: el archivo no lo puede mostrar.',
   'task.more': 'Ir a más cosas',
+  'elections.preparing': 'En preparación',
+  'numbers.pick': '¿Qué elección querés ver?',
+  'light.pick': '¿En qué elección vas a anotar?',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1370,6 +1373,9 @@ const en: Record<MessageKey, string> = {
   'roll.problem.external_ai': 'This roll was built with an external AI: the names went through an outside service. This election’s security level lets you load it anyway.',
   'roll.problem.external_ai_paid_only': 'This roll was built with an external AI. With this election’s security level, load it only if it was a paid service that keeps no data: the file cannot show that.',
   'task.more': 'Go to more',
+  'elections.preparing': 'Being prepared',
+  'numbers.pick': 'Which election do you want to see?',
+  'light.pick': 'Which election will you note in?',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;
