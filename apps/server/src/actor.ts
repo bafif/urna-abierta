@@ -134,6 +134,21 @@ export async function audit(pool: pg.Pool, actor: Actor | null, action: string, 
   await pool.query('INSERT INTO audit_log (user_id, action, target, detail) VALUES ($1, $2, $3, $4)', [actor?.userId ?? null, action, target ?? null, JSON.stringify(detail)]);
 }
 
+/**
+ * For views that are looked at again and again, such as a panel that refreshes by itself: one entry per
+ * person, thing and few minutes says who looked, without burying everything else in the log.
+ */
+const AUDIT_AGAIN_MS = 5 * 60_000;
+const lastAudited = new Map<string, number>();
+export async function auditView(pool: pg.Pool, actor: Actor, action: string, target?: string): Promise<void> {
+  const key = `${actor.userId}\n${action}\n${target ?? ''}`;
+  const now = Date.now();
+  if (now - (lastAudited.get(key) ?? 0) < AUDIT_AGAIN_MS) return;
+  if (lastAudited.size > 10_000) lastAudited.clear();
+  lastAudited.set(key, now);
+  await audit(pool, actor, action, target);
+}
+
 export async function getSetting<T>(pool: pg.Pool, key: string, fallback: T): Promise<T> {
   const result = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
   return result.rows[0]?.value ?? fallback;

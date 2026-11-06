@@ -769,12 +769,42 @@ describe.skipIf(!url)('against a real Postgres', () => {
       for (const dni of dnis) expect(dump).not.toContain(dni);
     });
 
+    it('the audit log records who saw whom, by reference, and each panel once every few minutes', async () => {
+      const since = Number((await pool.query('SELECT coalesce(max(id), 0) AS n FROM audit_log')).rows[0].n);
+      const logged = async () => (await pool.query('SELECT action, target, detail FROM audit_log WHERE id > $1 ORDER BY id', [since])).rows;
+      const people = (await call('semaforo', 'GET', `/api/elections/${demo.election}/people?q=ez`)).json().people;
+      expect(people.length).toBeGreaterThan(0);
+      await call('coordinacion', 'GET', '/api/persons?q=acu');
+      for (let i = 0; i < 2; i += 1) {
+        await call('coordinacion', 'GET', '/api/users');
+        await call('jefe', 'GET', `/api/district/${demo.election}`);
+        await call('jefe', 'GET', `/api/tables/${table}/detail`);
+        await call('jefe', 'GET', `/api/sync/pull?table=${table}&since=0`);
+        await call('fiscal', 'GET', `/api/sync/pull?table=${table}&since=0`);
+        await call('coordinacion', 'GET', '/api/audit');
+      }
+      const unit = (await call('coordinacion', 'POST', `/api/elections/${demo.election}/units`, { name: 'Distrito nuevo' })).json().id;
+      await call('coordinacion', 'PUT', `/api/tables/${table}`, { name: 'Mesa nueva', unit });
+      const entries = await logged();
+      const searched = entries.find((e) => e.action === 'semaphore.searched');
+      const refs = (await pool.query('SELECT ref FROM electors WHERE id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows.map((row) => row.ref);
+      expect(searched.detail.people.sort()).toEqual(refs.sort());
+      expect(entries.find((e) => e.action === 'person.searched').detail.people.length).toBeGreaterThan(0);
+      const count = (action: string) => entries.filter((e) => e.action === action).length;
+      for (const action of ['users.viewed', 'district.viewed', 'table.viewed', 'table.pulled', 'audit.viewed', 'unit.created', 'table.changed']) expect(count(action), action).toBe(1);
+      // Nothing in the log names anyone by roll id, document or name.
+      const text = JSON.stringify(entries);
+      expect(text).not.toMatch(/99\d{6}/);
+      for (const person of people) expect(text).not.toContain(person.id);
+    });
+
     it('the audit log records who did what, and cannot be changed', async () => {
       await call('fiscal', 'GET', `/api/tables/${table}/bundle`);
       const { entries } = (await call('coordinacion', 'GET', '/api/audit')).json();
       expect(entries.some((e: { action: string; who: string }) => e.action === 'roll.downloaded' && e.who === 'Marta')).toBe(true);
       await expect(pool.query('DELETE FROM audit_log')).rejects.toThrow(/cannot be changed/);
       await expect(pool.query(`UPDATE audit_log SET action = 'x'`)).rejects.toThrow(/cannot be changed/);
+      await expect(pool.query('TRUNCATE audit_log')).rejects.toThrow(/cannot be changed/);
       expect((await call('fiscal', 'GET', '/api/audit')).statusCode).toBe(403);
     });
   });

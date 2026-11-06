@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation } from '@urna-abierta/domain';
-import { audit, authenticated, can, canReachTable, erasedId, getSetting, securityProfile, type Actor } from './actor.ts';
+import { audit, auditView, authenticated, can, canReachTable, erasedId, getSetting, securityProfile, type Actor } from './actor.ts';
 import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
 const MAX_PULL = 200;
@@ -151,6 +151,8 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     if (!table || !TABLE_ID.test(table) || !Number.isSafeInteger(cursor) || cursor < 0) return reply.code(400).send({ error: 'invalid_request' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
+    // What a table marked names people: a poll watcher reads their own all day, anyone else is recorded.
+    if (!request.actor.assignments.some((a) => a.role === 'fiscal' && a.table_id === table)) await auditView(pool, request.actor, 'table.pulled', table);
     const result = await pool.query(
       `SELECT id, table_id AS table, seq, type, device, device_seq, device_time, payload
        FROM operations WHERE table_id = $1 AND seq > $2 AND NOT quarantined ORDER BY seq LIMIT $3`,
