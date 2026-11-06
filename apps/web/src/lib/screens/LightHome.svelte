@@ -27,6 +27,8 @@
   let election = $state<OpenElection | null>(null);
   /** With several elections and none clearly under way, the person says which one. */
   let choosing = $state(false);
+  /** Until the elections and categories are in, the screen offers nothing to touch: it may still turn into the list. */
+  let loaded = $state(false);
   let categories = $state.raw<Category[]>([]);
   let query = $state('');
   let people = $state.raw<Person[]>([]);
@@ -38,10 +40,15 @@
 
   onMount(async () => {
     try {
-      elections = (await session.api<{ elections: OpenElection[] }>('/open-elections')).elections;
+      const [open, defined] = await Promise.all([
+        session.api<{ elections: OpenElection[] }>('/open-elections'),
+        session.api<{ categories: Category[] }>('/semaphore/categories'),
+      ]);
+      elections = open.elections;
       election = autoPick(elections);
       choosing = !election && elections.length > 1;
-      categories = (await session.api<{ categories: Category[] }>('/semaphore/categories')).categories;
+      categories = defined.categories;
+      loaded = true;
     } catch {
       offline = true;
     }
@@ -117,19 +124,22 @@
 {:else}
   <Pantalla accion="equipo" volver={nav.current.name !== 'home' || elections.length > 1} onback={elections.length > 1 ? () => (choosing = true) : undefined} ojo={election?.name ?? ''} titulo={t('light.title')} bajada={t('light.text')} desliza>
     {#if offline}<p class="estado envio"><span class="foco"></span>{t('light.needSignal')}</p>{/if}
-    {#if categories.length === 0 && !offline}<p class="aviso-suave">{t('light.empty')}</p>{/if}
-    <label class="buscar">
-      <Ic name="lupa" />
-      <input type="search" bind:value={query} oninput={typed} placeholder={t('light.search')} aria-label={t('light.search')} autocomplete="off" />
-    </label>
-    <div class="tarjetas compactas">
-      {#each people as found (found.id)}
-        <button class="tarjeta fila-mesa" data-testid="light-person" onclick={() => open(found)}>
-          <strong>{found.name}</strong>
-          <span>{categories.find((category) => category.id === found.category)?.name ?? found.table ?? ''}</span>
-        </button>
-      {/each}
-    </div>
+    {#if loaded && categories.length === 0 && !offline}<p class="aviso-suave">{t('light.empty')}</p>{/if}
+    <!-- Only with an election to search in: typed before the list of elections came, a name would go nowhere. -->
+    {#if election}
+      <label class="buscar">
+        <Ic name="lupa" />
+        <input type="search" bind:value={query} oninput={typed} placeholder={t('light.search')} aria-label={t('light.search')} autocomplete="off" />
+      </label>
+      <div class="tarjetas compactas">
+        {#each people as found (found.id)}
+          <button class="tarjeta fila-mesa" data-testid="light-person" onclick={() => open(found)}>
+            <strong>{found.name}</strong>
+            <span>{categories.find((category) => category.id === found.category)?.name ?? found.table ?? ''}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
     {#snippet pie()}
       <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
     {/snippet}
