@@ -9,6 +9,7 @@ import { uuidv7, writePadron, type Operation } from '@urna-abierta/domain';
 import { forgetActors, totpCode } from '../src/actor.ts';
 import { buildApp, migrate, seedDemo } from '../src/app.ts';
 import { clock } from '../src/clock.ts';
+import { eraseElector } from '../src/routes-work.ts';
 import { diskPhotoStore, photoStoreFromEnv, PhotoStoreUnavailable, s3PhotoStore, type PhotoStore } from '../src/photo-store.ts';
 import { fakeS3 } from './fake-s3.ts';
 
@@ -746,6 +747,38 @@ describe.skipIf(!url)('against a real Postgres', () => {
         { id: 'f-3', full_name: 'Gama, Gustavo', document: '111222' },
       ]);
       expect((await csv(first, true)).json()).toMatchObject({ people: 2, added: 0, kept: 2, missing: 1, erased: 1, corrected: 1 });
+    });
+
+    it('a roll loaded before what the file said was kept keyed: erasures and corrections made then or later stay with their person', async () => {
+      const id = await newElection();
+      const csv = (text: string, preview = false) =>
+        app.inject({ method: 'POST', url: `/api/elections/${id}/roll${preview ? '?preview=1' : ''}`, payload: Buffer.from(text), headers: { authorization: `Bearer ${tokens.coordinacion}`, 'content-type': 'text/csv' } });
+      const file = 'Apellido y nombre;DNI\nAlfa, Ana;\nBeta, Bea;\nGama, Gus;\nDelta, Dora;\nÉpsilon, Eli;\n';
+      expect((await csv(file)).statusCode).toBe(200);
+      // As the first versions left it: no key, and an erasure that wiped what the row said before the server erased it again.
+      await pool.query('UPDATE electors SET source_key = NULL WHERE election_id = $1', [id]);
+      await pool.query(`UPDATE electors SET full_name = 'Borrado a pedido', search = '' WHERE election_id = $1 AND id = 'f-2'`, [id]);
+      expect(await eraseElector(pool, id, 'f-2')).toMatchObject({ ref: expect.any(String) });
+      // And a correction made without keeping the key.
+      await pool.query(`UPDATE electors SET full_name = 'Épsilon, Elisa', search = 'epsilon elisa', corrected_at = now() WHERE election_id = $1 AND id = 'f-5'`, [id]);
+      // Corrections made now, one of them erased afterwards.
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/f-3`, { full_name: 'Gama, Gustavo' })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'PUT', `/api/persons/${id}/f-4`, { full_name: 'Delta, Dorotea' })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'DELETE', `/api/persons/${id}/f-4`)).statusCode).toBe(200);
+
+      const rows = async () => (await pool.query('SELECT id, full_name FROM electors WHERE election_id = $1 AND erased_at IS NULL ORDER BY id', [id])).rows;
+      const before = await rows();
+      expect(before).toEqual([
+        { id: 'f-1', full_name: 'Alfa, Ana' },
+        { id: 'f-3', full_name: 'Gama, Gustavo' },
+        { id: 'f-5', full_name: 'Épsilon, Elisa' },
+      ]);
+      expect((await csv(file, true)).json()).toMatchObject({ people: 3, added: 0, kept: 3, missing: 0, erased: 2, corrected: 2 });
+      expect((await csv(file)).statusCode).toBe(200);
+      expect(await rows()).toEqual(before);
+      // Once loaded again, every row has its key, and the same file is still nobody new.
+      expect((await pool.query('SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND erased_at IS NULL AND source_key IS NULL', [id])).rows[0].n).toBe(0);
+      expect((await csv(file, true)).json()).toMatchObject({ added: 0, kept: 3, missing: 0, erased: 2 });
     });
 
     it('refuses what it cannot read, and a roll made with an external AI if the election forbids it', async () => {
