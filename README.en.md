@@ -96,7 +96,8 @@ The first real test is a university election, in April 2027.
 
 ## Author
 
-Made by me, **Bautista D. Fiori**. If you want to use it in your election or join in, write to me.
+Made by me, **Bautista D. Fiori**. If you want to use it in your election or join in, write to me. To contribute code, read
+[how to contribute](CONTRIBUTING.en.md); if you found a security flaw, tell me privately, as [SECURITY.en.md](SECURITY.en.md) says.
 
 [LinkedIn](https://www.linkedin.com/in/b-d-fiori/) · [GitHub](https://github.com/bafif)
 
