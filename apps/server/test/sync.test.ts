@@ -1102,6 +1102,31 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await mark('otro', null)).statusCode).toBe(200);
     });
 
+    it('whoever cannot see sensitive marks cannot tell who has one by how a change is refused, and trying it is recorded', async () => {
+      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
+      tokens.otro = await redeem((await call('coordinacion', 'POST', '/api/users', { name: 'Otro semáforo', role: 'semaforo' })).json().invitation);
+      const [marked, unmarked] = (await call('otro', 'GET', `/api/elections/${demo.election}/people?q=ez`)).json().people as { id: string }[];
+      expect((await call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${marked!.id}/semaphore`, { category: closed })).statusCode).toBe(200);
+      const answer = async (person: { id: string }, category: unknown) => {
+        const response = await call('otro', 'PUT', `/api/elections/${demo.election}/people/${person.id}/semaphore`, { category });
+        return [response.statusCode, response.json()];
+      };
+      const since = Number((await pool.query('SELECT coalesce(max(id), 0) AS n FROM audit_log')).rows[0].n);
+      const refusals = async () => (await pool.query(`SELECT count(*)::int AS n FROM audit_log WHERE action = 'semaphore.refused' AND id > $1`, [since])).rows[0].n as number;
+      // A category that is not one is checked first, the same for everyone.
+      for (const wrong of [0, 'no-existe']) expect(await answer(marked!, wrong)).toEqual(await answer(unmarked!, wrong));
+      expect(await refusals()).toBe(0);
+      // Changing a sensitive mark and choosing a sensitive category get the same refusal, and both are recorded.
+      const refused = await answer(marked!, open);
+      expect(refused).toEqual([403, { error: 'sensitive_mark' }]);
+      expect(await answer(unmarked!, closed)).toEqual(refused);
+      expect(await answer(marked!, null)).toEqual(refused);
+      expect(await refusals()).toBe(3);
+    });
+
     it('finds, exports, records consent and erases a person, and purges an election', async () => {
       const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
       expect(found.document).toBeTruthy();

@@ -283,21 +283,27 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.put<{ Params: { id: string; elector: string }; Body: { category?: unknown } }>('/api/elections/:id/people/:elector/semaphore', { preHandler: writeLight }, async (request, reply) => {
     const { id, elector } = request.params;
     const { category } = request.body ?? {};
+    // What is asked for is checked first, so that a wrong category says nothing about the person.
+    if (category !== null && typeof category !== 'string') return reply.code(400).send({ error: 'invalid_category' });
+    const found = category === null ? null : await pool.query('SELECT sensitive FROM semaphore_categories WHERE id = $1', [category]);
+    if (found && !found.rows[0]) return reply.code(404).send({ error: 'no_such_category' });
+    const sensitive: boolean = found?.rows[0].sensitive ?? false;
     const ref = await refOf(pool, id, elector);
     if (!ref) return reply.code(404).send({ error: 'not_found' });
     // Whoever cannot see a sensitive mark sees no mark at all: they must not replace it or clear it without knowing.
-    const current = await pool.query('SELECT sealed IS NOT NULL AS sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
-    if (current.rows[0]?.sealed && !can(request.actor, 'semaphore.sensitive')) return reply.code(403).send({ error: 'sensitive_mark' });
+    // Finding one, or choosing a sensitive category, gets the same refusal, and trying it is recorded.
+    if (!can(request.actor, 'semaphore.sensitive')) {
+      const current = await pool.query('SELECT sealed IS NOT NULL AS sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
+      if (sensitive || current.rows[0]?.sealed) {
+        await audit(pool, request.actor, 'semaphore.refused', ref);
+        return reply.code(403).send({ error: 'sensitive_mark' });
+      }
+    }
     if (category === null) {
       await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
       await audit(pool, request.actor, 'semaphore.cleared', ref);
       return { ok: true };
     }
-    if (typeof category !== 'string') return reply.code(400).send({ error: 'invalid_category' });
-    const found = await pool.query('SELECT sensitive FROM semaphore_categories WHERE id = $1', [category]);
-    if (!found.rows[0]) return reply.code(404).send({ error: 'no_such_category' });
-    const sensitive = found.rows[0].sensitive;
-    if (sensitive && !can(request.actor, 'semaphore.sensitive')) return reply.code(403).send({ error: 'forbidden' });
     await pool.query(
       `INSERT INTO semaphore_marks (election_id, elector_id, category_id, sealed, noted_by) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (election_id, elector_id) DO UPDATE SET category_id = $3, sealed = $4, noted_by = $5, noted_at = now()`,
