@@ -44,6 +44,9 @@ jobs:
         run: node design/verificar-contraste.mjs
       - if: ${{ !cancelled() }}
         run: sh deploy/server/prueba-estado.sh
+      # The landing carries copies of the themes so visitors can try them: they must stay the app's.
+      - if: ${{ !cancelled() }}
+        run: cmp apps/web/src/lib/temas.js landing/temas.js && cmp apps/web/src/lib/aplicar-tema.js landing/aplicar-tema.js
 
   server:
     name: Server against Postgres
