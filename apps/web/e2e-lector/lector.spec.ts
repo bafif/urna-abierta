@@ -49,12 +49,13 @@ test('a roll goes from a scanned PDF to a file for the app, with a person fixing
   await expect(page.getByRole('alert')).toContainText('Ese archivo no es un PDF');
 
   // A PDF without a ruled table: the reader says so in plain words and points to the app, which takes spreadsheets.
+  // Readers that also take photos say «archivo» where the first one said «PDF»: both are right.
   await file.setInputFiles(NO_TABLE);
-  await expect(heading(page)).toHaveText('No se pudo leer este PDF', { timeout: 60_000 });
+  await expect(heading(page)).toHaveText(/^No se pudo leer este (PDF|archivo)$/, { timeout: 60_000 });
   await expect(page.getByRole('alert')).toContainText('tabla con líneas');
   await expect(page.getByText('subila directo en la app, con «Subir el padrón»')).toBeVisible();
   await shot(page, '2-no-se-pudo');
-  await button(page, 'Probar con otro PDF').click();
+  await page.getByRole('button', { name: /^Probar con otro (PDF|archivo)$/ }).click();
   await expect(heading(page)).toHaveText('¿Qué padrón leemos?');
 
   await page.getByTestId('pdf-file').setInputFiles(ROLL);
