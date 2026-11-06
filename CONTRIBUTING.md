@@ -28,6 +28,7 @@ corepack pnpm install
 corepack pnpm test                                   # las pruebas unitarias de todo el repo
 corepack pnpm check                                  # los tipos de cada paquete, con sus pruebas
 node design/verificar-contraste.mjs                  # que todos los temas se puedan leer
+sh deploy/server/prueba-estado.sh                    # lo que dice «urna estado», con podman y curl de mentira
 ```
 
 Las pruebas del servidor contra una base de verdad corren solo si les das una Postgres vacía. Sin `TEST_DATABASE_URL`, se saltean:
