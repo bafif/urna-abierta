@@ -17,14 +17,14 @@ personales». Qué se carga, quién lo ve, dónde está el servidor y cuándo se
 
 | Qué | De dónde sale | Quién lo ve |
 |---|---|---|
-| Padrón: nombre, documento, legajo, número de orden, mesa y domicilio, si el archivo los trae | El archivo que subís | Coordinación ve todo. El fiscal ve solo su mesa y, según la seguridad, el documento completo o sus últimos 3 números |
+| Padrón: nombre, documento, legajo, número de orden, mesa y domicilio, si el archivo los trae | El archivo que subís | Coordinación ve todo. El fiscal ve solo su mesa hasta que se cierra la elección y, según la seguridad, el documento completo o sus últimos 3 números. Su teléfono conoce a cada persona por un identificador al azar, nunca por su documento |
 | Quién votó y a qué hora | Los teléfonos de los fiscales | El fiscal de esa mesa, y coordinación al atender un pedido. Los demás ven solo cuántos |
 | Semáforo: una categoría por persona | Quien anota en el semáforo | Quien tiene esa tarea. Las categorías sensibles, solo quien tiene el permiso aparte |
 | Consentimiento: fecha y cómo se dio | Lo anotás vos | Coordinación |
 | Equipo: nombre y teléfono de cada persona, y sus dispositivos | Lo cargás al sumar a alguien | Coordinación y sistema |
 | Registro: quién hizo qué y cuándo | El servidor, solo | Coordinación y sistema |
 | Fotos de las actas | Los fiscales | El jefe de esa mesa y coordinación |
-| Copias de seguridad: todo lo anterior | El servidor, cada 6 horas | Quien tenga la llave de recuperación |
+| Copias de seguridad: todo lo anterior | El servidor, cada 6 horas. Si configuraste un almacenamiento S3, también van ahí | Quien tenga la llave de recuperación |
 
 El servidor controla cada pedido y entrega solo lo que esa persona puede ver. Lo que puede hacer cada tarea está en **Más cosas**,
 **Permisos**.
@@ -90,8 +90,9 @@ Está en **Más cosas**, **Pedidos de personas**, y lo ve quien tiene la tarea �
    a otra persona es peor que no contestar.
 2. **Buscala.** Escribí al menos tres letras del apellido, o el documento, y tocá «Buscar». Busca en todas las elecciones que no se
    purgaron, y muestra hasta 25 personas, cada una con su elección. Si aparece en varias elecciones, atendé cada una.
-3. **Si pide ver sus datos.** Tocá «Bajar todo lo que tenemos». Se baja un archivo con su fila del padrón, su categoría del semáforo, su
-   consentimiento y las horas en que la tacharon. Plazo: 10 días corridos.
+3. **Si pide ver sus datos.** Tocá «Bajar todo lo que tenemos». Se baja una página, en el idioma de la pantalla, para mandársela o
+   imprimirla: sus datos del padrón, dónde vota, si votó, su categoría del semáforo, su consentimiento y sus derechos. Plazo: 10 días
+   corridos.
 4. **Si pide corregirlos.** En «Corregir sus datos», cambiá el nombre o el documento y tocá «Guardar la corrección». Plazo: 5 días hábiles.
 5. **Si pide borrarlos.** Tocá «Borrar sus datos» y confirmá. Se borran su nombre, documento, legajo, domicilio, consentimiento y su marca
    del semáforo. La fila queda anónima, como «Borrado a pedido», para que los totales de la mesa sigan dando. Plazo: 5 días hábiles.
@@ -99,11 +100,14 @@ Está en **Más cosas**, **Pedidos de personas**, y lo ve quien tiene la tarea �
 
 Tres cosas para tener en cuenta:
 
-- **El archivo de «Bajar todo lo que tenemos» es técnico** (JSON). La ley pide información clara y sin códigos, así que pasalo a una nota
-  que se entienda antes de dársela.
-- **Los teléfonos que ya prepararon la mesa guardan el padrón como lo bajaron.** Corregir o borrar a alguien en el servidor no lo cambia
-  en esos teléfonos. Cada teléfono borra su padrón la primera vez que se abre la app pasada una semana del último día de votación, si ya
-  envió todo.
+- **La página cubre una sola elección.** Si el mismo documento está en otros padrones, la página los nombra: atendé cada uno. Una
+  categoría sensible aparece solo si quien baja la página tiene la tarea «Ver las categorías sensibles»; si no, la página dice que hay
+  una y que la prepare alguien con ese permiso.
+- **Una corrección o un borrado llega a los teléfonos que ya prepararon la mesa** la próxima vez que tengan señal: cada uno revisa cada
+  5 minutos si cambió el padrón de su mesa y lo vuelve a bajar. Volver a subir el padrón no deshace ni lo corregido ni lo borrado.
+- **Cada teléfono borra su padrón cuando se cierra la elección,** apenas se entera y ya envió todo. Un teléfono que no se entera, por
+  falta de señal, lo borra pasadas las 6 de la mañana del día siguiente al último día de votación, más las horas que permite la
+  seguridad: 12 en una elección de facultad, 6 en una municipal o provincial, ninguna en una nacional.
 - **La ley prevé casos en que no corresponde borrar** (art. 16, inc. 5). Si alguien pide salir del padrón durante la votación,
   consultalo antes de tocar nada.
 
@@ -128,6 +132,7 @@ algo de sus ideas o de su afiliación…» hace que:
 
 - solo la vea quien tiene la tarea «Ver las categorías sensibles»;
 - cada vez que alguien la mira, el registro anote «Miró categorías sensibles»;
+- solo quien tiene esa tarea pueda cambiarla o sacarla;
 - se guarde cifrada en la base, con una clave que no está en la base.
 
 Lo más seguro es no anotar opiniones políticas de nadie que no lo haya consentido. Si usás categorías sensibles, cargá el consentimiento
@@ -143,10 +148,10 @@ marcas para siempre? Quedan solo los totales. No se puede deshacer.» La elecci�
 
 | Se borra | Queda |
 |---|---|
-| Nombres, documentos, legajos y domicilios del padrón | Los totales de cada mesa: sobres y escrutinio |
+| Nombres, documentos, legajos y domicilios del padrón, y los identificadores y números de orden de cada persona | Los totales de cada mesa: sobres y escrutinio |
 | Las marcas del semáforo y los consentimientos | Las fotos de las actas |
 | Quién votó y a qué hora | El equipo: nombre y teléfono de cada persona |
-| | El registro |
+| | El registro, que nombra a cada persona por una referencia que ya no lleva a nadie |
 | | Las copias de seguridad hechas antes, hasta que se renuevan |
 
 - **Decidí la fecha antes de la elección,** con el abogado: por ejemplo, cuando ya no quede ningún reclamo posible sobre el resultado. La
@@ -159,8 +164,9 @@ marcas para siempre? Quedan solo los totales. No se puede deshacer.» La elecci�
 ## Las copias de seguridad
 
 El servidor hace una copia cada 6 horas, cifrada con la llave de recuperación, y guarda las últimas 28: una semana. Están en el mismo
-servidor, en `/opt/urna-abierta/copias`, y la app no las puede borrar. Cada copia lleva toda la base, las fotos del disco y la clave que
-abre las categorías sensibles.
+servidor, en `/opt/urna-abierta/copias`, y la app no las puede borrar. Si configuraste un almacenamiento S3, cada copia va también a la
+carpeta `backups/` del bucket, que guarda las 28 más nuevas (lo explica la [guía de servidores](servidores.md#copias-fuera-del-servidor)).
+Cada copia lleva toda la base, las fotos del disco y la clave que abre las categorías sensibles.
 
 **Purgar o borrar a una persona no toca las copias.** Sus datos siguen ahí hasta que esas copias se renuevan, una semana después, y en
 cada copia que bajaste a una computadora, para siempre.
@@ -169,7 +175,8 @@ Para no esperar esa semana, después de purgar y de comprobar que no vas a neces
 
 1. Entrá por SSH al servidor y listá las copias: `sudo ls -l /opt/urna-abierta/copias`. La hora del nombre está en UTC: tres horas más
    que en Argentina.
-2. Borrá las anteriores a la purga, una por una: `sudo rm /opt/urna-abierta/copias/urna-AAAAMMDD-HHMMSS.tar.gpg`.
+2. Borrá las anteriores a la purga, una por una: `sudo rm /opt/urna-abierta/copias/urna-AAAAMMDD-HHMMSS.tar.gpg`. Si las copias van a un
+   bucket, borralas también ahí, desde la página del proveedor.
 3. Hacé una copia nueva, ya sin datos personales: `sudo urna copia`.
 4. Borrá las copias que bajaste desde la app, de tu computadora y de cualquier nube o papelera donde las hayas puesto.
 
@@ -185,8 +192,9 @@ tenías.
   compartir.
 - **El nivel de seguridad** se elige en **Más cosas**, **Seguridad**. En una elección municipal, provincial o nacional, todos menos los
   fiscales confirman con un código de una app como Google Authenticator o Aegis, y el fiscal ve solo los últimos 3 números de cada
-  documento.
-- **El registro no se puede cambiar desde la app.** Anota descargas del padrón, de datos de personas y de copias de seguridad.
+  documento. Mientras una elección de ese tipo esté abierta, el servidor aplica al menos ese nivel y no deja bajarlo.
+- **El registro no se puede cambiar desde la app,** y la base rechaza editarlo, borrarlo o vaciarlo. Anota descargas del padrón, de datos
+  de personas y de copias de seguridad, y quién buscó o miró a quién, por una referencia al azar, sin nombres ni documentos.
 - **Las copias salen cifradas,** y sin la llave de recuperación no se abren.
 - **Contales a fiscales y jefes que lo que ven es confidencial** (art. 10), y sacá del equipo a quien ya no lo necesite.
 
@@ -194,14 +202,14 @@ tenías.
 
 Esta lista es de noviembre de 2026. Una versión nueva puede resolver alguno: fijate en sus notas.
 
-- En un padrón real, el identificador interno de cada persona lleva su documento completo. Ese identificador queda después de borrarla o
-  de purgar, en la base y en el registro, y llega al teléfono del fiscal aunque la pantalla muestre solo 3 números.
-- Volver a subir el padrón puede deshacer correcciones y borrados hechos a pedido. Después de borrar a alguien, no subas otro padrón; si no
-  queda otra, volvé a borrarlo.
-- Cerrar la elección no le corta al fiscal el acceso al padrón de su mesa en el servidor.
-- «Bajar todo lo que tenemos» muestra también las categorías sensibles a quien atiende pedidos, aunque no tenga el permiso aparte.
+- Hasta la purga, el identificador interno de una persona borrada sale de su documento con la clave de campos, para reconocerla si se
+  vuelve a subir el padrón. Quien tenga esa clave, que viaja en las copias de seguridad, puede probar todos los documentos hasta dar con
+  el suyo. La fila borrada sigue en su mesa y con su número de orden, sin nombre ni documento, hasta la purga.
+- Corregir el documento de una persona no cambia su identificador interno, que suele llevar el documento que traía el archivo: el viejo
+  queda ahí hasta que se la borra o se purga.
 - Una categoría se puede marcar como sensible solo al crearla, y una persona recibe una sola tarea desde la app.
 - El consentimiento no se puede retirar ni borrar desde la app: se reemplaza con otro, o se borran los datos.
 - El cifrado de las categorías sensibles protege una copia de la base sacada sin el archivo `.env`. No protege una copia del disco entero
   ni una copia de seguridad abierta con la llave, porque la clave viaja con ellas.
-- Las copias de seguridad no salen del servidor solas: si querés tener una afuera, bajala desde la app.
+- Las copias de seguridad salen del servidor solas solo si configuraste un almacenamiento S3, y una de más de 5 GB no entra. Si no, para
+  tener una afuera, bajala desde la app.
