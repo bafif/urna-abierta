@@ -3,6 +3,7 @@
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import { t, timeAgo } from '../i18n.svelte.ts';
+  import { alertWatch } from '../alerts.ts';
   import { localDay } from '../app.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
@@ -28,6 +29,8 @@
   }
 
   const REFRESH_MS = 20_000;
+  /** While an alert is open, more often: the server keeps the panel this long anyway. */
+  const ALERT_REFRESH_MS = 10_000;
   /** Past this, a table is worth a call. It may only be missing signal, and the screen says so. */
   const SILENT_MS = 30 * 60_000;
 
@@ -38,7 +41,8 @@
   let offline = $state(false);
   let loaded = $state(false);
   let showAll = $state(false);
-  let timer: ReturnType<typeof setInterval> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let gone = false;
 
   async function load() {
     try {
@@ -46,7 +50,10 @@
         const { elections } = await session.api<{ elections: ElectionRef[] }>('/district/elections');
         election = (given ? elections.find((item) => item.id === given) : elections.find((item) => item.status === 'jornada') ?? elections[0]) ?? null;
       }
-      if (election) tables = (await session.api<{ tables: Table[] }>(`/district/${election.id}`)).tables;
+      if (election) {
+        tables = (await session.api<{ tables: Table[] }>(`/district/${election.id}`)).tables;
+        alertWatch.update(election.id, tables.flatMap((table) => table.incidents.map((incident) => incident.id)));
+      }
       offline = false;
     } catch {
       offline = true;
@@ -54,13 +61,30 @@
     loaded = true;
   }
 
+  /** Also while the app is in the background, so that the icon and the title keep up. */
+  function again() {
+    clearTimeout(timer);
+    if (gone) return;
+    timer = setTimeout(async () => {
+      await load();
+      again();
+    }, tables.some((table) => table.incidents.length > 0) ? ALERT_REFRESH_MS : REFRESH_MS);
+  }
+
+  function back() {
+    if (document.visibilityState === 'visible') void load().then(again);
+  }
+
   onMount(() => {
-    void load();
-    timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
-    }, REFRESH_MS);
+    void load().then(again);
+    document.addEventListener('visibilitychange', back);
   });
-  onDestroy(() => clearInterval(timer));
+  onDestroy(() => {
+    gone = true;
+    clearTimeout(timer);
+    document.removeEventListener('visibilitychange', back);
+    alertWatch.leave();
+  });
 
   /** Only while it is being voted: at night, or once its day was closed, silence says nothing. */
   const silent = (table: Table) =>
