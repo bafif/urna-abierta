@@ -22,8 +22,17 @@ To see the design proposal, just open `design/index.html` in a browser.
 
 ## The installer
 
-It is downloaded from the GitHub releases page, for Windows, macOS or Linux. It opens in your browser and can only be seen from your
-computer. Until a version is published, run it from the source with `node apps/installer/src/main.ts`, with the container images built.
+It is downloaded from the GitHub releases page, for Windows, macOS or Linux: [Downloading and opening it](#downloading-and-opening-it)
+says which one. It opens in your browser and can only be seen from your computer.
+
+Until a version is published, run it from the source, in the repository's folder, with Node 24 and Podman:
+
+```sh
+deploy/instalador.sh
+```
+
+It builds the images of the server and the app from that same code, and opens the installer. Those images are enough for the option
+of trying it on this computer; installing on a server needs published images.
 
 It asks three questions and does the rest.
 
