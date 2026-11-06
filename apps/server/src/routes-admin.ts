@@ -4,8 +4,8 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
-import { audit, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, setSetting } from './actor.ts';
+import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
+import { audit, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, securityProfile, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -55,6 +55,9 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.put<{ Body: { profile?: unknown } }>('/api/security', { preHandler: requires(pool, 'security.manage') }, async (request, reply) => {
     const { profile } = request.body ?? {};
     if (!isSecurityProfile(profile)) return reply.code(400).send({ error: 'invalid_profile' });
+    // An open election holds the level its kind asks for, whoever wants to lower it.
+    const { minimum } = await securityProfile(pool);
+    if (stricterProfile(profile, minimum) !== profile) return reply.code(409).send({ error: 'election_needs_more', minimum });
     await setSetting(pool, 'security_profile', profile);
     // Going to a stricter profile takes away what it does not allow.
     if (!SECURITY_PROFILES[profile].fiscalSeesSemaphore) await setSetting(pool, 'fiscal_semaphore', false);
@@ -93,7 +96,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** In a low risk election, the party can let poll watchers see the traffic light of their table. */
   app.put<{ Body: { enabled?: unknown } }>('/api/semaphore/fiscal-view', { preHandler: manageElection }, async (request, reply) => {
     const enabled = request.body?.enabled === true;
-    const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+    const { profile } = await securityProfile(pool);
     if (enabled && !SECURITY_PROFILES[profile].fiscalSeesSemaphore) return reply.code(409).send({ error: 'profile_forbids' });
     await setSetting(pool, 'fiscal_semaphore', enabled);
     await audit(pool, request.actor, 'semaphore.fiscal_view', undefined, { enabled });
@@ -250,8 +253,8 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const read: PadronRead = isCsv ? readCsvRoll(csvText(request.body)) : readPadron(new Uint8Array(request.body));
     if (!read.padron) return reply.code(422).send({ error: 'cannot_read', problems: read.problems });
     const { manifest } = read.padron;
-    const profile = await getSetting(pool, 'security_profile', 'estudiantil');
-    if (manifest.extraction?.external_ai === true && SECURITY_PROFILES[profile as keyof typeof SECURITY_PROFILES].externalAi === 'forbidden') {
+    const { profile } = await securityProfile(pool);
+    if (manifest.extraction?.external_ai === true && SECURITY_PROFILES[profile].externalAi === 'forbidden') {
       return reply.code(422).send({ error: 'external_ai_forbidden' });
     }
     const existing = await pool.query('SELECT id, corrected_at IS NOT NULL AS corrected FROM electors WHERE election_id = $1', [election]);

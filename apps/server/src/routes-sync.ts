@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation, type SecurityProfile } from '@urna-abierta/domain';
-import { audit, authenticated, can, canReachTable, erasedId, getSetting, type Actor } from './actor.ts';
+import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation } from '@urna-abierta/domain';
+import { audit, authenticated, can, canReachTable, erasedId, getSetting, securityProfile, type Actor } from './actor.ts';
 import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
 const MAX_PULL = 200;
@@ -97,7 +97,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
-    const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+    const { profile } = await securityProfile(pool);
     const digits = SECURITY_PROFILES[profile].documentDigits;
     // Only if the party allows it in a low risk election, and never a sensitive category.
     const withLight = SECURITY_PROFILES[profile].fiscalSeesSemaphore && (await getSetting(pool, 'fiscal_semaphore', false));

@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { isRole, permissionsOf, SECURITY_PROFILES, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
+import { isRole, isSecurityProfile, permissionsOf, SECURITY_PROFILES, stricterProfile, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
 
 export interface Assignment {
   role: Role;
@@ -71,10 +71,30 @@ declare module 'fastify' {
   }
 }
 
+export interface ProfileInForce {
+  /** What applies now. */
+  profile: SecurityProfile;
+  /** What the party chose. */
+  chosen: SecurityProfile;
+  /** The least an open election asks for, by its kind. */
+  minimum: SecurityProfile | null;
+}
+
+/** The profile in force: the one the party chose, or the one an open election asks for when it is stricter. */
+export async function securityProfile(pool: pg.Pool): Promise<ProfileInForce> {
+  const found = await pool.query(
+    `SELECT (SELECT value FROM settings WHERE key = 'security_profile') AS chosen,
+            ARRAY(SELECT DISTINCT kind FROM elections WHERE status NOT IN ('cerrada', 'purgada')) AS kinds`,
+  );
+  const chosen: SecurityProfile = isSecurityProfile(found.rows[0].chosen) ? found.rows[0].chosen : 'estudiantil';
+  const minimum = (found.rows[0].kinds as string[]).filter(isSecurityProfile).reduce<SecurityProfile | null>((most, kind) => stricterProfile(kind, most), null);
+  return { profile: stricterProfile(chosen, minimum), chosen, minimum };
+}
+
 /** Poll watchers never need it: they get in with their link, and only ever see their own table. */
 export async function needsSecondFactor(pool: pg.Pool, actor: Actor): Promise<boolean> {
   if (actor.verified || actor.roles.every((role) => role === 'fiscal')) return false;
-  const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+  const { profile } = await securityProfile(pool);
   return SECURITY_PROFILES[profile].secondFactor;
 }
 

@@ -1,8 +1,8 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { mainRole, SECURITY_PROFILES, themeProblems, type SecurityProfile } from '@urna-abierta/domain';
-import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, setSetting, totpMatches, unseal } from './actor.ts';
+import { mainRole, SECURITY_PROFILES, themeProblems } from '@urna-abierta/domain';
+import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpMatches, unseal } from './actor.ts';
 
 /** The theme chosen when installing is the one everyone sees until the party says otherwise. */
 const defaultParty = () => ({ name: '', theme: process.env.URNA_TEMA ?? 'aula' });
@@ -172,7 +172,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get('/api/me', { preHandler: beforeSecondFactor }, async (request) => {
     const { actor } = request;
     await pool.query('UPDATE devices SET last_seen_at = now() WHERE id = $1', [actor.deviceId]);
-    const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+    const { profile, minimum } = await securityProfile(pool);
     const tableIds = actor.assignments.filter((a) => a.role === 'fiscal' && a.table_id).map((a) => a.table_id);
     const tables = await pool.query(
       `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories,
@@ -210,6 +210,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       security: {
         profile,
         chosen: (await pool.query(`SELECT 1 FROM settings WHERE key = 'security_profile'`)).rowCount === 1,
+        minimum,
         fiscalView: await getSetting(pool, 'fiscal_semaphore', false),
         ...SECURITY_PROFILES[profile],
       },
