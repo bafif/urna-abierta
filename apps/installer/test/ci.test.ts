@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const root = new URL('../../../', import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), 'utf8');
+const packages = ['apps', 'packages', 'tools'].flatMap((folder) => readdirSync(new URL(`${folder}/`, root)).map((name) => `${folder}/${name}/`));
 
 describe('the end to end scripts', () => {
   it.each(['deploy/e2e.sh', 'deploy/e2e-instalador.sh'])('%s hands Playwright the report folder only when there is one', (path) => {
@@ -41,5 +42,20 @@ describe('what GitHub runs', () => {
   it('cancels only an older run of the same pull request, and every commit to main gets its own', () => {
     // In a group that runs share, GitHub keeps only the newest waiting run and cancels the others.
     expect(/^concurrency:\n {2}group: (.*)$/m.exec(workflow)?.[1]).toBe("tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}");
+  });
+
+  it('checks the types of every package, its tests and end to end ones included', () => {
+    expect(workflow).toContain('run: pnpm -r --no-bail run check');
+    for (const pkg of packages) {
+      const { scripts } = JSON.parse(read(`${pkg}package.json`)) as { scripts?: Record<string, string> };
+      expect(scripts?.check, pkg).toBeDefined();
+      // tsc and svelte-check look only in the folders that the tsconfig names.
+      const { include } = JSON.parse(read(`${pkg}tsconfig.json`)) as { include: string[] };
+      const folders = readdirSync(new URL(pkg, root), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.'))
+        .filter((entry) => (readdirSync(new URL(`${pkg}${entry.name}/`, root), { recursive: true }) as string[]).some((file) => file.endsWith('.ts')))
+        .map((entry) => entry.name);
+      expect(folders.filter((folder) => !include.includes(folder)), pkg).toEqual([]);
+    }
   });
 });

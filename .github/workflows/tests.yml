@@ -33,8 +33,9 @@ jobs:
       # Each step runs even if one before it failed: they are independent.
       - if: ${{ !cancelled() }}
         run: pnpm --filter @urna-abierta/domain exec vitest run
+      # The types of every package, its tests and end to end ones included.
       - if: ${{ !cancelled() }}
-        run: pnpm --filter @urna-abierta/web run check
+        run: pnpm -r --no-bail run check
       - if: ${{ !cancelled() }}
         run: pnpm --filter @urna-abierta/web exec vitest run
       - if: ${{ !cancelled() }}

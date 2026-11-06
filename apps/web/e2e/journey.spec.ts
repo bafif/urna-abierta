@@ -308,7 +308,7 @@ test('the chief gets the alert, sees who is silent, and two different counts wai
   await page.addInitScript(() => {
     const rung: number[][] = [];
     (window as unknown as { rung: number[][] }).rung = rung;
-    navigator.vibrate = (pattern: VibratePattern) => rung.push([pattern].flat()) > 0;
+    navigator.vibrate = (pattern: number | Iterable<number>) => rung.push(typeof pattern === 'number' ? [pattern] : [...pattern]) > 0;
   });
   await enter(page, demo.links.jefe!);
   await expect(page.getByRole('heading')).toHaveText('2 mesas te necesitan');

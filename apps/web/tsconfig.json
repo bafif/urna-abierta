@@ -6,6 +6,6 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "test", "*"],
+  "include": ["src", "test", "e2e", "e2e-installer", "e2e-lector", "*"],
   "exclude": ["src/service-worker"]
 }
