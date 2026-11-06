@@ -149,18 +149,13 @@ html[data-tachado="suave"] .fila.tachada .num, html[data-tachado="suave"] .fila.
 html[data-tachado="suave"] .fila.tachada .doc { visibility: hidden; }
 html[data-tachado="suave"] .fila.tachada .tilde { display: block; }
 
-/* ---------- Aula: a lined notebook with its red margin by day, a blackboard at night ---------- */
-html[data-fondo="cuaderno"] body { background-image: linear-gradient(to bottom, transparent 33px, var(--linea) 33px, var(--linea) 34px, transparent 34px); background-size: 100% 34px; }
-html[data-fondo="cuaderno"] body::before { content: ''; position: fixed; top: 0; bottom: 0; left: max(10px, calc(50% - var(--ancho) / 2 - 6px)); width: 2px; background: var(--margen); opacity: 0.7; pointer-events: none; }
-html[data-fondo="cuaderno"][data-modo="oscuro"] body { background-image: linear-gradient(to bottom, transparent 33px, color-mix(in srgb, var(--linea) 60%, transparent) 33px, color-mix(in srgb, var(--linea) 60%, transparent) 34px, transparent 34px); }
-
 /* ---------- Feria: every section with the colour of a task, and its shapes ---------- */
 html[data-cabecera="banda"] main > section > .envase > h2 { position: relative; overflow: hidden; padding: 18px 24px; border-radius: var(--radio, 20px); background: var(--banda-n); color: var(--sobre-banda-n); }
-html[data-cabecera="banda"] main > section:nth-of-type(5n+1) { --banda-n: var(--banda-1); --sobre-banda-n: var(--sobre-banda-1); }
-html[data-cabecera="banda"] main > section:nth-of-type(5n+2) { --banda-n: var(--banda-2); --sobre-banda-n: var(--sobre-banda-2); }
-html[data-cabecera="banda"] main > section:nth-of-type(5n+3) { --banda-n: var(--banda-3); --sobre-banda-n: var(--sobre-banda-3); }
-html[data-cabecera="banda"] main > section:nth-of-type(5n+4) { --banda-n: var(--banda-4); --sobre-banda-n: var(--sobre-banda-4); }
-html[data-cabecera="banda"] main > section:nth-of-type(5n+5) { --banda-n: var(--banda-5); --sobre-banda-n: var(--sobre-banda-5); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+1) { --banda-n: var(--banda-2); --sobre-banda-n: var(--sobre-banda-2); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+2) { --banda-n: var(--banda-3); --sobre-banda-n: var(--sobre-banda-3); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+3) { --banda-n: var(--banda-4); --sobre-banda-n: var(--sobre-banda-4); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+4) { --banda-n: var(--banda-5); --sobre-banda-n: var(--sobre-banda-5); }
+html[data-cabecera="banda"] main > section:nth-of-type(5n+5) { --banda-n: var(--banda-1); --sobre-banda-n: var(--sobre-banda-1); }
 html[data-decor="formas"] main > section > .envase > h2::before { content: ''; position: absolute; right: -40px; top: -60px; width: 150px; height: 150px; border-radius: 50%; background: currentColor; opacity: 0.14; }
 html[data-decor="formas"] main > section > .envase > h2::after { content: ''; position: absolute; right: 120px; bottom: -34px; width: 64px; height: 64px; background: currentColor; opacity: 0.1; transform: rotate(18deg); }
 html[data-cabecera="banda"] section { border-top: 0; }
@@ -181,3 +176,43 @@ html[data-material="almohada"] .boton.principal, html[data-material="almohada"] 
 /* ---------- Vidrio: glass over the aurora, the cover too ---------- */
 html[data-material="vidrio"] .demo-padron { background: color-mix(in srgb, var(--superficie) 72%, transparent); border-color: var(--vidrio-borde); backdrop-filter: blur(14px); }
 html[data-material="vidrio"] .boton.principal { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 12px 24px var(--vidrio-sombra); }
+
+/* ---------- Second pass: closer to how the app looks with each theme ---------- */
+
+/* The cover: Aula keeps the original green one; every other theme shows its own panel and phones. */
+.portada-viva { display: none; }
+html[data-tema]:not([data-tema="aula"]) .portada-viva { display: grid; }
+html[data-tema]:not([data-tema="aula"]) .portada-original { display: none; }
+
+/* Feria: the top of the page and every title are full-width colour bands with their shapes, as the app's headers. */
+html[data-cabecera="banda"] header.arriba, html[data-cabecera="banda"] .tapa { background: var(--banda-1); color: var(--sobre-banda-1); box-shadow: 0 0 0 100vmax var(--banda-1); clip-path: inset(0 -100vmax); }
+html[data-cabecera="banda"] header.arriba a, html[data-cabecera="banda"] .tapa a:not(.boton) { color: inherit; }
+html[data-cabecera="banda"] .tapa .bajada, html[data-cabecera="banda"] .tapa .nota, html[data-cabecera="banda"] .probar-tema > span { color: inherit; opacity: 0.92; }
+html[data-cabecera="banda"] .tapa .boton.principal { background: var(--sobre-banda-1); color: var(--banda-1); }
+html[data-cabecera="banda"] .tapa .boton.otro { box-shadow: inset 0 0 0 3px currentColor; color: inherit; }
+html[data-cabecera="banda"] .tapa { position: relative; }
+html[data-cabecera="banda"] .tapa > * { position: relative; z-index: 1; }
+html[data-decor="formas"] .tapa::before { content: ''; position: absolute; z-index: 0; right: -80px; top: -110px; width: 360px; height: 360px; border-radius: 50%; background: var(--sobre-banda-1); opacity: 0.13; pointer-events: none; }
+html[data-decor="formas"] .tapa::after { content: ''; position: absolute; z-index: 0; right: 150px; top: 40px; width: 120px; height: 120px; border-radius: 18px; background: var(--banda-3); transform: rotate(18deg); pointer-events: none; }
+html[data-cabecera="banda"] main > section { padding-top: 0; }
+html[data-cabecera="banda"] main > section > .envase > h2 { border-radius: 0; padding: 34px 0; margin: 0 0 26px; font-size: clamp(32px, 5vw, 50px); box-shadow: 0 0 0 100vmax var(--banda-n); clip-path: inset(0 -100vmax); overflow: visible; }
+html[data-decor="formas"] main > section > .envase > h2::before { right: 0; top: -50px; width: 170px; height: 170px; }
+html[data-decor="formas"] main > section > .envase > h2::after { right: 210px; bottom: -40px; width: 80px; height: 80px; border-radius: 12px; }
+html[data-cabecera="banda"] .boton.otro { box-shadow: inset 0 0 0 3px var(--texto); color: var(--texto); }
+
+/* Vidrio: every section is a glass panel over the aurora, and the top bar floats like the app's. */
+html[data-material="vidrio"] header.arriba { margin-top: 14px; border-radius: 999px; padding: 12px 26px; background: color-mix(in srgb, var(--superficie) 50%, transparent); border: 1px solid var(--vidrio-borde); backdrop-filter: blur(18px); }
+html[data-material="vidrio"] main > section { border-top: 0; padding: 18px 0; }
+html[data-material="vidrio"] main > section > .envase { padding: 36px 40px; border-radius: 30px; background: color-mix(in srgb, var(--superficie) 42%, transparent); border: 1px solid var(--vidrio-borde); backdrop-filter: blur(20px); box-shadow: 0 12px 30px var(--vidrio-sombra); }
+
+/* Mate: every section is a soft, round cushion, with air around it. */
+html[data-material="almohada"] main > section { padding: 22px 0; }
+html[data-material="almohada"] main > section > .envase { padding: 40px 44px; border-radius: 36px; background: var(--superficie); box-shadow: 0 10px 30px var(--almohada); }
+html[data-material="almohada"] .tarjeta, html[data-material="almohada"] .tema-tarjeta { background: var(--fondo); box-shadow: none; }
+
+/* Tablero: a thick rule under the top bar, like a results board. */
+html[data-material="filete"] header.arriba { border-bottom: 4px solid var(--texto); }
+
+@media (max-width: 720px) {
+  html[data-material="vidrio"] main > section > .envase, html[data-material="almohada"] main > section > .envase { padding: 26px 22px; border-radius: 24px; }
+}
