@@ -19,9 +19,12 @@ CREATE TABLE IF NOT EXISTS elections (
   days date[] NOT NULL DEFAULT '{}',
   categories jsonb NOT NULL DEFAULT '[]',
   status text NOT NULL DEFAULT 'preparacion',
+  -- Which day it is depends on where the election happens, not on the server's clock.
+  time_zone text NOT NULL DEFAULT 'America/Argentina/Buenos_Aires',
   created_at timestamptz NOT NULL DEFAULT now(),
   closed_at timestamptz
 );
+ALTER TABLE elections ADD COLUMN IF NOT EXISTS time_zone text NOT NULL DEFAULT 'America/Argentina/Buenos_Aires';
 
 CREATE TABLE IF NOT EXISTS units (
   id text PRIMARY KEY,
@@ -73,9 +76,17 @@ CREATE TABLE IF NOT EXISTS devices (
   revoked_at timestamptz
 );
 
+-- 96 random bits, written in 16 letters and digits.
+CREATE OR REPLACE FUNCTION new_public_id() RETURNS text AS $$
+  SELECT translate(encode(substr(uuid_send(gen_random_uuid()), 1, 6) || substr(uuid_send(gen_random_uuid()), 11, 6), 'base64'), '+/', '-_')
+$$ LANGUAGE sql VOLATILE;
+
 CREATE TABLE IF NOT EXISTS electors (
   election_id uuid NOT NULL REFERENCES elections (id) ON DELETE CASCADE,
   id text NOT NULL,
+  -- What phones know a person by. The id comes from the roll and can carry the whole document; this one is
+  -- random, its own in each election, and importing the roll again never changes it.
+  public_id text NOT NULL DEFAULT new_public_id(),
   table_id text REFERENCES polling_tables (id) ON DELETE SET NULL,
   order_number integer,
   full_name text NOT NULL,
@@ -107,6 +118,18 @@ CREATE TABLE IF NOT EXISTS operations (
   UNIQUE (table_id, seq)
 );
 CREATE INDEX IF NOT EXISTS operations_type ON operations (table_id, type);
+
+-- Databases from before the random ids: each person gets one, and the marks already sent name them by it.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'electors' AND column_name = 'public_id') THEN
+    ALTER TABLE electors ADD COLUMN public_id text NOT NULL DEFAULT new_public_id();
+    UPDATE operations o SET payload = jsonb_set(o.payload, '{elector}', to_jsonb(x.public_id))
+      FROM polling_tables t JOIN electors x ON x.election_id = t.election_id
+      WHERE o.table_id = t.id AND o.type IN ('voter.marked', 'voter.unmarked') AND x.id = o.payload->>'elector';
+  END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS electors_public ON electors (election_id, public_id);
 
 CREATE TABLE IF NOT EXISTS incident_states (
   operation_id uuid PRIMARY KEY REFERENCES operations (id) ON DELETE CASCADE,

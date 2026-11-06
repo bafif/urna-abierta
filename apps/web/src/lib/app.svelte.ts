@@ -1,14 +1,23 @@
 import { tick } from 'svelte';
-import { fakeRoll, MarkState, parseOperation, SCHEMA_VERSION, uuidv7, type Operation, type RollEntry } from '@urna-abierta/domain';
-import { QueueState, storeFor, UrnaDatabase } from './db.ts';
+import { dayIn, fakeRoll, MarkState, MAX_PHOTO_BYTES, parseOperation, SCHEMA_VERSION, uuidv7, type Operation, type RollEntry } from '@urna-abierta/domain';
+import { CLOCK_WARNING_MS, offsetAfterJump } from './clock.ts';
+import { PhotoState, QueueState, storeFor, UrnaDatabase } from './db.ts';
 import { t } from './i18n.svelte.ts';
 import { API, session, type TableInfo } from './session.svelte.ts';
-import { retryDelay, syncOnce } from './sync.ts';
+import { pullAll, pushNow, retryDelay, sendPhoto, syncOnce, type SyncStore } from './sync.ts';
 
 const PRACTICE_KEY = 'urna-abierta-practica';
 const PRACTICE_PEOPLE = 40;
 const MAX_PHOTO_SIDE = 1800;
 const SHRINK_LIMIT_MS = 15_000;
+/** The second try, already smaller, is quicker. */
+const SHRINK_AGAIN_LIMIT_MS = 10_000;
+/** An urgent alert goes out by itself: if it does not get through in this time, the plan B shows. */
+const ALERT_LIMIT_MS = 8_000;
+/** Who this is and their table are asked again this often while there is signal: they say if the roll changed. */
+const ME_EVERY_MS = 5 * 60_000;
+/** A smaller difference is not worth writing down again. */
+const CLOCK_NOTICE_MS = 60_000;
 /** A phone that never heard the election closed still lets go of the roll, once everything was sent. */
 const DAYS_KEPT_AFTER_LAST = 7;
 const PERIODIC_SYNC_MS = 30_000;
@@ -19,6 +28,8 @@ const ROOM_CHECK_LIMIT_MS = 8_000;
 /** Browsers take a while to notice freed space, so the check repeats by itself until then. */
 const ROOM_RETRY_MS = 20_000;
 const PREPARED_KEY = 'urna-abierta-prepared';
+/** When the phone's clock was last looked at, while it was off: it may get fixed with the app closed. */
+const CLOCK_SEEN_KEY = 'urna-abierta-reloj-visto';
 
 /**
  * Whether the phone has room left, found by writing to a separate store. It cannot be asked:
@@ -79,24 +90,33 @@ export function localDay(date = new Date()): string {
 /** The ellipsis says that digits are missing, so it only goes when some are. */
 export const shownDocument = (suffix: string) => (suffix.length <= 4 && suffix ? `…${suffix}` : suffix);
 
+function draw(bitmap: ImageBitmap, scale: number): Promise<Blob | null> {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', 0.82));
+}
+
+async function withinLimit<T>(work: Promise<T>, ms: number): Promise<T | null> {
+  const limit = new Promise<null>((done) => setTimeout(() => done(null), ms));
+  try {
+    return await Promise.race([work, limit]);
+  } catch {
+    return null;
+  }
+}
+
 /** Keeps a photo of the tally sheet readable and light enough to go out with little signal. */
 async function shrink(file: Blob): Promise<Blob> {
-  const work = (async () => {
+  const whole = async () => {
     const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', 0.82));
-  })();
-  // The last step of the day cannot depend on a phone managing this: the original photo works too.
-  const limit = new Promise<null>((done) => setTimeout(() => done(null), SHRINK_LIMIT_MS));
-  try {
-    return (await Promise.race([work, limit])) ?? file;
-  } catch {
-    return file;
-  }
+    return draw(bitmap, Math.min(1, MAX_PHOTO_SIDE / Math.max(bitmap.width, bitmap.height)));
+  };
+  // Some phones cannot open a whole photo at once: the browser can open it already smaller.
+  const smaller = async () => draw(await createImageBitmap(file, { resizeWidth: MAX_PHOTO_SIDE, resizeQuality: 'medium' }), 1);
+  // The last step of the day cannot depend on a phone managing this: the original photo works too, if it is not too big.
+  return (await withinLimit(whole(), SHRINK_LIMIT_MS)) ?? (await withinLimit(smaller(), SHRINK_AGAIN_LIMIT_MS)) ?? file;
 }
 
 async function sha256(bytes: ArrayBuffer): Promise<string> {
@@ -122,8 +142,11 @@ class AppState {
   private marks = new MarkState();
   /** Everything applied to the marks, to rebuild them if a write fails. */
   private applied: Operation[] = [];
-  private readonly store = storeFor(this.db, (operations) => this.applyRemote(operations));
+  private readonly store: SyncStore = { ...storeFor(this.db, (operations) => this.applyRemote(operations)), serverTime: (offset) => this.noteClock(offset) };
   private deviceId = '';
+  private lastMeAt = Date.now();
+  /** The phone's clock and the time that passed, the last time they were looked at. */
+  private clockSeen = { wall: Date.now(), mono: performance.now() };
   private deviceSeq = 0;
   private order = 0;
   private failures = 0;
@@ -156,6 +179,12 @@ class AppState {
   intact = $state<boolean | null>(null);
   tapSamples = $state.raw<number[]>([]);
   writeSamples = $state.raw<number[]>([]);
+  /** How far ahead the server's clock is from this phone's, in milliseconds. */
+  clockOffset = $state(0);
+  /** The roll of the table changed on the server, and the phone already has the new one. */
+  rollUpdated = $state(false);
+  /** Photos the server will never take, by their hash. */
+  refusedPhotos = $state.raw<Set<string>>(new Set());
 
   voted(id: string): boolean {
     return this.marks.hasVoted(id);
@@ -202,14 +231,30 @@ class AppState {
     return new Set(this.ofType('tally.submitted').map((operation) => (operation.payload as { category: string }).category));
   }
 
+  /** A photo the server refused does not count: it has to be taken again. One from another phone is not known here, so it counts. */
   get hasPhoto(): boolean {
-    return this.ofType('tally.photo').length > 0;
+    return this.ofType('tally.photo').some((operation) => !this.refusedPhotos.has((operation.payload as { sha256: string }).sha256));
+  }
+
+  get photoRefused(): boolean {
+    return this.refusedPhotos.size > 0 && !this.hasPhoto;
+  }
+
+  /** Today where the election happens, by the server's clock: a phone with the wrong date or zone still gets its step right. */
+  get today(): string {
+    const now = new Date(Date.now() + this.clockOffset);
+    const zone = this.table?.timeZone;
+    return zone ? dayIn(zone, now) : localDay(now);
+  }
+
+  get clockWrong(): boolean {
+    return Math.abs(this.clockOffset) > CLOCK_WARNING_MS;
   }
 
   get step(): Step {
     const table = this.table;
     if (this.electors.length === 0 || !table || table.days.length === 0) return 'prepare';
-    const today = localDay();
+    const today = this.today;
     const own = table.shift ?? table.days;
     const last = own[own.length - 1]!;
     if (today < own[0]!) return 'waiting';
@@ -226,7 +271,7 @@ class AppState {
   /** Which day of the election today is, counted from one. */
   get dayNumber(): number {
     const days = this.table?.days ?? [];
-    const index = days.indexOf(localDay());
+    const index = days.indexOf(this.today);
     return index === -1 ? days.length : index + 1;
   }
 
@@ -288,6 +333,8 @@ class AppState {
       this.online = false;
     });
     document.addEventListener('visibilitychange', () => {
+      // Leaving to the phone's settings and coming back is how the clock gets fixed.
+      this.watchClock();
       if (document.visibilityState === 'visible') {
         void this.checkRoom();
         void this.sync();
@@ -298,14 +345,14 @@ class AppState {
     await this.db.setMeta('deviceId', this.deviceId);
     this.deviceSeq = (await this.db.getMeta<number>('deviceSeq')) ?? 0;
     if (!this.practice) this.tableId = (await this.db.getMeta<string>('tableId')) ?? '';
+    this.clockOffset = (await this.db.getMeta<number>('clockOffset')) ?? 0;
+    const seen = Number(localStorage.getItem(CLOCK_SEEN_KEY));
+    if (seen && !this.practice) this.useClockOffset(offsetAfterJump(this.clockOffset, Date.now() - seen));
+    this.refusedPhotos = new Set(await this.db.photos.where('sent').equals(PhotoState.Refused).primaryKeys());
 
     this.electors = await this.db.electors.toArray();
     this.electors.sort((a, b) => a.order - b.order);
-    const stored = await this.db.operations.toArray();
-    for (const row of stored) {
-      this.applyLocally(row.operation);
-      this.order = Math.max(this.order, row.order);
-    }
+    await this.replay();
     this.dataLost = !this.practice && this.electors.length === 0 && localStorage.getItem(PREPARED_KEY) !== null;
     await this.touchCanary();
     await this.refreshPersistence();
@@ -341,6 +388,48 @@ class AppState {
     this.dataLost = false;
     this.intact = null;
     this.revision += 1;
+  }
+
+  /** The marks and everything else, from what is saved. */
+  private async replay(): Promise<void> {
+    this.applied = [];
+    this.marks = new MarkState();
+    for (const row of await this.db.operations.toArray()) {
+      this.applyLocally(row.operation);
+      this.order = Math.max(this.order, row.order);
+    }
+    this.revision += 1;
+  }
+
+  private noteClock(offset: number): void {
+    if (Math.abs(offset - this.clockOffset) < CLOCK_NOTICE_MS) return;
+    this.useClockOffset(offset);
+  }
+
+  private useClockOffset(offset: number): void {
+    this.clockSeen = { wall: Date.now(), mono: performance.now() };
+    if (offset === this.clockOffset) return;
+    this.clockOffset = offset;
+    void this.db.setMeta('clockOffset', offset).catch(() => undefined);
+  }
+
+  /**
+   * The difference with the server is only measured with signal. If the phone's clock jumped since the last look by
+   * about what it was off, someone fixed it, and the day has to stay right without waiting for signal.
+   */
+  private watchClock(): void {
+    if (this.practice) return;
+    const wall = Date.now();
+    const mono = performance.now();
+    const jump = wall - this.clockSeen.wall - (mono - this.clockSeen.mono);
+    this.clockSeen = { wall, mono };
+    this.useClockOffset(offsetAfterJump(this.clockOffset, jump));
+    try {
+      if (this.clockWrong) localStorage.setItem(CLOCK_SEEN_KEY, String(wall));
+      else localStorage.removeItem(CLOCK_SEEN_KEY);
+    } catch {
+      // Without it, a clock fixed with the app closed waits for the next sync.
+    }
   }
 
   private applyLocally(operation: Operation): void {
@@ -393,18 +482,21 @@ class AppState {
       await this.letGoIfFinished();
     }
     let electors: RollEntry[];
+    let revision: string | null = null;
     if (this.practice) {
       electors = fakeRoll(PRACTICE_PEOPLE, 1);
     } else {
       const response = await session.fetch(`${API}/tables/${table.id}/bundle`, { signal: AbortSignal.timeout(60_000) });
       if (!response.ok) throw new Error('no server');
-      electors = ((await response.json()) as { electors: RollEntry[] }).electors;
+      ({ electors, revision } = (await response.json()) as { electors: RollEntry[]; revision: string });
     }
     await this.db.transaction('rw', this.db.electors, this.db.meta, async () => {
       await this.db.electors.clear();
       await this.db.electors.bulkPut(electors);
       await this.db.setMeta('tableId', table.id);
       await this.db.setMeta('lastDay', table.days.at(-1));
+      await this.db.setMeta('rollRevision', revision);
+      await this.db.setMeta('publicIds', true);
       const canary = await this.db.getMeta<Canary>('canary');
       if (canary) await this.db.setMeta('canary', { ...canary, preparedPeople: electors.length });
     });
@@ -416,6 +508,51 @@ class AppState {
     this.intact = true;
     await this.refreshPersistence();
     void this.sync();
+  }
+
+  /**
+   * Brings the roll again when it changed on the server: someone added, moved or corrected, a light. Marks stay,
+   * because they name people by an id that never changes. A roll from before those ids is replaced once nothing is
+   * left to send, together with its marks, which come back from the server under the new ids.
+   */
+  private async refreshRoll(): Promise<void> {
+    const table = session.me?.table;
+    if (this.practice || this.electors.length === 0 || !table?.rollRevision || table.id !== this.tableId) return;
+    const before = !(await this.db.getMeta<boolean>('publicIds'));
+    if (!before && (await this.db.getMeta<string>('rollRevision')) === table.rollRevision) return;
+    if (before && this.pendingCount > 0) return;
+    const response = await session.fetch(`${API}/tables/${table.id}/bundle`, { signal: AbortSignal.timeout(60_000) });
+    if (!response.ok) return;
+    const { electors, revision } = (await response.json()) as { electors: RollEntry[]; revision: string };
+    // All of it before touching anything: the marks on screen must not disappear, not even for a moment.
+    const pulled = before ? await pullAll(table.id, API, session.fetch) : null;
+    if (before && !pulled) return;
+    const replaced = await this.db.transaction('rw', this.db.electors, this.db.operations, this.db.meta, async () => {
+      if (pulled) {
+        const waiting = await this.db.operations.where('[queue+order]').between([QueueState.Pending, -Infinity], [QueueState.Pending, Infinity]).count();
+        if (waiting > 0) return false;
+        await this.db.operations.filter((row) => row.queue === QueueState.Done && row.operation.type.startsWith('voter.')).delete();
+        const known = new Set(await this.db.operations.toCollection().primaryKeys());
+        const fresh = pulled.operations.filter((operation) => !known.has(operation.id));
+        await this.db.operations.bulkPut(fresh.map((operation) => ({ id: operation.id, queue: QueueState.Done, order: 0, operation })));
+        await this.db.setMeta('cursor', pulled.next);
+        await this.db.setMeta('publicIds', true);
+      }
+      await this.db.electors.clear();
+      await this.db.electors.bulkPut(electors);
+      await this.db.setMeta('rollRevision', revision);
+      const canary = await this.db.getMeta<Canary>('canary');
+      if (canary) await this.db.setMeta('canary', { ...canary, preparedPeople: electors.length });
+      return true;
+    });
+    if (!replaced) return;
+    this.electors = [...electors].sort((a, b) => a.order - b.order);
+    if (pulled) await this.replay();
+    this.canary = (await this.db.getMeta<Canary>('canary')) ?? null;
+    this.intact = true;
+    // Changing to the new ids changes nothing the person can see.
+    if (!pulled) this.rollUpdated = true;
+    this.revision += 1;
   }
 
   /**
@@ -487,9 +624,13 @@ class AppState {
   async reportIncident(): Promise<'sent' | 'queued' | 'unsaved'> {
     const operation = await this.record('incident.reported', { kind: 'urgent' });
     if (!operation) return 'unsaved';
-    await this.sync();
-    const row = await this.db.operations.get(operation.id);
-    return row?.queue === QueueState.Done ? 'sent' : 'queued';
+    if (this.practice) return 'sent';
+    // By itself and right away: behind a queue of marks, with little signal, it could take minutes. If it does not
+    // get through, it stays queued like everything else, and the screen offers the plan B at once.
+    const sent = await pushNow(this.store, this.tableId, [operation], API, session.fetch, ALERT_LIMIT_MS);
+    await this.refreshPending().catch(() => undefined);
+    this.schedule(1_000);
+    return sent ? 'sent' : 'queued';
   }
 
   async countEnvelopes(day: string, envelopes: number): Promise<boolean> {
@@ -504,37 +645,46 @@ class AppState {
     return operation !== null;
   }
 
-  /** The photo stays saved on the phone until it reaches the server. */
-  async addPhoto(file: Blob): Promise<boolean> {
-    if (this.noRoom || this.storageBroken) return false;
+  /** The photo stays saved on the phone until it reaches the server. One the server would never take is not kept. */
+  async addPhoto(file: Blob): Promise<'saved' | 'unsaved' | 'tooBig'> {
+    if (this.noRoom || this.storageBroken) return 'unsaved';
     const blob = await shrink(file);
+    if (blob.size > MAX_PHOTO_BYTES) return 'tooBig';
     const bytes = await blob.arrayBuffer();
     const hash = await sha256(bytes);
     try {
-      await this.db.photos.put({ sha256: hash, bytes, sent: this.practice ? 1 : 0 });
+      await this.db.photos.put({ sha256: hash, bytes, sent: this.practice ? PhotoState.Sent : PhotoState.Waiting });
     } catch {
       this.saveFailed = true;
       await this.checkRoom();
-      return false;
+      return 'unsaved';
     }
+    // The same picture again is a new try.
+    this.forgetRefused(hash);
     const operation = await this.record('tally.photo', { sha256: hash });
-    if (!operation) return false;
+    if (!operation) return 'unsaved';
     await this.refreshPending();
     this.schedule(500);
-    return true;
+    return 'saved';
   }
 
+  /** One at a time, each with its own limit. One the server refuses is set aside, so that the next ones still go. */
   private async sendPhotos(): Promise<void> {
-    const waiting = await this.db.photos.where('sent').equals(0).toArray();
+    const waiting = await this.db.photos.where('sent').equals(PhotoState.Waiting).toArray();
     for (const photo of waiting) {
-      const response = await session.fetch(`${API}/tables/${this.tableId}/photos/${photo.sha256}`, {
-        method: 'PUT',
-        headers: { 'content-type': 'image/jpeg' },
-        body: photo.bytes,
-      });
-      if (!response.ok) return;
-      await this.db.photos.update(photo.sha256, { sent: 1 });
+      const result = await sendPhoto(`${API}/tables/${this.tableId}/photos/${photo.sha256}`, photo.bytes, session.fetch);
+      if (result === 'failed') return;
+      await this.db.photos.update(photo.sha256, { sent: result === 'sent' ? PhotoState.Sent : PhotoState.Refused });
+      if (result === 'refused') this.refusedPhotos = new Set([...this.refusedPhotos, photo.sha256]);
+      else this.forgetRefused(photo.sha256);
     }
+  }
+
+  private forgetRefused(hash: string): void {
+    if (!this.refusedPhotos.has(hash)) return;
+    const refused = new Set(this.refusedPhotos);
+    refused.delete(hash);
+    this.refusedPhotos = refused;
   }
 
   private applyRemote(operations: Operation[]): void {
@@ -553,7 +703,7 @@ class AppState {
       .where('[queue+order]')
       .between([QueueState.Pending, -Infinity], [QueueState.Pending, Infinity])
       .count();
-    const photos = await this.db.photos.where('sent').equals(0).count();
+    const photos = await this.db.photos.where('sent').equals(PhotoState.Waiting).count();
     if (reading !== this.pendingReading) return;
     this.pendingCount = operations;
     this.pendingPhotos = photos;
@@ -573,6 +723,7 @@ class AppState {
 
   /** One at a time. Whoever asks during a send gets another one after it, which sees what that one missed. */
   async sync(): Promise<void> {
+    this.watchClock();
     if (this.practice || !this.tableId) return;
     if (this.running) {
       await this.running;
@@ -588,9 +739,18 @@ class AppState {
     this.sending = true;
     // Receiving operations writes too, so it waits while the phone has no room.
     const result = this.noRoom ? 'failed' : await syncOnce(this.store, this.tableId, API, session.fetch);
-    if (result === 'done') await this.sendPhotos().catch(() => undefined);
+    if (result === 'done') {
+      await this.sendPhotos().catch(() => undefined);
+      if (Date.now() - this.lastMeAt > ME_EVERY_MS) {
+        this.lastMeAt = Date.now();
+        await session.refreshMe();
+      }
+    }
     await this.refreshPending().catch(() => undefined);
-    if (result === 'done') await this.letGoIfFinished().catch(() => undefined);
+    if (result === 'done') {
+      await this.letGoIfFinished().catch(() => undefined);
+      await this.refreshRoll().catch(() => undefined);
+    }
     this.sending = false;
     this.online = navigator.onLine;
     if (result === 'done') {

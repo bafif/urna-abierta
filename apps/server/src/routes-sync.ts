@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation, type SecurityProfile } from '@urna-abierta/domain';
+import { foldText, MAX_BATCH, MAX_PHOTO_BYTES, parseOperation, SECURITY_PROFILES, type Operation, type RollEntry, type SecurityProfile } from '@urna-abierta/domain';
 import { audit, authenticated, canReachTable, getSetting } from './actor.ts';
+import { clock } from './clock.ts';
 import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
 const MAX_PULL = 200;
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const TABLE_ID = /^[\w-]{1,64}$/;
 
 /** At most one write every half a minute: hearing from a phone is frequent and tells little. */
@@ -17,6 +17,9 @@ async function heardFrom(pool: pg.Pool, table: string): Promise<void> {
   heard.set(table, Date.now());
   await pool.query('UPDATE polling_tables SET last_contact = now() WHERE id = $1', [table]);
 }
+
+type VoterOperation = Extract<Operation, { type: 'voter.marked' | 'voter.unmarked' }>;
+const isVoter = (operation: Operation): operation is VoterOperation => operation.type === 'voter.marked' || operation.type === 'voter.unmarked';
 
 /**
  * Stores a batch in one transaction. Locking the row of the table gives every operation of
@@ -29,16 +32,20 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
     await client.query('BEGIN');
     const locked = await client.query<{ last_seq: string }>('SELECT last_seq FROM polling_tables WHERE id = $1 FOR UPDATE', [table]);
     const last = Number(locked.rows[0]!.last_seq);
-    const inserted = await client.query(
+    // Asked here, after the lock: the purge holds that same lock while it deletes, so a batch that waited for it sees it.
+    // After the purge nobody's vote is kept, not even from a phone that was offline for days. The phone still hears it arrived, so it stops sending it.
+    const election = await client.query<{ status: string }>('SELECT e.status FROM elections e JOIN polling_tables t ON t.election_id = e.id WHERE t.id = $1', [table]);
+    const kept = election.rows[0]?.status === 'purgada' ? operations.filter((operation) => !isVoter(operation)) : operations;
+    const inserted = kept.length === 0 ? { rowCount: 0 } : await client.query(
       `INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload, author, quarantined)
        SELECT id, $1, $2 + ordinality, type, device, device_seq, device_time, payload, $9, $10
        FROM unnest($3::uuid[], $4::text[], $5::text[], $6::bigint[], $7::timestamptz[], $8::jsonb[])
          WITH ORDINALITY AS t (id, type, device, device_seq, device_time, payload, ordinality)
        ON CONFLICT (id) DO NOTHING`,
-      [table, last, operations.map((o) => o.id), operations.map((o) => o.type), operations.map((o) => o.device), operations.map((o) => o.device_seq), operations.map((o) => o.device_time), operations.map((o) => JSON.stringify(o.payload)), author, quarantined],
+      [table, last, kept.map((o) => o.id), kept.map((o) => o.type), kept.map((o) => o.device), kept.map((o) => o.device_seq), kept.map((o) => o.device_time), kept.map((o) => JSON.stringify(o.payload)), author, quarantined],
     );
     // It writes this row anyway, so it also says the phone was heard from.
-    await client.query('UPDATE polling_tables SET last_seq = $2, last_contact = now() WHERE id = $1', [table, last + (inserted.rowCount ? operations.length : 0)]);
+    await client.query('UPDATE polling_tables SET last_seq = $2, last_contact = now() WHERE id = $1', [table, last + (inserted.rowCount ? kept.length : 0)]);
     heard.set(table, Date.now());
     await client.query('COMMIT');
   } catch (error) {
@@ -49,7 +56,7 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
   }
 }
 
-/** A status only changes through one route of this same process, which clears this at that moment. */
+/** A status only changes through two routes of this same process, the step forward and the purge, which clear this at that moment. */
 const statuses = new Map<string, string>();
 export const forgetStatuses = () => statuses.clear();
 async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
@@ -65,36 +72,58 @@ async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
   return statuses.get(table) ?? null;
 }
 
+/** The roll of a table as phones get it. The id that comes from the roll stays on the server: it can be the whole document. */
+export async function tableRoll(pool: pg.Pool, table: string): Promise<RollEntry[]> {
+  const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+  const digits = SECURITY_PROFILES[profile].documentDigits;
+  // Only if the party allows it in a low risk election, and never a sensitive category.
+  const withLight = SECURITY_PROFILES[profile].fiscalSeesSemaphore && (await getSetting(pool, 'fiscal_semaphore', false));
+  const rows = await pool.query(
+    `SELECT x.public_id, x.order_number, x.full_name, x.document, c.name AS light_name, c.color AS light_color
+     FROM electors x
+     LEFT JOIN semaphore_marks m ON $2 AND m.election_id = x.election_id AND m.elector_id = x.id
+     LEFT JOIN semaphore_categories c ON c.id = m.category_id AND NOT c.sensitive
+     WHERE x.table_id = $1 ORDER BY x.order_number NULLS LAST, x.full_name`,
+    [table, withLight],
+  );
+  return rows.rows.map((row, index) => {
+    const order = row.order_number ?? index + 1;
+    const documentSuffix = String(row.document ?? '').slice(-digits);
+    return {
+      id: row.public_id, order, name: row.full_name, documentSuffix, search: foldText(`${order} ${row.full_name} ${documentSuffix}`),
+      ...(row.light_name ? { light: { name: row.light_name, color: row.light_color } } : {}),
+    };
+  });
+}
+
+/** Changes whenever what a phone holds of its table would: someone added, moved, renamed, a light, the digits shown. */
+export const rollRevision = (electors: RollEntry[]) => createHash('sha256').update(JSON.stringify(electors)).digest('base64url').slice(0, 22);
+
+/**
+ * A phone prepared before the random ids still names people by the id of the roll until it refreshes: that one never gets stored.
+ * Only people of this same table: naming someone of another table must not tell whether they are on the roll.
+ */
+async function usePublicIds(pool: pg.Pool, table: string, operations: VoterOperation[]): Promise<void> {
+  if (operations.length === 0) return;
+  const found = await pool.query(
+    'SELECT id, public_id FROM electors WHERE table_id = $1 AND id = ANY($2)',
+    [table, [...new Set(operations.map((operation) => operation.payload.elector))]],
+  );
+  const publicId = new Map(found.rows.map((row) => [row.id, row.public_id]));
+  for (const operation of operations) operation.payload.elector = publicId.get(operation.payload.elector) ?? operation.payload.elector;
+}
+
 export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoStore) {
   const signedIn = authenticated(pool);
 
-  /** Only what the poll watcher needs: no addresses, and as few document digits as the election asks for. */
+  /** Only what the poll watcher needs: no addresses, a random id for each person, and as few document digits as the election asks for. */
   app.get<{ Params: { table: string } }>('/api/tables/:table/bundle', { preHandler: signedIn }, async (request, reply) => {
     const { table } = request.params;
     if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
-    const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
-    const digits = SECURITY_PROFILES[profile].documentDigits;
-    // Only if the party allows it in a low risk election, and never a sensitive category.
-    const withLight = SECURITY_PROFILES[profile].fiscalSeesSemaphore && (await getSetting(pool, 'fiscal_semaphore', false));
-    const rows = await pool.query(
-      `SELECT x.id, x.order_number, x.full_name, x.document, c.name AS light_name, c.color AS light_color
-       FROM electors x
-       LEFT JOIN semaphore_marks m ON $2 AND m.election_id = x.election_id AND m.elector_id = x.id
-       LEFT JOIN semaphore_categories c ON c.id = m.category_id AND NOT c.sensitive
-       WHERE x.table_id = $1 ORDER BY x.order_number NULLS LAST, x.full_name`,
-      [table, withLight],
-    );
-    const electors = rows.rows.map((row, index) => {
-      const order = row.order_number ?? index + 1;
-      const documentSuffix = String(row.document ?? '').slice(-digits);
-      return {
-        id: row.id, order, name: row.full_name, documentSuffix, search: foldText(`${order} ${row.full_name} ${documentSuffix}`),
-        ...(row.light_name ? { light: { name: row.light_name, color: row.light_color } } : {}),
-      };
-    });
+    const electors = await tableRoll(pool, table);
     await audit(pool, request.actor, 'roll.downloaded', table, { people: electors.length });
-    return { table, electors };
+    return { table, electors, revision: rollRevision(electors) };
   });
 
   app.post<{ Body: { table?: unknown; operations?: unknown } }>('/api/sync/push', { preHandler: signedIn }, async (request, reply) => {
@@ -114,9 +143,10 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     }
     // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
     const late = ['cerrada', 'purgada'].includes(status);
+    await usePublicIds(pool, table, valid.filter(isVoter));
     if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
     else await heardFrom(pool, table);
-    return { acked: valid.map((o) => o.id), rejected, server_time: new Date().toISOString() };
+    return { acked: valid.map((o) => o.id), rejected, server_time: clock.now().toISOString() };
   });
 
   app.get<{ Querystring: { table?: string; since?: string } }>('/api/sync/pull', { preHandler: signedIn }, async (request, reply) => {
@@ -135,6 +165,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
       operations: rows.map((row) => ({ id: row.id, schema: 1, table: row.table, type: row.type, device: row.device, device_seq: Number(row.device_seq), device_time: new Date(row.device_time).toISOString(), payload: row.payload })),
       next: rows.length > 0 ? Number(rows[rows.length - 1].seq) : cursor,
       more: result.rows.length > MAX_PULL,
+      server_time: clock.now().toISOString(),
     };
   });
 

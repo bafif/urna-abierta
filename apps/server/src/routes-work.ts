@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
 import { audit, can, canReachTable, requires, seal, unseal, type Actor } from './actor.ts';
+import { clock } from './clock.ts';
+import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
@@ -52,9 +54,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         `SELECT t.id, t.name, t.place, t.last_seq,
                 t.last_contact AS last_sync,
                 (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id
-                 WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR current_date = ANY(a.days)) DESC LIMIT 1) AS fiscal
-         FROM polling_tables t WHERE t.id = ANY($1) ORDER BY t.position`,
-        [scope],
+                 WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR ($2::timestamptz AT TIME ZONE e.time_zone)::date = ANY(a.days)) DESC LIMIT 1) AS fiscal
+         FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = ANY($1) ORDER BY t.position`,
+        [scope, clock.now()],
       ),
       pool.query('SELECT table_id, count(*)::int AS total FROM electors WHERE table_id = ANY($1) GROUP BY table_id', [scope]),
       votesPerTable(pool, scope),
@@ -101,12 +103,17 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     const info = await pool.query(
       `SELECT t.id, t.name, t.place, e.categories, (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total,
-              (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR current_date = ANY(a.days)) DESC LIMIT 1) AS fiscal
+              (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR ($2::timestamptz AT TIME ZONE e.time_zone)::date = ANY(a.days)) DESC LIMIT 1) AS fiscal
        FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1`,
-      [table],
+      [table, clock.now()],
     );
     if (!info.rows[0]) return reply.code(404).send({ error: 'not_found' });
-    const operations = await pool.query(`SELECT id, type, payload, device_time, author FROM operations WHERE table_id = $1 AND type IN ('incident.reported', 'envelopes.counted', 'tally.submitted', 'tally.photo') AND NOT quarantined ORDER BY seq`, [table]);
+    // An alert that came after the close shows too, said so, like in the district: otherwise nobody could ever resolve it.
+    const operations = await pool.query(
+      `SELECT id, type, payload, device_time, author, quarantined FROM operations
+       WHERE table_id = $1 AND type IN ('incident.reported', 'envelopes.counted', 'tally.submitted', 'tally.photo') AND (NOT quarantined OR type = 'incident.reported') ORDER BY seq`,
+      [table],
+    );
     const decisions = await pool.query('SELECT category, operation_id FROM tally_decisions WHERE table_id = $1', [table]);
     const states = await pool.query('SELECT operation_id FROM incident_states WHERE operation_id = ANY($1)', [operations.rows.filter((o) => o.type === 'incident.reported').map((o) => o.id)]);
     const resolved = new Set(states.rows.map((row) => row.operation_id));
@@ -120,7 +127,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     return {
       ...info.rows[0],
       voted: (await votesPerTable(pool, [table])).get(table) ?? 0,
-      incidents: operations.rows.filter((o) => o.type === 'incident.reported' && !resolved.has(o.id)).map((o) => ({ id: o.id, at: o.device_time, kind: o.payload.kind })),
+      incidents: operations.rows.filter((o) => o.type === 'incident.reported' && !resolved.has(o.id)).map((o) => ({ id: o.id, at: o.device_time, kind: o.payload.kind, late: o.quarantined })),
       envelopes: operations.rows.filter((o) => o.type === 'envelopes.counted').map((o) => ({ day: o.payload.day, envelopes: o.payload.envelopes, marked: o.payload.marked, matches: o.payload.envelopes === o.payload.marked })),
       photos: operations.rows.filter((o) => o.type === 'tally.photo').map((o) => o.payload.sha256),
       tallies: [...tallies.entries()].map(([category, versions]) => {
@@ -264,7 +271,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const person = await pool.query('SELECT * FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
     if (!person.rows[0]) return reply.code(404).send({ error: 'not_found' });
     const mark = await pool.query('SELECT category_id, sealed, noted_at FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
-    const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, id]);
+    const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, person.rows[0].public_id]);
     await audit(pool, request.actor, 'person.exported', id);
     const row = mark.rows[0];
     const category = row && (row.sealed ? unseal(row.sealed) : row.category_id);
@@ -293,12 +300,28 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** After the election: no names remain. Only totals per table are kept. */
   app.post<{ Params: { id: string } }>('/api/elections/:id/purge', { preHandler: requires(pool, 'election.manage') }, async (request, reply) => {
     const { id } = request.params;
-    const status = await pool.query('SELECT status FROM elections WHERE id = $1', [id]);
-    if (status.rows[0]?.status !== 'cerrada') return reply.code(409).send({ error: 'close_it_first' });
-    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
-    await pool.query(`UPDATE electors SET full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1`, [id]);
-    await pool.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
-    await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const status = await client.query('SELECT status FROM elections WHERE id = $1 FOR UPDATE', [id]);
+      if (status.rows[0]?.status !== 'cerrada') {
+        await client.query('ROLLBACK');
+        return reply.code(409).send({ error: 'close_it_first' });
+      }
+      // The same lock a batch from a phone takes: one that arrives meanwhile waits, and then sees the purge.
+      await client.query('SELECT 1 FROM polling_tables WHERE election_id = $1 ORDER BY id FOR UPDATE', [id]);
+      await client.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
+      await client.query(`UPDATE electors SET full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1`, [id]);
+      await client.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
+      await client.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    forgetStatuses();
     await audit(pool, request.actor, 'election.purged', id);
     return { status: 'purgada' };
   });

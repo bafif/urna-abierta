@@ -4,10 +4,21 @@
   import { pwa } from '../pwa.svelte.ts';
 
   const pending = $derived(app.pendingCount + app.pendingPhotos);
+  // Only on the phone of a poll watcher, the one whose steps go by the date.
+  const clockWrong = $derived(app.clockWrong && !app.practice && app.electors.length > 0);
 </script>
 
-{#if app.practice || pwa.waitingWorker || app.noRoom || app.saveFailed || app.dataLost}
+{#if app.practice || pwa.waitingWorker || app.noRoom || app.saveFailed || app.dataLost || app.rollUpdated || clockWrong}
   <div class="avisos">
+    {#if app.rollUpdated}
+      <div class="aviso-suave" role="status" data-testid="roll-updated">
+        <span>{t('roll.updated')}</span>
+        <button class="enlace" onclick={() => (app.rollUpdated = false)}>{t('roll.updated.ok')}</button>
+      </div>
+    {/if}
+    {#if clockWrong}
+      <p class="aviso-suave" data-testid="clock-wrong">{t('clock.wrong')}</p>
+    {/if}
     {#if app.practice}
       <div class="aviso-suave" data-testid="practice">
         <span>{t('practice.notice')}</span>
