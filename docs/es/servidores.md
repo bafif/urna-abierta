@@ -127,7 +127,8 @@ cierra la cuenta, se pierden con él. Para tener siempre una afuera:
 
 - **Bajalas desde la app**, en **Más cosas**, **Copias de seguridad**, cada tanto y sobre todo antes de la elección.
 - **Mandalas a un almacenamiento S3.** Si configurás uno para las fotos (abajo), cada copia va también al bucket, a la carpeta
-  `backups/`, y ahí quedan las 28 más nuevas. Siguen cifradas con la llave de recuperación: el proveedor guarda algo que no puede abrir.
+  `backups/` dentro de la de las fotos (`fotos/backups/`, si no cambiaste `URNA_S3_PREFIX`), y ahí quedan las 28 más nuevas. Siguen
+  cifradas con la llave de recuperación: el proveedor guarda algo que no puede abrir.
   Para borrar las viejas, la clave de acceso necesita permiso de listar el bucket; sin él se mandan igual, pero se acumulan. Conviene un
   bucket de otro proveedor que el del servidor, así la copia sobrevive si se cierra esa cuenta.
 
@@ -152,7 +153,7 @@ hacen falta la copia, la llave de recuperación y esos datos, que volvés a pone
 | `URNA_S3_REGION` | La región del bucket. Si queda vacía, `us-east-1`. |
 | `URNA_S3_ACCESS_KEY_ID` | La parte pública de la clave de acceso. |
 | `URNA_S3_SECRET_ACCESS_KEY` | La parte secreta. |
-| `URNA_S3_PREFIX` | La carpeta dentro del bucket. Si queda vacía, `fotos/`. Si no termina en `/`, se la agrega. |
+| `URNA_S3_PREFIX` | La carpeta dentro del bucket. Si queda vacía, `fotos/`. Si no termina en `/`, se la agrega. Si dos instalaciones usan el mismo bucket, por ejemplo una de prueba y la de verdad, cada una necesita la suya: si no, se borran las copias entre ellas. |
 
 Las fotos van al bucket solo si están `URNA_S3_ENDPOINT` y `URNA_S3_BUCKET`; si las dos quedan vacías, van al disco. Si está una sola,
 o faltan las claves de acceso, el servidor no arranca y dice qué falta. Las direcciones usan el estilo de ruta
@@ -176,7 +177,7 @@ van al bucket. Si después volvés al disco, las que quedaron en el bucket dejan
 
 **Las fotos del bucket no entran en la copia de seguridad.** La copia lleva la base y la carpeta de fotos del disco, que con S3 queda
 vacía o con las de antes. Las fotos del bucket las cuida el proveedor; si querés más resguardo, activá el versionado del bucket. Las
-copias, en cambio, sí van al bucket, a `backups/`: lo explica [Copias fuera del servidor](#copias-fuera-del-servidor).
+copias, en cambio, sí van al bucket, a `fotos/backups/`: lo explica [Copias fuera del servidor](#copias-fuera-del-servidor).
 
 Direcciones y regiones de cada proveedor:
 
@@ -204,5 +205,5 @@ El servidor es de temporada. Purgá los datos desde la app, bajá la última cop
 en la consola de la nube. Si no los borrás, pueden seguir cobrando.
 
 Si las fotos iban a un almacenamiento S3, purgar no las toca y borrar el servidor tampoco: siguen en el bucket, junto con las copias de
-`backups/`, y el proveedor sigue cobrando por ellas. Cuando ya no las necesites, en la consola del proveedor vaciá el bucket (con todas las versiones, si activaste el
+`fotos/backups/`, y el proveedor sigue cobrando por ellas. Cuando ya no las necesites, en la consola del proveedor vaciá el bucket (con todas las versiones, si activaste el
 versionado), borralo y borrá la clave de acceso que creaste para el servidor.
