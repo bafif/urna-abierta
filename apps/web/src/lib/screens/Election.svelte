@@ -81,7 +81,7 @@
     <div class="renglon-botones separado">
       {#if election.people && now !== 'tables'}<button class="enlace" onclick={() => nav.go('tables', { election: id })}>{t('election.seeTables')}</button>{/if}
       {#if election.tables}<button class="enlace" onclick={() => nav.go('districts', { election: id })}>{t('election.districts')}</button>{/if}
-      {#if election.people}<button class="enlace" onclick={() => nav.go('rollUpload', { election: id })}>{t('election.reupload')}</button>{/if}
+      {#if election.people && !['cerrada', 'purgada'].includes(election.status)}<button class="enlace" onclick={() => nav.go('rollUpload', { election: id })}>{t('election.reupload')}</button>{/if}
       {#if ['jornada', 'escrutinio', 'cerrada'].includes(election.status)}<button class="enlace" onclick={() => nav.go('numbers', { election: id })}>{t('election.numbers')}</button>{/if}
     </div>
     {#snippet pie()}

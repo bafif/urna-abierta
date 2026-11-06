@@ -3,6 +3,7 @@ import { dayIn, fakeRoll, MarkState, MAX_PHOTO_BYTES, parseOperation, SCHEMA_VER
 import { CLOCK_WARNING_MS, offsetAfterJump } from './clock.ts';
 import { PhotoState, QueueState, storeFor, UrnaDatabase } from './db.ts';
 import { t } from './i18n.svelte.ts';
+import { rollCanGo } from './roll-release.ts';
 import { API, session, type TableInfo } from './session.svelte.ts';
 import { pullAll, pushNow, retryDelay, sendPhoto, syncOnce, type SyncStore } from './sync.ts';
 
@@ -18,8 +19,6 @@ const ALERT_LIMIT_MS = 8_000;
 const ME_EVERY_MS = 5 * 60_000;
 /** A smaller difference is not worth writing down again. */
 const CLOCK_NOTICE_MS = 60_000;
-/** A phone that never heard the election closed still lets go of the roll, once everything was sent. */
-const DAYS_KEPT_AFTER_LAST = 7;
 const PERIODIC_SYNC_MS = 30_000;
 const ROOM_CHECK_MS = 10 * 60_000;
 /** Enough to notice a full phone in time: what the app itself writes is far smaller than this. */
@@ -357,20 +356,20 @@ class AppState {
     await this.touchCanary();
     await this.refreshPersistence();
     await this.refreshPending();
-    if (!this.practice) await this.letGoIfFinished();
+    // With signal, the first sync decides, a second from now: the server knows better than the calendar.
+    if (!this.practice && !navigator.onLine) await this.letGoIfFinished(false);
   }
 
   /**
    * The roll does not stay on the phone: once the election closed or the person moved to another
-   * table, and only when nothing is left to send, it goes.
+   * table, and only when nothing is left to send, it goes. `reached`: the server answered just now.
    */
-  private async letGoIfFinished(): Promise<void> {
+  private async letGoIfFinished(reached: boolean): Promise<void> {
     if (!this.tableId || this.pendingCount + this.pendingPhotos > 0) return;
-    const assigned = session.me?.table?.id;
-    const reached = navigator.onLine && session.me !== null;
-    const lastDay = session.me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
-    const longAgo = lastDay && Date.now() - Date.parse(`${lastDay}T12:00:00`) > DAYS_KEPT_AFTER_LAST * 86_400_000;
-    if ((reached && assigned !== this.tableId) || longAgo) await this.wipe();
+    const { me } = session;
+    const lastDay = me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
+    const roll = { tableId: this.tableId, reached: reached && me !== null, assigned: me?.table?.id, lastDay, hoursKept: me?.security.localHoursAfterClose };
+    if (rollCanGo(roll)) await this.wipe();
   }
 
   private async wipe(): Promise<void> {
@@ -479,7 +478,7 @@ class AppState {
     if (this.tableId && this.tableId !== table.id && this.pendingCount + this.pendingPhotos > 0) {
       await this.sync();
       if (this.pendingCount + this.pendingPhotos > 0) throw new Error('pending from another table');
-      await this.letGoIfFinished();
+      await this.letGoIfFinished(true);
     }
     let electors: RollEntry[];
     let revision: string | null = null;
@@ -738,7 +737,13 @@ class AppState {
   private async runSync(): Promise<void> {
     this.sending = true;
     // Receiving operations writes too, so it waits while the phone has no room.
-    const result = this.noRoom ? 'failed' : await syncOnce(this.store, this.tableId, API, session.fetch);
+    let result = this.noRoom ? 'failed' : await syncOnce(this.store, this.tableId, API, session.fetch);
+    if (result === 'closed') {
+      // The server already said it: hearing it from /me as well lets the phone let go of the roll right away.
+      await session.refresh();
+      this.lastMeAt = Date.now();
+      result = 'done';
+    }
     if (result === 'done') {
       await this.sendPhotos().catch(() => undefined);
       if (Date.now() - this.lastMeAt > ME_EVERY_MS) {
@@ -747,10 +752,8 @@ class AppState {
       }
     }
     await this.refreshPending().catch(() => undefined);
-    if (result === 'done') {
-      await this.letGoIfFinished().catch(() => undefined);
-      await this.refreshRoll().catch(() => undefined);
-    }
+    await this.letGoIfFinished(result === 'done').catch(() => undefined);
+    if (result === 'done') await this.refreshRoll().catch(() => undefined);
     this.sending = false;
     this.online = navigator.onLine;
     if (result === 'done') {

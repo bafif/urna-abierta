@@ -27,6 +27,8 @@ describe.skipIf(!url)('loading a roll, against a real Postgres', () => {
     const own = new URL(url!);
     own.pathname = `/${name}`;
     pool = new pg.Pool({ connectionString: own.toString(), max: 4 });
+    // Dropping the database at the end can still catch a connection on its way out: that is not a failure.
+    pool.on('error', () => undefined);
     await migrate(pool);
     process.env.URNA_FIELD_KEY = 'clave de prueba';
     app = buildApp(pool);
@@ -55,7 +57,7 @@ describe.skipIf(!url)('loading a roll, against a real Postgres', () => {
     const preview = await upload(election, file, 'application/zip', true);
     expect(preview.statusCode).toBe(200);
     expect(preview.json()).toEqual({
-      people: 3, added: 3, kept: 0, missing: 0, toReview: 2, withoutTable: 3,
+      people: 3, added: 3, kept: 0, missing: 0, erased: 0, corrected: 0, toReview: 2, withoutTable: 3,
       problems: [
         { where: 'electors:2', problem: 'same_document_other_name' },
         { where: 'electors:3', problem: 'same_person' },

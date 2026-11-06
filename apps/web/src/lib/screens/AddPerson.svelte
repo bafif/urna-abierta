@@ -68,7 +68,7 @@
       {/each}
     </div>
   {/if}
-  {#if !fixedRole && session.can('sistema', 'coordinacion')}
+  {#if !fixedRole && session.allows('users.manage')}
     <button class="enlace" onclick={() => nav.go('permissions')}>{t('person.permissions')}</button>
   {/if}
   {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}

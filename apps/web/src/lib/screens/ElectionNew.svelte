@@ -6,9 +6,6 @@
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
 
-  const PROFILE_OF_KIND: Record<string, string> = { estudiantil: 'estudiantil', local: 'local', nacional: 'nacional' };
-  const STRICTNESS = ['estudiantil', 'local', 'nacional'];
-
   let step = $state<'kind' | 'days' | 'voted'>('kind');
   let kind = $state<string | null>('estudiantil');
   let name = $state('');
@@ -64,14 +61,11 @@
     failed = false;
     try {
       const { id } = await session.api<{ id: string }>('/elections', { method: 'POST', body: { name, kind, days, categories: categories() } });
-      // The election asks for at least its own level of care, and never lowers what was set.
-      const wanted = kind ? PROFILE_OF_KIND[kind] : undefined;
-      const current = session.me?.security.profile ?? 'estudiantil';
-      if (wanted && session.can('sistema') && STRICTNESS.indexOf(wanted) > STRICTNESS.indexOf(current)) {
-        await session.api('/security', { method: 'PUT', body: { profile: wanted } });
-        await session.refresh();
-      }
-      nav.replace('election', { id });
+      // The server holds the level of care the election's kind asks for while it is open: this only shows it.
+      await session.refresh();
+      // That level may ask this device for a second step: the start screen asks for it before anything else.
+      if (session.me?.secondFactorNeeded) nav.home();
+      else nav.replace('election', { id });
     } catch {
       failed = true;
     }

@@ -18,7 +18,7 @@
     try {
       const [listed, team] = await Promise.all([
         session.api<{ elections: ElectionSummary[] }>('/elections'),
-        session.can('sistema', 'coordinacion') ? session.api<{ users: unknown[] }>('/users') : { users: [] },
+        session.allows('users.manage') ? session.api<{ users: unknown[] }>('/users') : { users: [] },
       ]);
       elections = listed.elections;
       people = team.users.length;
@@ -29,7 +29,7 @@
   });
 
   const me = $derived(session.me!);
-  const canSecurity = $derived(session.can('sistema'));
+  const canSecurity = $derived(session.allows('security.manage'));
   const firstName = $derived(me.user.name.split(' ')[0] ?? '');
   const done = $derived({
     party: Boolean(me.party.name),

@@ -11,6 +11,8 @@
     added: number;
     kept: number;
     missing: number;
+    erased?: number;
+    corrected?: number;
     toReview: number;
     withoutTable: number;
     problems?: PadronProblem[];
@@ -48,6 +50,10 @@
   function failed(error: unknown, fallback: string) {
     if (error instanceof ApiError && error.code === 'external_ai_forbidden') {
       problem = t('roll.upload.aiForbidden');
+      return;
+    }
+    if (error instanceof ApiError && error.code === 'election_closed') {
+      problem = t('roll.upload.closed');
       return;
     }
     const listed = error instanceof ApiError ? error.problems.filter(isProblem) : [];
@@ -133,6 +139,8 @@
       <strong>{t('roll.upload.people', { count: summary.people })}</strong>
       {#if summary.kept > 0}<span>{t('roll.upload.changes', { added: summary.added, missing: summary.missing })}</span>{/if}
       {#if summary.toReview > 0}<span>{t('roll.upload.toReview', { count: summary.toReview })}</span>{/if}
+      {#if summary.corrected}<span>{t('roll.upload.corrected', { count: summary.corrected })}</span>{/if}
+      {#if summary.erased}<span>{t('roll.upload.erased', { count: summary.erased })}</span>{/if}
     </div>
     {#if summary.missing > 0}<p class="resultado mal">{t('roll.upload.missing', { count: summary.missing })}</p>{/if}
   {/if}

@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { foldText, MAX_BATCH, MAX_PHOTO_BYTES, parseOperation, SECURITY_PROFILES, type Operation, type RollEntry, type SecurityProfile } from '@urna-abierta/domain';
-import { audit, authenticated, canReachTable, getSetting } from './actor.ts';
+import { foldText, MAX_BATCH, MAX_PHOTO_BYTES, parseOperation, SECURITY_PROFILES, type Operation, type RollEntry } from '@urna-abierta/domain';
+import { audit, auditView, authenticated, can, canReachTable, erasedId, getSetting, securityProfile, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
 import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
@@ -24,18 +24,22 @@ const isVoter = (operation: Operation): operation is VoterOperation => operation
 /**
  * Stores a batch in one transaction. Locking the row of the table gives every operation of
  * that table a number in commit order. With one global sequence, a reader could pass a number
- * whose transaction had not committed yet and never see that row.
+ * whose transaction had not committed yet and never see that row. Erasing a person and purging
+ * the election take the same lock, so who is named is decided here, after it: never with an id
+ * that an erasure or a purge committed meanwhile took away.
  */
-async function storeBatch(pool: pg.Pool, table: string, operations: Operation[], author: string, quarantined: boolean): Promise<void> {
+async function storeBatch(pool: pg.Pool, table: string, received: Operation[], author: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const locked = await client.query<{ last_seq: string }>('SELECT last_seq FROM polling_tables WHERE id = $1 FOR UPDATE', [table]);
     const last = Number(locked.rows[0]!.last_seq);
-    // Asked here, after the lock: the purge holds that same lock while it deletes, so a batch that waited for it sees it.
+    // Read after the lock, in a statement of its own: one that had to wait for it would still see the status from before.
+    const { status } = (await client.query<{ status: string }>('SELECT e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1', [table])).rows[0]!;
+    // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
+    const quarantined = ['cerrada', 'purgada'].includes(status);
     // After the purge nobody's vote is kept, not even from a phone that was offline for days. The phone still hears it arrived, so it stops sending it.
-    const election = await client.query<{ status: string }>('SELECT e.status FROM elections e JOIN polling_tables t ON t.election_id = e.id WHERE t.id = $1', [table]);
-    const kept = election.rows[0]?.status === 'purgada' ? operations.filter((operation) => !isVoter(operation)) : operations;
+    const kept = status === 'purgada' ? received.filter((operation) => !isVoter(operation)) : await usePublicIds(client, table, received);
     const inserted = kept.length === 0 ? { rowCount: 0 } : await client.query(
       `INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload, author, quarantined)
        SELECT id, $1, $2 + ordinality, type, device, device_seq, device_time, payload, $9, $10
@@ -56,6 +60,26 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
   }
 }
 
+/**
+ * Phones know people by a random id. One prepared before those ids still names them by the id of the roll until it
+ * refreshes, and that id, often the DNI, never gets stored: it is swapped here for the random one, also when the
+ * person was erased meanwhile and the roll id went with it. Erasures take the same lock as a batch, so this runs
+ * after it. Only people of this same table: naming someone of another table must not tell whether they are on the roll.
+ */
+async function usePublicIds(client: pg.PoolClient, table: string, operations: Operation[]): Promise<Operation[]> {
+  const named = [...new Set(operations.filter(isVoter).map((operation) => operation.payload.elector))];
+  if (named.length === 0) return operations;
+  const erased = new Map(named.map((id) => [erasedId(id), id]));
+  const found = await client.query(
+    'SELECT id, public_id FROM electors WHERE table_id = $1 AND (id = ANY($2) OR id = ANY($3))',
+    [table, named, [...erased.keys()]],
+  );
+  const publicId = new Map<string, string>(found.rows.map((row) => [erased.get(row.id) ?? row.id, row.public_id]));
+  return operations.map((operation) =>
+    isVoter(operation) && publicId.has(operation.payload.elector) ? ({ ...operation, payload: { ...operation.payload, elector: publicId.get(operation.payload.elector)! } } as Operation) : operation,
+  );
+}
+
 /** A status only changes through two routes of this same process, the step forward and the purge, which clear this at that moment. */
 const statuses = new Map<string, string>();
 export const forgetStatuses = () => statuses.clear();
@@ -74,7 +98,7 @@ async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
 
 /** The roll of a table as phones get it. The id that comes from the roll stays on the server: it can be the whole document. */
 export async function tableRoll(pool: pg.Pool, table: string): Promise<RollEntry[]> {
-  const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+  const { profile } = await securityProfile(pool);
   const digits = SECURITY_PROFILES[profile].documentDigits;
   // Only if the party allows it in a low risk election, and never a sensitive category.
   const withLight = SECURITY_PROFILES[profile].fiscalSeesSemaphore && (await getSetting(pool, 'fiscal_semaphore', false));
@@ -100,17 +124,12 @@ export async function tableRoll(pool: pg.Pool, table: string): Promise<RollEntry
 export const rollRevision = (electors: RollEntry[]) => createHash('sha256').update(JSON.stringify(electors)).digest('base64url').slice(0, 22);
 
 /**
- * A phone prepared before the random ids still names people by the id of the roll until it refreshes: that one never gets stored.
- * Only people of this same table: naming someone of another table must not tell whether they are on the roll.
+ * Once the election closes, the roll and what was marked at a table are only for whoever runs the election.
+ * What a phone still has to send is taken anyway, kept apart for review.
  */
-async function usePublicIds(pool: pg.Pool, table: string, operations: VoterOperation[]): Promise<void> {
-  if (operations.length === 0) return;
-  const found = await pool.query(
-    'SELECT id, public_id FROM electors WHERE table_id = $1 AND id = ANY($2)',
-    [table, [...new Set(operations.map((operation) => operation.payload.elector))]],
-  );
-  const publicId = new Map(found.rows.map((row) => [row.id, row.public_id]));
-  for (const operation of operations) operation.payload.elector = publicId.get(operation.payload.elector) ?? operation.payload.elector;
+async function closedFor(pool: pg.Pool, actor: Actor, table: string): Promise<boolean> {
+  if (can(actor, 'election.manage')) return false;
+  return ['cerrada', 'purgada'].includes((await statusOf(pool, table)) ?? '');
 }
 
 export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoStore) {
@@ -121,6 +140,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const { table } = request.params;
     if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
     const electors = await tableRoll(pool, table);
     await audit(pool, request.actor, 'roll.downloaded', table, { people: electors.length });
     return { table, electors, revision: rollRevision(electors) };
@@ -141,10 +161,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
       else if (parsed.table !== table) rejected.push({ id: parsed.id, reason: 'wrong_table' });
       else valid.push(parsed);
     }
-    // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
-    const late = ['cerrada', 'purgada'].includes(status);
-    await usePublicIds(pool, table, valid.filter(isVoter));
-    if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
+    if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId);
     else await heardFrom(pool, table);
     return { acked: valid.map((o) => o.id), rejected, server_time: clock.now().toISOString() };
   });
@@ -154,6 +171,9 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const cursor = Number(since ?? 0);
     if (!table || !TABLE_ID.test(table) || !Number.isSafeInteger(cursor) || cursor < 0) return reply.code(400).send({ error: 'invalid_request' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
+    // What a table marked names people: a poll watcher reads their own all day, anyone else is recorded.
+    if (!request.actor.assignments.some((a) => a.role === 'fiscal' && a.table_id === table)) await auditView(pool, request.actor, 'table.pulled', table);
     const result = await pool.query(
       `SELECT id, table_id AS table, seq, type, device, device_seq, device_time, payload
        FROM operations WHERE table_id = $1 AND seq > $2 AND NOT quarantined ORDER BY seq LIMIT $3`,
@@ -192,6 +212,8 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const { table, sha } = request.params;
     if (!/^[0-9a-f]{64}$/.test(sha)) return reply.code(400).send({ error: 'invalid_request' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    // A tally sheet has no names: the chief can still look at it, the poll watcher's work is over.
+    if (!can(request.actor, 'district.watch') && (await closedFor(pool, request.actor, table))) return reply.code(410).send({ error: 'election_closed' });
     const known = await pool.query('SELECT 1 FROM photos WHERE sha256 = $1 AND table_id = $2', [sha, table]);
     if (!known.rowCount) return reply.code(404).send({ error: 'not_found' });
     let bytes: Buffer | null;

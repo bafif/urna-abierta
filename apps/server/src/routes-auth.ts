@@ -1,8 +1,8 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { dayIn, mainRole, SECURITY_PROFILES, storedPhone, themeProblems, type SecurityProfile } from '@urna-abierta/domain';
-import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, setSetting, totpMatches, unseal } from './actor.ts';
+import { dayIn, mainRole, SECURITY_PROFILES, storedPhone, themeProblems } from '@urna-abierta/domain';
+import { attemptLimiter, audit, authenticated, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpMatches, unseal } from './actor.ts';
 import { clock } from './clock.ts';
 import { rollRevision, tableRoll } from './routes-sync.ts';
 
@@ -174,7 +174,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get('/api/me', { preHandler: beforeSecondFactor }, async (request) => {
     const { actor } = request;
     await pool.query('UPDATE devices SET last_seen_at = now() WHERE id = $1', [actor.deviceId]);
-    const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
+    const { profile, chosen, minimum } = await securityProfile(pool);
     const tableIds = actor.assignments.filter((a) => a.role === 'fiscal' && a.table_id).map((a) => a.table_id);
     const tables = await pool.query(
       `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories, e.time_zone,
@@ -220,12 +220,17 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     return {
       user: { id: actor.userId, name: actor.name },
       roles: actor.roles,
+      // What each screen checks: a party can edit what a role allows.
+      permissions: actor.permissions,
       main: mainRole(actor.roles),
       secondFactorNeeded: await needsSecondFactor(pool, actor),
       party: await getSetting(pool, 'party', defaultParty()),
       security: {
         profile,
         chosen: (await pool.query(`SELECT 1 FROM settings WHERE key = 'security_profile'`)).rowCount === 1,
+        // What the party chose, which is what the Security screen starts from: the profile above may be an election's.
+        choice: chosen,
+        minimum,
         fiscalView: await getSetting(pool, 'fiscal_semaphore', false),
         ...SECURITY_PROFILES[profile],
       },

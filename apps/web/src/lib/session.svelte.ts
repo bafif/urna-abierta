@@ -1,4 +1,6 @@
 import { resolve } from '$app/paths';
+import { isRole, permissionsOf, type Permission } from '@urna-abierta/domain';
+import { nav } from './nav.svelte.ts';
 import { ui, type Theme } from './ui.svelte.ts';
 
 export const API = `${resolve('/')}api`;
@@ -38,10 +40,13 @@ export interface TableInfo {
 export interface Me {
   user: { id: string; name: string };
   roles: string[];
+  /** What this person may do, with the roles as the party edited them. A phone saved before it came works it out from the roles. */
+  permissions?: string[];
   main: string | null;
   secondFactorNeeded: boolean;
   party: { name: string; theme: string };
-  security: { profile: string; chosen: boolean; fiscalSeesSemaphore: boolean; fiscalView: boolean };
+  /** The profile in force: the one chosen, or what an open election asks for, if that is more. */
+  security: { profile: string; chosen: boolean; choice?: string; minimum?: string | null; fiscalSeesSemaphore: boolean; fiscalView: boolean; localHoursAfterClose?: number };
   table: TableInfo | null;
   contact: { name: string; phone: string | null } | null;
   /** Has no table because the election they worked already closed. */
@@ -86,6 +91,11 @@ class Session {
       ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}),
     });
     const data = await response.json().catch(() => ({}));
+    // The level of care went up meanwhile, an election of another kind opened: the second step comes first, at the start.
+    if (response.status === 403 && data.error === 'second_factor_needed' && this.me) {
+      this.me = { ...this.me, secondFactorNeeded: true };
+      nav.home();
+    }
     if (!response.ok) throw new ApiError(response.status, data.error ?? 'failed', data.problems);
     return data as T;
   }
@@ -160,8 +170,22 @@ class Session {
     }
   }
 
-  can(...roles: string[]): boolean {
-    return roles.some((role) => this.me?.roles.includes(role));
+  /** Screens show what the server would allow: the permissions, never the name of a role. */
+  allows(...permissions: Permission[]): boolean {
+    const held = this.me?.permissions ?? permissionsOf((this.me?.roles ?? []).filter(isRole));
+    return permissions.some((permission) => held.includes(permission));
+  }
+
+  /** The work that opens first, in the same order as the roles: running elections, the system, a district, the traffic light, the numbers, a table. */
+  get home(): 'adminHome' | 'more' | 'district' | 'lightHome' | 'numbers' | 'fiscalPlan' | null {
+    if (this.allows('election.manage')) return 'adminHome';
+    if (this.allows('security.manage')) return 'more';
+    if (this.allows('district.watch')) return 'district';
+    if (this.allows('semaphore.read')) return 'lightHome';
+    if (this.allows('stats.read')) return 'numbers';
+    if (this.allows('table.work')) return 'fiscalPlan';
+    if (this.allows('users.manage', 'audit.read', 'persons.manage')) return 'more';
+    return null;
   }
 
   /** Forgets this device's access, so that another invitation can be used. Saved marks stay. */
