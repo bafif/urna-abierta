@@ -174,7 +174,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const people = totals.rows.reduce((sum, row) => sum + row.total, 0);
     const voted = [...votes.values()].reduce((sum, value) => sum + value, 0);
     const hours = await pool.query(
-      `SELECT (date_trunc('hour', device_time))::text AS hour, count(*)::int AS marks FROM operations
+      `SELECT to_char(date_trunc('hour', device_time AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24:00:00"Z"') AS hour, count(*)::int AS marks FROM operations
        WHERE table_id = ANY($1) AND type = 'voter.marked' AND NOT quarantined GROUP BY 1 ORDER BY 1`,
       [ids],
     );

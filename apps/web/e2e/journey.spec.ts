@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { backOnline, enter, expectLeft, onIphone, openRoll, PHOTO, prepare, prepared, seed, totp, typeNumber } from './helpers.ts';
 
 test.beforeEach(({ page }) => {
@@ -7,6 +7,14 @@ test.beforeEach(({ page }) => {
 });
 
 const useThis = (page: Page) => page.getByRole('button', { name: 'Usar este' }).click();
+
+/** Picks the newest election when several are under way, and goes on when the screen already opened one. */
+async function pickNewest(page: Page, ready: Locator): Promise<void> {
+  const pick = page.getByTestId('pick-election');
+  await expect(ready.or(pick.first())).toBeVisible();
+  if ((await pick.count()) > 0) await pick.first().click();
+  await expect(ready).toBeVisible();
+}
 const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
 
 test('the first run: code, party, team, security, and a second step when the profile asks for it', async ({ page }) => {
@@ -311,6 +319,8 @@ test('the traffic light starts empty, and the numbers never show a name', async 
   const other = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });
   const light = await other.newPage();
   await enter(light, demo.links.semaforo!);
+  // The server keeps the elections of earlier tests open: with several under way, it asks which one, newest first.
+  await pickNewest(light, light.getByRole('searchbox'));
   await light.getByRole('searchbox').fill('99000001');
   await light.getByTestId('light-person').first().click();
   await light.getByRole('radio', { name: `Puede ser ${test.info().project.name}` }).click();
@@ -323,6 +333,7 @@ test('the traffic light starts empty, and the numbers never show a name', async 
   const third = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });
   const numbers = await third.newPage();
   await enter(numbers, demo.links.estadistico!);
+  await pickNewest(numbers, numbers.getByTestId('share'));
   await expect(numbers.getByTestId('share')).toBeVisible();
   await expect(numbers.locator('body')).not.toContainText('Acuña');
   await third.close();
