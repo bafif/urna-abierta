@@ -208,6 +208,36 @@ test('when the election closes with something still on the phone, it says to wai
   await expect(page.getByRole('button', { name: 'Fijarme de nuevo' })).toBeVisible();
 });
 
+test('a clock fixed with no signal, as the notice asks, does not move the day', async ({ context, request }) => {
+  // The phone is a day behind until the test fixes its clock, and stays fixed after reopening.
+  await context.addInitScript(() => {
+    const real = Date.now.bind(Date);
+    let behind = localStorage.getItem('prueba-reloj') === 'bien' ? 0 : 86_400_000;
+    (window as unknown as { fixClock: () => void }).fixClock = () => {
+      behind = 0;
+      localStorage.setItem('prueba-reloj', 'bien');
+    };
+    Date.now = () => real() - behind;
+  });
+  const demo = await seed(request, { size: 10, startsInDays: 0 });
+  const page = await prepared(context, demo.tables[0]!.invitations[0]!);
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await expect(page.getByTestId('clock-wrong')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: 'Abrir el padrón' })).toBeVisible();
+  await context.setOffline(true);
+  // Off to the phone's settings and back.
+  await page.evaluate(() => {
+    (window as unknown as { fixClock: () => void }).fixClock();
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.getByTestId('clock-wrong')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Abrir el padrón' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Empezar el escrutinio' })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Abrir el padrón' })).toBeVisible();
+  await expect(page.getByTestId('clock-wrong')).toHaveCount(0);
+});
+
 test('a mark that could not be saved goes back to the list, and says so', async ({ context, request }) => {
   const demo = await seed(request);
   const page = await prepared(context, demo.tables[0]!.invitations[0]!);
