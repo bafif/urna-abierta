@@ -118,8 +118,9 @@ Las fuentes viajan con la app, porque tiene que funcionar sin señal, y todas ti
 ## Sin señal y sincronización
 
 Todo se guarda primero en el teléfono, y la pantalla responde sin esperar a la red. Con señal, «Preparar mesa» baja el
-padrón de esa mesa, sin domicilios. Cada acción es una operación con un identificador propio, y repetir un envío no
-duplica nada.
+padrón de esa mesa, sin domicilios y con un identificador al azar para cada persona, nunca su documento. Si después el
+padrón cambia, el teléfono lo vuelve a bajar solo cuando tiene señal, y lo tachado sigue. Cada acción es una operación con un
+identificador propio, y repetir un envío no duplica nada.
 
 | Dato | Regla |
 |---|---|
@@ -129,15 +130,17 @@ duplica nada.
 | Foto del acta | Se identifica por su SHA-256 |
 | Padrón, cronograma, permisos, semáforo | Se editan solo con señal |
 
-Ninguna regla depende de la hora del teléfono. Cada mesa numera sus operaciones bajo un bloqueo de su fila, porque con una
-secuencia global un lector puede pasar por alto filas que confirman fuera de orden. Lo que llega después del cierre queda en
-cuarentena para revisarlo, sin descartarse. Un teléfono revocado deja de enviar, y lo suyo sigue guardado en él.
+Ninguna regla depende de la hora del teléfono: el día sale del reloj del servidor, en la zona horaria de la elección. Cada
+mesa numera sus operaciones bajo un bloqueo de su fila, porque con una secuencia global un lector puede pasar por alto filas
+que confirman fuera de orden. Lo que llega después del cierre queda en cuarentena para revisarlo, sin descartarse, salvo los
+tachados que llegan después de la purga, que se descartan. Un teléfono revocado deja de enviar, y lo suyo sigue guardado en él.
 
 Un teléfono sin espacio es el peor caso, porque escribir en la base puede romperla y perderlo todo. La app lo comprueba al
 abrirse, al preparar la mesa y cada 10 minutos, con una escritura aparte. Sin lugar, avisa y no deja tachar hasta que se libere;
 si una escritura falla igual, la persona vuelve a la lista y la app lo dice. Nunca muestra como guardado lo que no se guardó.
 
-El aviso urgente se guarda y se envía. Si no sale, ofrece llamar, WhatsApp y SMS, con la mesa y el tipo de problema, sin
+El aviso urgente se guarda y sale primero, solo, sin esperar lo que haya en cola. Si en unos segundos no salió, ofrece
+llamar, WhatsApp y SMS, con la mesa y el tipo de problema, sin
 datos de votantes.
 
 ### Elecciones de varios días
