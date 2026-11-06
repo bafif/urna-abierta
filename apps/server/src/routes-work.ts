@@ -264,7 +264,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const person = await pool.query('SELECT * FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
     if (!person.rows[0]) return reply.code(404).send({ error: 'not_found' });
     const mark = await pool.query('SELECT category_id, sealed, noted_at FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [election, id]);
-    const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, id]);
+    const voted = await pool.query(`SELECT device_time FROM operations WHERE table_id = $1 AND type = 'voter.marked' AND payload->>'elector' = $2`, [person.rows[0].table_id, person.rows[0].public_id]);
     await audit(pool, request.actor, 'person.exported', id);
     const row = mark.rows[0];
     const category = row && (row.sealed ? unseal(row.sealed) : row.category_id);
