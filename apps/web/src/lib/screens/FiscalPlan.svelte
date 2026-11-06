@@ -3,7 +3,7 @@
   import Pantalla from '../components/Pantalla.svelte';
   import Stations, { type Station } from '../components/Stations.svelte';
   import SyncLine from '../components/SyncLine.svelte';
-  import { app, localDay } from '../app.svelte.ts';
+  import { app } from '../app.svelte.ts';
   import { formatDay, t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { pwa } from '../pwa.svelte.ts';
@@ -53,9 +53,10 @@
     return t('plan.title');
   });
   const subtitle = $derived.by(() => {
-    if (step === 'waiting') return t('plan.waiting', { day: formatDay(days[0]!) });
+    // Whoever starts on a later day is told about their own first day, not about the election's.
+    if (step === 'waiting') return days[0]! > (table?.days[0] ?? '') ? t('plan.waiting.shift', { day: formatDay(days[0]!) }) : t('plan.waiting', { day: formatDay(days[0]!) });
     if (step === 'rest') {
-      const next = days.find((day) => day > localDay());
+      const next = days.find((day) => day > app.today);
       return next ? t('plan.rest.next', { day: formatDay(next) }) : '';
     }
     if (step === 'done') return pending > 0 ? t('plan.finished.pending') : t('plan.finished.sent');
@@ -80,6 +81,12 @@
 
 {#if !app.ready}
   <Pantalla />
+{:else if !table && session.me?.ended}
+  <Pantalla titulo={t('plan.ended.title')} bajada={t('plan.ended.text')}>
+    {#snippet pie()}
+      <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+    {/snippet}
+  </Pantalla>
 {:else if !table}
   <Pantalla titulo={t('plan.noTable.title')} bajada={t('plan.noTable.text')}>
     {#snippet pie()}
@@ -90,9 +97,10 @@
     {/snippet}
   </Pantalla>
 {:else}
-  <Pantalla ojo={formatDay(localDay())} titulo={title} bajada={subtitle} desliza>
+  <Pantalla ojo={formatDay(app.today)} titulo={title} bajada={subtitle} desliza>
     <Stations steps={stations} />
     {#if failed}<p class="problema" role="alert">{t('prepare.failed')}</p>{/if}
+    {#if step === 'photo' && app.photoRefused}<p class="problema" role="alert">{t('photo.refused')}</p>{/if}
     {#if pwa.installEvent && !app.practice}
       <div class="aviso-suave">
         <span>{t('plan.install')}</span>

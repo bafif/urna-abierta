@@ -190,8 +190,9 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   expect(left).toBe(0);
 
   // And the phone lets go of the roll as soon as it hears the election closed.
+  // It says the election ended, not that there is no table yet.
   await fiscal.reload();
-  await expect(fiscal.getByRole('heading')).toHaveText('Todavía no tenés mesa');
+  await expect(fiscal.getByRole('heading')).toHaveText('La elección terminó. Gracias');
   await expect.poll(() => fiscal.evaluate(() => new Promise<number>((resolve) => {
     const open = indexedDB.open('urna-abierta');
     open.onsuccess = () => {
@@ -262,8 +263,14 @@ test('the chief gets the alert, sees who is silent, and two different counts wai
   const fiscal = await prepared(phone, demo.tables[0]!.invitations[0]!);
   await fiscal.getByRole('button', { name: 'Algo anda mal' }).click();
   await fiscal.getByTestId('report').click();
-  await expect(fiscal.getByText('Le llegó el aviso a Rubén.')).toBeVisible({ timeout: 20_000 });
+  // It only says what is true: the alert reached the system, not that the chief saw it.
+  await expect(fiscal.getByText('Tu aviso ya está en el sistema. Si es urgente, llamá a Rubén.')).toBeVisible({ timeout: 20_000 });
 
+  await page.addInitScript(() => {
+    const rung: number[][] = [];
+    (window as unknown as { rung: number[][] }).rung = rung;
+    navigator.vibrate = (pattern: VibratePattern) => rung.push([pattern].flat()) > 0;
+  });
   await enter(page, demo.links.jefe!);
   await expect(page.getByRole('heading')).toHaveText('2 mesas te necesitan');
   await expect(page.locator('.tarjeta.alerta')).toContainText('Mesa 12: aviso urgente');

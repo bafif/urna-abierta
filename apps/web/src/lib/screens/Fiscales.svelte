@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { whatsappDigits } from '@urna-abierta/domain';
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import { formatDay, t } from '../i18n.svelte.ts';
@@ -60,7 +61,7 @@
     setTimeout(() => (copied = false), 3_000);
   }
 
-  const whatsapp = (item: Pending) => `https://wa.me/${item.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(t('invite.message', { name: item.name.split(' ')[0] ?? '', party: session.me?.party.name ?? '', link: inviteLink(item.invitation) }))}`;
+  const whatsapp = (item: Pending) => `https://wa.me/${whatsappDigits(item.phone)}?text=${encodeURIComponent(t('invite.message', { name: item.name.split(' ')[0] ?? '', party: session.me?.party.name ?? '', link: inviteLink(item.invitation) }))}`;
 </script>
 
 {#if pending}
@@ -70,7 +71,7 @@
         <div class="tarjeta" data-testid="pending-invite">
           <strong>{item.name}</strong>
           <span>{item.table}</span>
-          {#if item.phone}<a class="enlace" href={whatsapp(item)}>{t('invite.whatsapp')}</a>{/if}
+          {#if whatsappDigits(item.phone)}<a class="enlace" href={whatsapp(item)}>{t('invite.whatsapp')}</a>{/if}
         </div>
       {/each}
     </div>

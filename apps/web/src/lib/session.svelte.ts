@@ -29,6 +29,10 @@ export interface TableInfo {
   shift: string[] | null;
   categories: { id: string; name: string; lists: { id: string; name: string }[] }[];
   total: number;
+  /** Where the election happens, which says what day it is. */
+  timeZone?: string;
+  /** Changes when the roll of the table changes on the server. */
+  rollRevision?: string;
 }
 
 export interface Me {
@@ -40,6 +44,8 @@ export interface Me {
   security: { profile: string; chosen: boolean; fiscalSeesSemaphore: boolean; fiscalView: boolean };
   table: TableInfo | null;
   contact: { name: string; phone: string | null } | null;
+  /** Has no table because the election they worked already closed. */
+  ended?: boolean;
 }
 
 function read<T>(key: string): T | null {
@@ -139,6 +145,11 @@ class Session {
     } catch {
       this.unreachable = !this.me;
     }
+    await this.refreshMe();
+  }
+
+  /** Only who this is and their table: asked again now and then while a poll watcher works. */
+  async refreshMe(): Promise<void> {
     if (!this.token) return;
     try {
       this.me = await this.api<Me>('/me');
