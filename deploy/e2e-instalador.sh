@@ -34,15 +34,16 @@ done
 url=$(grep '^http' "$work/salida.txt")
 
 # With URNA_E2E_INFORME set to a folder, the report and the trace of each failure stay there, as GitHub keeps them.
-report=() output=/tmp/results
+# No arrays: the bash of macOS, 3.2, stops on an empty one under set -u.
+output=/tmp/results
 if [ -n "${URNA_E2E_INFORME:-}" ]; then
   mkdir -p "$URNA_E2E_INFORME"
-  report=(-v "$URNA_E2E_INFORME:/informe" -e PLAYWRIGHT_HTML_OUTPUT_DIR=/informe/html)
   output=/informe/resultados
   set -- --reporter=list,html --trace retain-on-failure "$@"
 fi
 podman run --rm --network host --ipc host -v "$root:/work:ro" -w /work/apps/web \
-  -e INSTALLER_URL="$url" -e PLAYWRIGHT_HTML_OPEN=never "${report[@]}" \
+  -e INSTALLER_URL="$url" -e PLAYWRIGHT_HTML_OPEN=never \
+  ${URNA_E2E_INFORME:+-v "$URNA_E2E_INFORME:/informe" -e PLAYWRIGHT_HTML_OUTPUT_DIR=/informe/html} \
   ${URNA_E2E_SALIDA:+-v "$URNA_E2E_SALIDA:/salida"} \
   urna-e2e-browsers \
   npx playwright test -c playwright.installer.config.ts --output "$output" "$@"
