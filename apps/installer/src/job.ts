@@ -76,10 +76,10 @@ function cloudFor(where: Extract<Where, { kind: 'cloud' }>): Cloud {
   return googleCloud(where.credentials);
 }
 
-/** A cloud installation that failed. `left` is what could not be deleted afterwards: empty when nothing stays charging. */
+/** A cloud installation that failed. `left` is what could not be deleted afterwards: empty when nothing stays charging, null when nothing had been created. */
 export class CloudFailure extends Error {
-  readonly left: string[];
-  constructor(message: string, left: string[]) {
+  readonly left: string[] | null;
+  constructor(message: string, left: string[] | null) {
     super(message);
     this.left = left;
   }
