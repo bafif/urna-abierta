@@ -117,6 +117,16 @@ describe('syncOnce', () => {
     expect(await syncOnce(store, 'm-1', '/api', silent)).toBe('failed');
     expect(state.queue).toHaveLength(1);
   });
+
+  it('after the close it still sends what was waiting, and then hears the table is closed', async () => {
+    const { store, state } = memoryStore([makeOperation(1)]);
+    const closed = (async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/sync/push')) return json({ acked: JSON.parse(String(init?.body)).operations.map((o: Operation) => o.id), rejected: [] });
+      return json({ error: 'election_closed' }, 410);
+    }) as typeof fetch;
+    expect(await syncOnce(store, 'm-1', '/api', closed)).toBe('closed');
+    expect(state.queue).toHaveLength(0);
+  });
 });
 
 describe('retryDelay', () => {

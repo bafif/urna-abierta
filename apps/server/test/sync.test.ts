@@ -222,9 +222,32 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await push('fiscal', table, [operation(table, 1)]);
       for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
       expect((await push('fiscal', table, [operation(table, 2)])).json().acked).toHaveLength(1);
-      expect(await pullAll('fiscal', table)).toHaveLength(1);
+      expect(await pullAll('coordinacion', table)).toHaveLength(1);
       const kept = await pool.query('SELECT count(*)::int AS n FROM operations WHERE quarantined');
       expect(kept.rows[0].n).toBe(1);
+    });
+
+    it('closing the election takes the roll away from poll watchers and chiefs, and only the tally photo stays for the chief', async () => {
+      const bytes = Buffer.from('acta');
+      const sha = createHash('sha256').update(bytes).digest('hex');
+      const photo = (who: string) => call(who, 'GET', `/api/tables/${table}/photos/${sha}`);
+      await app.inject({ method: 'PUT', url: `/api/tables/${table}/photos/${sha}`, payload: bytes, headers: { authorization: `Bearer ${tokens.fiscal}`, 'content-type': 'image/jpeg' } });
+      await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status: 'escrutinio' });
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status: 'cerrada' });
+      for (const who of ['fiscal', 'jefe']) {
+        const bundle = await call(who, 'GET', `/api/tables/${table}/bundle`);
+        expect(bundle.statusCode).toBe(410);
+        expect(bundle.json().error).toBe('election_closed');
+        expect((await call(who, 'GET', `/api/sync/pull?table=${table}&since=0`)).statusCode).toBe(410);
+      }
+      expect((await photo('fiscal')).statusCode).toBe(410);
+      expect((await photo('jefe')).body).toBe('acta');
+      // Whoever runs the election still sees it all, to review what came late.
+      expect((await call('coordinacion', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      expect((await call('coordinacion', 'GET', `/api/sync/pull?table=${table}&since=0`)).statusCode).toBe(200);
+      // And the phone hears how long it may keep the roll.
+      expect((await call('fiscal', 'GET', '/api/me')).json().security.localHoursAfterClose).toBe(12);
     });
   });
 

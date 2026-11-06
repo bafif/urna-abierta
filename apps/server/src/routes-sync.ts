@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, MAX_BATCH, parseOperation, SECURITY_PROFILES, type Operation, type SecurityProfile } from '@urna-abierta/domain';
-import { audit, authenticated, canReachTable, getSetting } from './actor.ts';
+import { audit, authenticated, can, canReachTable, getSetting, type Actor } from './actor.ts';
 import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
 const MAX_PULL = 200;
@@ -65,6 +65,15 @@ async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
   return statuses.get(table) ?? null;
 }
 
+/**
+ * Once the election closes, the roll and what was marked at a table are only for whoever runs the election.
+ * What a phone still has to send is taken anyway, kept apart for review.
+ */
+async function closedFor(pool: pg.Pool, actor: Actor, table: string): Promise<boolean> {
+  if (can(actor, 'election.manage')) return false;
+  return ['cerrada', 'purgada'].includes((await statusOf(pool, table)) ?? '');
+}
+
 export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoStore) {
   const signedIn = authenticated(pool);
 
@@ -73,6 +82,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const { table } = request.params;
     if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
     const profile = await getSetting<SecurityProfile>(pool, 'security_profile', 'estudiantil');
     const digits = SECURITY_PROFILES[profile].documentDigits;
     // Only if the party allows it in a low risk election, and never a sensitive category.
@@ -124,6 +134,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const cursor = Number(since ?? 0);
     if (!table || !TABLE_ID.test(table) || !Number.isSafeInteger(cursor) || cursor < 0) return reply.code(400).send({ error: 'invalid_request' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
     const result = await pool.query(
       `SELECT id, table_id AS table, seq, type, device, device_seq, device_time, payload
        FROM operations WHERE table_id = $1 AND seq > $2 AND NOT quarantined ORDER BY seq LIMIT $3`,
@@ -161,6 +172,8 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const { table, sha } = request.params;
     if (!/^[0-9a-f]{64}$/.test(sha)) return reply.code(400).send({ error: 'invalid_request' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    // A tally sheet has no names: the chief can still look at it, the poll watcher's work is over.
+    if (!can(request.actor, 'district.watch') && (await closedFor(pool, request.actor, table))) return reply.code(410).send({ error: 'election_closed' });
     const known = await pool.query('SELECT 1 FROM photos WHERE sha256 = $1 AND table_id = $2', [sha, table]);
     if (!known.rowCount) return reply.code(404).send({ error: 'not_found' });
     let bytes: Buffer | null;

@@ -10,7 +10,8 @@ export interface SyncStore {
   setCursor(value: number): Promise<void>;
 }
 
-export type SyncResult = 'done' | 'failed';
+/** 'closed': the election closed, and the server no longer gives this table to this person. What was waiting went out anyway. */
+export type SyncResult = 'done' | 'failed' | 'closed';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const BASE_DELAY_MS = 5_000;
@@ -50,6 +51,7 @@ export async function syncOnce(
       const response = await request(`${apiBase}/sync/pull?table=${encodeURIComponent(table)}&since=${since}`, {
         signal: timeout(),
       });
+      if (response.status === 410) return 'closed';
       if (!response.ok) return 'failed';
       const body = (await response.json()) as { operations: Operation[]; next: number; more: boolean };
       await store.addRemote(body.operations);
