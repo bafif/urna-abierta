@@ -2,7 +2,10 @@
 (() => {
   const { FLUJOS, INSTALADOR, GENTE, fila, svg, boton, cabeza, opciones, plan } = window.URNA;
   const TEMAS = window.TEMAS;
-  const estado = { vista: 'comparar', tema: 'aula', modo: 'claro', idioma: 'es' };
+  const estado = { vista: 'comparar', tema: 'aula', modo: 'claro', idioma: 'es', portada: '' };
+  // #...&zoom=2 draws everything twice as big, for sharp images on dense screens.
+  const zoom = /(?:^|&)zoom=(\d)/.exec(location.hash.slice(1))?.[1];
+  if (zoom) document.documentElement.style.zoom = zoom;
   for (const parte of location.hash.slice(1).split('&')) {
     const [clave, valor] = parte.split('=');
     if (clave in estado && valor) estado[clave] = valor;
@@ -150,16 +153,26 @@
     const elegir = (id) => f.find((p) => p.id === id);
     const tema = (id) => TEMAS.find((t) => t.id === id);
     const color = logoUrna.replace('<svg', '<svg class="logo-grande"');
-    raiz.innerHTML = `<div class="portada">
+    // #vista=portada&portada=<theme>&modo=<mode>: the same cover with every phone in one theme, for the landing.
+    const uno = estado.portada && tema(estado.portada);
+    const c = uno && uno[estado.modo];
+    const claro = estado.modo === 'claro';
+    const estilo = uno
+      ? ` portada-tema" style="background:${claro ? c.primario : c.superficie2};color:${claro ? c.sobrePrimario : c.texto};font-family:${uno.fuentes.titulo};--caja:${uno.forma.tituloCaja}`
+      : '';
+    const telefonos = uno
+      ? ['f-plan', 'f-padron', 'f-sobres'].map((id) => telefono(elegir(id), uno, estado.modo, { nota: false })).join('')
+      : `${telefono(elegir('f-plan'), tema('aula'), 'claro', { nota: false })}
+        ${telefono(elegir('f-padron'), tema('tablero'), 'oscuro', { nota: false })}
+        ${telefono(elegir('f-sobres'), tema('feria'), 'claro', { nota: false })}`;
+    raiz.innerHTML = `<div class="portada${estilo}">
       <div class="portada-texto">
         ${color}
         <h1>Urna Abierta</h1>
         <p>${estado.idioma === 'en' ? 'Watching over an election should not depend on having a huge political machine.' : 'Fiscalizar una elección no debería depender de tener un aparato enorme.'}</p>
       </div>
       <div class="portada-telefonos">
-        ${telefono(elegir('f-plan'), tema('aula'), 'claro', { nota: false })}
-        ${telefono(elegir('f-padron'), tema('tablero'), 'oscuro', { nota: false })}
-        ${telefono(elegir('f-sobres'), tema('feria'), 'claro', { nota: false })}
+        ${telefonos}
       </div>
     </div>`;
   }
