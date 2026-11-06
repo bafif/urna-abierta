@@ -41,21 +41,36 @@ describe.skipIf(!url)('loading a roll, against a real Postgres', () => {
     await admin.end();
   });
 
-  it('a .padron that repeats an id previews and loads the first row, and the load does not fail', async () => {
+  it('a .padron that repeats an id loads the same person once and another name as one more person, both for review', async () => {
     const election = await newElection();
     const file = writePadron({
       electors: [
         { id: 'd-99000001', full_name: 'Prueba, Ana' },
         { id: 'd-99000002', full_name: 'Prueba, Luis' },
-        { id: 'd-99000001', full_name: 'Prueba, Otra' },
+        { id: 'd-99000001', full_name: 'PRUEBA ANA' },
+        { id: 'd-99000002', full_name: 'Ejemplo, Sol' },
+        { id: 'd-99000002', full_name: 'Ejemplo Sol' },
       ],
     });
     const preview = await upload(election, file, 'application/zip', true);
     expect(preview.statusCode).toBe(200);
-    expect(preview.json()).toMatchObject({ people: 2, added: 2, problems: [{ where: 'electors:3', problem: 'repeated_id' }] });
-    const load = await upload(election, file, 'application/zip');
-    expect(load.statusCode).toBe(200);
-    expect(await names(election)).toEqual([['d-99000001', 'Prueba, Ana'], ['d-99000002', 'Prueba, Luis']]);
+    expect(preview.json()).toEqual({
+      people: 3, added: 3, kept: 0, missing: 0, toReview: 2, withoutTable: 3,
+      problems: [
+        { where: 'electors:2', problem: 'same_document_other_name' },
+        { where: 'electors:3', problem: 'same_person' },
+        { where: 'electors:4', problem: 'same_document_other_name' },
+        { where: 'electors:5', problem: 'same_person' },
+      ],
+    });
+    const stored = async () =>
+      (await pool.query('SELECT id, full_name, needs_review FROM electors WHERE election_id = $1 ORDER BY id', [election])).rows.map((row) => [row.id, row.full_name, row.needs_review]);
+    expect((await upload(election, file, 'application/zip')).statusCode).toBe(200);
+    expect(await stored()).toEqual([['d-99000001', 'Prueba, Ana', false], ['d-99000002', 'Prueba, Luis', true], ['d-99000002~2', 'Ejemplo, Sol', true]]);
+    // The same file again finds the same people where they were.
+    expect((await upload(election, file, 'application/zip', true)).json()).toMatchObject({ people: 3, added: 0, kept: 3, missing: 0 });
+    expect((await upload(election, file, 'application/zip')).statusCode).toBe(200);
+    expect(await stored()).toEqual([['d-99000001', 'Prueba, Ana', false], ['d-99000002', 'Prueba, Luis', true], ['d-99000002~2', 'Ejemplo, Sol', true]]);
   });
 
   it('a CSV saved in Windows-1252 keeps its accents, and one in UTF-8 too', async () => {

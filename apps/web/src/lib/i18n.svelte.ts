@@ -365,10 +365,14 @@ const es = {
   'roll.problem.unsupported_version': 'Lo armó una versión más nueva del lector. Hay que actualizar Urna Abierta para leerlo.',
   'roll.problem.missing_file': 'Falta adentro del .padron.',
   'roll.problem.count_mismatch': 'Dice cuántas personas trae, y trae otra cantidad. Puede estar incompleto.',
-  'roll.problem.repeated_id': 'Quedó afuera porque su DNI o su legajo ya está en una fila anterior.',
-  'roll.problem.repeated_id.many': 'Quedaron afuera porque su DNI o su legajo ya está en una fila anterior.',
-  'roll.problem.repeated_id.padron': 'Quedó afuera porque su identificación ya está en una línea anterior.',
-  'roll.problem.repeated_id.padron.many': 'Quedaron afuera porque su identificación ya está en una línea anterior.',
+  'roll.problem.same_person': 'Es la misma persona que en una fila anterior (mismo DNI o legajo y mismo nombre, seguramente en otra carrera). Vota una sola vez, en la mesa de la primera fila, así que queda solo ahí.',
+  'roll.problem.same_person.many': 'Son las mismas personas que en filas anteriores (mismo DNI o legajo y mismo nombre, seguramente en otra carrera). Votan una sola vez, en la mesa de la primera fila, así que quedan solo ahí.',
+  'roll.problem.same_person.padron': 'Es la misma persona que en una línea anterior (misma identificación y mismo nombre, seguramente en otra carrera). Vota una sola vez, en la mesa de la primera línea, así que queda solo ahí.',
+  'roll.problem.same_person.padron.many': 'Son las mismas personas que en líneas anteriores (misma identificación y mismo nombre, seguramente en otra carrera). Votan una sola vez, en la mesa de la primera línea, así que quedan solo ahí.',
+  'roll.problem.same_document_other_name': 'Tiene el mismo DNI o legajo que otra fila, pero el nombre es otro o está escrito distinto. Se carga igual y queda para que la revises.',
+  'roll.problem.same_document_other_name.many': 'Tienen el mismo DNI o legajo que otra fila, pero el nombre es otro o está escrito distinto. Se cargan igual y quedan para que las revises.',
+  'roll.problem.same_document_other_name.padron': 'Tiene la misma identificación que otra línea, pero el nombre es otro o está escrito distinto. Se carga igual y queda para que la revises.',
+  'roll.problem.same_document_other_name.padron.many': 'Tienen la misma identificación que otra línea, pero el nombre es otro o está escrito distinto. Se cargan igual y quedan para que las revises.',
   'roll.problem.unknown_table': 'Nombra una mesa que el archivo no tiene.',
   'roll.problem.unknown_table.many': 'Nombran una mesa que el archivo no tiene.',
   'roll.problem.odd_document': 'El documento no tiene 7 u 8 números. Se carga igual y queda para que lo revises.',
@@ -1000,10 +1004,14 @@ const en: Record<MessageKey, string> = {
   'roll.problem.unsupported_version': 'A newer version of the reader built it. Urna Abierta needs an update to read it.',
   'roll.problem.missing_file': 'It is missing inside the .padron.',
   'roll.problem.count_mismatch': 'It says how many people it has, and it has a different number. It may be incomplete.',
-  'roll.problem.repeated_id': 'It was left out because its DNI or legajo is already on an earlier row.',
-  'roll.problem.repeated_id.many': 'They were left out because their DNI or legajo is already on an earlier row.',
-  'roll.problem.repeated_id.padron': 'It was left out because its id is already on an earlier line.',
-  'roll.problem.repeated_id.padron.many': 'They were left out because their id is already on an earlier line.',
+  'roll.problem.same_person': 'It is the same person as on an earlier row (same DNI or legajo and same name, most likely in another program). They vote once, at the table of the first row, so they are only there.',
+  'roll.problem.same_person.many': 'They are the same people as on earlier rows (same DNI or legajo and same name, most likely in another program). Each votes once, at the table of their first row, so they are only there.',
+  'roll.problem.same_person.padron': 'It is the same person as on an earlier line (same id and same name, most likely in another program). They vote once, at the table of the first line, so they are only there.',
+  'roll.problem.same_person.padron.many': 'They are the same people as on earlier lines (same id and same name, most likely in another program). Each votes once, at the table of their first line, so they are only there.',
+  'roll.problem.same_document_other_name': 'It has the same DNI or legajo as another row, but the name is different or written differently. It is loaded anyway, for you to check.',
+  'roll.problem.same_document_other_name.many': 'They have the same DNI or legajo as another row, but the name is different or written differently. They are loaded anyway, for you to check.',
+  'roll.problem.same_document_other_name.padron': 'It has the same id as another line, but the name is different or written differently. It is loaded anyway, for you to check.',
+  'roll.problem.same_document_other_name.padron.many': 'They have the same id as another line, but the name is different or written differently. They are loaded anyway, for you to check.',
   'roll.problem.unknown_table': 'It names a table the file does not have.',
   'roll.problem.unknown_table.many': 'They name a table the file does not have.',
   'roll.problem.odd_document': 'The document does not have 7 or 8 digits. It is loaded anyway, for you to check.',
@@ -1372,7 +1380,8 @@ export function rollProblem({ place, problem, lines }: { place: string; problem:
   const key: string =
     code === 'invalid' && field ? 'roll.problem.invalidField'
     : code === 'too_long' && field ? 'roll.problem.tooLong'
-    : code === 'repeated_id' && place !== 'line' ? 'roll.problem.repeated_id.padron'
+    // A .padron has lines and its own ids, where a spreadsheet has rows, DNIs and legajos.
+    : place !== 'line' && has(`roll.problem.${code}.padron`) ? `roll.problem.${code}.padron`
     : has(`roll.problem.${code}`) ? `roll.problem.${code}`
     : 'roll.problem.other';
   const text = t((many && has(`${key}.many`) ? `${key}.many` : key) as MessageKey, { field: t(has(fieldKey) ? fieldKey : 'roll.field.row') });

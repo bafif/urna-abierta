@@ -128,7 +128,32 @@ describe('Excel spreadsheets', () => {
     });
     const { padron, problems } = readXlsxRoll(file);
     expect(padron?.electors).toHaveLength(1);
-    expect(problems).toEqual([{ where: 'line 3', problem: 'repeated_id' }]);
+    expect(problems).toEqual([{ where: 'line 3', problem: 'same_person' }]);
+  });
+
+  it('keeps another name with the same document as one more person, both for review, as a CSV does', () => {
+    const file = oneSheet({
+      1: [{ inline: 'Nombre' }, { inline: 'DNI' }, { inline: 'Legajo' }],
+      2: [{ inline: 'Prueba, Ana' }, { n: '99000004' }, { inline: 'A-1/1' }],
+      3: [{ inline: 'Ejemplo, Luis' }, { n: '99000004' }, { inline: 'A-2/2' }],
+      4: [{ inline: 'Muestra, Sol' }, { n: '9.9000004E7' }],
+      5: [{ inline: 'PRUEBA ANA' }, { n: '99000004' }, { inline: 'A-3/3' }],
+    });
+    const read = readXlsxRoll(file);
+    expect(read.padron?.electors.map((elector) => [elector.id, elector.full_name, elector.review?.status])).toEqual([
+      ['d-99000004', 'Prueba, Ana', 'pending'],
+      ['l-A-2/2', 'Ejemplo, Luis', 'pending'],
+      ['f-3', 'Muestra, Sol', 'pending'],
+    ]);
+    expect(read.problems).toEqual([
+      { where: 'line 2', problem: 'same_document_other_name' },
+      { where: 'line 3', problem: 'same_document_other_name' },
+      { where: 'line 4', problem: 'same_document_other_name' },
+      { where: 'line 5', problem: 'same_person' },
+    ]);
+    expect(readXlsxRoll(file)).toEqual(read);
+    const csv = readCsvRoll('Nombre,DNI,Legajo\n"Prueba, Ana",99000004,A-1/1\n"Ejemplo, Luis",99000004,A-2/2\n"Muestra, Sol",99000004,\nPRUEBA ANA,99000004,A-3/3\n');
+    expect(csv).toEqual({ ...read, padron: { ...read.padron, manifest: { ...read.padron!.manifest, files: { electors: { path: 'csv', count: 3 } } } } });
   });
 
   it('says what is wrong without showing any row', () => {
