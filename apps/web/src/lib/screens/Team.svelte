@@ -49,7 +49,10 @@
       </button>
       {#if open === person.id && person.id !== session.me?.user.id}
         <div class="renglon-botones">
-          <button class="enlace" onclick={() => invite(person)}>{t('team.invite')}</button>
+          <!-- Managing the team and inviting are two tasks: whoever only looks after the system does not invite. -->
+          {#if session.allows('team.invite')}
+            <button class="enlace" onclick={() => invite(person)}>{t('team.invite')}</button>
+          {/if}
           <button class="enlace" onclick={() => remove(person)}>{t('team.remove')}</button>
         </div>
       {/if}

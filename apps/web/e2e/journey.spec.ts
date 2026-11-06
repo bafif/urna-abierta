@@ -458,6 +458,12 @@ test('whoever only looks after the system lands on what they can do, and sees no
   await expect(page.getByRole('button', { name: 'Volver' })).toHaveCount(0);
   await page.getByRole('button', { name: /^Registro/ }).click();
   await expect(page.getByTestId('audit-entry').first()).toBeVisible();
+  // The team is theirs to manage, but inviting is not: there is no button the server would refuse.
+  await page.getByRole('button', { name: 'Volver' }).click();
+  await page.getByRole('button', { name: /^Tu equipo/ }).click();
+  await page.getByTestId('team-person').filter({ hasText: 'Marta' }).click();
+  await expect(page.getByRole('button', { name: 'Sacar del equipo' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mandar otra invitación' })).toHaveCount(0);
 });
 
 test('someone asks for their data and to be erased', async ({ page, request }) => {
