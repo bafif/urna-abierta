@@ -89,6 +89,7 @@ La primera prueba real es una elección universitaria, en abril de 2027.
 | [Plan técnico](docs/es/plan-tecnico.md) | Arquitectura, sincronización, permisos y formato de padrón |
 | [Mediciones](docs/es/resultados-etapa-4.md) | Qué se probó y qué dio, con los [riesgos iniciales](docs/es/resultados-etapa-1.md) |
 | [Legal](LEGAL.md) | Licencia, responsabilidades y datos personales |
+| [Datos personales](docs/es/datos-personales.md) | Qué pide la ley, cómo inscribir la base y cómo atender cada pedido con la app |
 | [Escáner de padrones](https://github.com/bafif/urna-abierta-padrones) | El repo que convierte padrones al formato abierto |
 
 ## Autor

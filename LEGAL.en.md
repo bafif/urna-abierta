@@ -47,6 +47,9 @@ are worth knowing:
   Chile are not on the list of adequate countries in Disposition 60-E/2016.
 - The database may have to be registered with the AAIP.
 
+How to register it, how to handle each request and what the backups keep is in the
+[personal data guide](docs/en/personal-data.md).
+
 ## Tools to comply
 
 The app brings optional tools. Using them is up to each party, and having them does not guarantee legal compliance:

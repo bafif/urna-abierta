@@ -90,6 +90,7 @@ The first real test is a university election, in April 2027.
 | [Technical plan](docs/en/technical-plan.md) | Architecture, sync, permissions and roll format |
 | [Measurements](docs/en/stage-4-results.md) | What was tested and what it showed, with the [initial risks](docs/en/stage-1-results.md) |
 | [Legal](LEGAL.en.md) | License, responsibilities and personal data |
+| [Personal data](docs/en/personal-data.md) | What the law asks, how to register the database and how to handle each request with the app |
 | [Roll scanner](https://github.com/bafif/urna-abierta-padrones) | The repository that converts rolls to the open format |
 
 ## Author
