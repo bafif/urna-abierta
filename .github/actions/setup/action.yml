@@ -1,0 +1,24 @@
+name: Setup
+description: Node 24, the pnpm that package.json names, and the workspace installed. pnpm's store is kept between runs, by the lockfile.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+    - shell: bash
+      run: corepack enable
+    - id: store
+      shell: bash
+      env:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    # Only what pnpm downloads, which the lockfile pins with its hashes: nothing built here is reused.
+    - uses: actions/cache@v4
+      with:
+        path: ${{ steps.store.outputs.path }}
+        key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-${{ runner.os }}-
+    - shell: bash
+      run: pnpm install --frozen-lockfile
