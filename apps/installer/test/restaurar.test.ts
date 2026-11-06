@@ -98,6 +98,16 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     expect(there.filter((file) => /base\.dump|fotos\.tar|clave-campos|\/fotos\//.test(file))).toEqual([]);
   });
 
+  it('says so when the database does not let its data go, and leaves the field key and the photos as they were', () => {
+    const { restore, untouched, dump } = server();
+    const done = restore(backup(), { PRUEBA_BASE_FALLA: 'si' });
+    expect(done.ok).toBe(false);
+    expect(done.said).toContain('no restauré nada');
+    expect(done.said).toContain('fe_sendauth: no password supplied');
+    expect(untouched()).toBe(true);
+    expect(existsSync(dump)).toBe(false);
+  });
+
   it('refuses a backup with one of its files twice, or with one missing', () => {
     const twice = server();
     const repeated = twice.restore(backup({ outer: () => ['base.dump'] }));

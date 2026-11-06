@@ -10,7 +10,7 @@
  * URNA_E2E_NAME and URNA_E2E_PORT (the first of five ports) let it run next to another copy.
  */
 import { execFileSync } from 'node:child_process';
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -236,6 +236,11 @@ podman('cp', `${first.name}:${backup}`, copy);
 asUrna(first, 'podman', 'exec', '-u', 'postgres', 'urna-db', 'sh', '-c', 'sed -i -- "s/scram-sha-256$/trust/" "$PGDATA/pg_hba.conf" && kill -HUP 1');
 await sleep(2_000);
 const trusting = fromThePod(first);
+// And a database password in .env that is not the database's, as an older installer run again on the machine leaves
+// it: the server got in only because the pod was trusted.
+const oldPassword = /^POSTGRES_PASSWORD=(\S+)$/m.exec(madeThere)![1]!;
+const newPassword = randomBytes(24).toString('hex');
+asUrna(first, 'sed', '-i', `s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=${newPassword}/`, '/opt/urna-abierta/.env');
 
 // Updating: the next version is already on the machine, as if it had been downloaded.
 podman('cp', nextFile, `${first.name}:/tmp/nuevas.tar`);
@@ -252,6 +257,12 @@ const backupsNow = api(first, 'GET', '/backups', { token }).backups;
 record('después de actualizar están los datos, siguen las sesiones y hay una copia de antes', afterUpdate?.[0]?.name === 'Simulacro' && afterUpdate[0].people === 30 && backupsNow?.length === 2, afterUpdate?.[0]);
 const closedNow = fromThePod(first);
 record('«urna actualizar» le pide la clave también a una base que confiaba en el pod', trusting.ok && trusting.said.trim() === '1' && !closedNow.ok && closedNow.said.includes('no password supplied'), [trusting.said.trim(), closedNow.said.trim()]);
+const withNew = fromThePod(first, newPassword);
+const withOld = fromThePod(first, oldPassword);
+// What an older «urna» runs, after going back to an older version: inside the database's container, with no password.
+const olderCopy = attempt('exec', first.name, 'sh', '-c', 'runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta "$@"', 'sh',
+  'podman', 'exec', 'urna-db', 'sh', '-c', 'unset PGPASSWORD; pg_dump -w -U urna -Fc urna | wc -c && psql -w -q -U urna -d urna -tAc "SELECT 1"');
+record('la base toma la clave que dice .env, y adentro de su contenedor sigue sin pedirla, como lo necesita un «urna» anterior', withNew.ok && withNew.said.trim() === '1' && !withOld.ok && olderCopy.ok && /^\s*[1-9]\d*\s*\n1\s*$/.test(olderCopy.said), [withNew.said.trim(), withOld.said.trim(), olderCopy.said.trim()]);
 const same = attempt('exec', first.name, 'urna', 'actualizar', 'nueva');
 const missing = attempt('exec', first.name, 'urna', 'actualizar', 'v0.0.0-no-existe');
 const unchanged = podman('exec', first.name, 'grep', '^URNA_IMAGE_SERVER=', '/opt/urna-abierta/.env');
