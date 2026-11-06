@@ -633,6 +633,11 @@ const es = {
   'persons.correct': 'Corregir sus datos',
   'persons.correct.save': 'Guardar la corrección',
   'persons.corrected': 'Datos corregidos.',
+  'roll.upload.erased': '{count} personas pidieron que se borren sus datos: no se vuelven a cargar.',
+  'roll.upload.erased.one': '1 persona pidió que se borren sus datos: no se vuelve a cargar.',
+  'roll.upload.corrected': 'Las {count} correcciones que ya hiciste quedan como están.',
+  'roll.upload.corrected.one': 'La corrección que ya hiciste queda como está.',
+  'roll.upload.closed': 'Esta elección ya cerró: su padrón no se puede cambiar.',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1272,6 +1277,11 @@ const en: Record<MessageKey, string> = {
   'persons.correct': 'Correct their data',
   'persons.correct.save': 'Save the correction',
   'persons.corrected': 'Data corrected.',
+  'roll.upload.erased': '{count} people asked for their data to be erased: they are not loaded again.',
+  'roll.upload.erased.one': '1 person asked for their data to be erased: they are not loaded again.',
+  'roll.upload.corrected': 'The {count} corrections you already made stay as they are.',
+  'roll.upload.corrected.one': 'The correction you already made stays as it is.',
+  'roll.upload.closed': 'This election is closed: its roll cannot be changed.',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;

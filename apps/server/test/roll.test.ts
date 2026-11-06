@@ -55,7 +55,7 @@ describe.skipIf(!url)('loading a roll, against a real Postgres', () => {
     const preview = await upload(election, file, 'application/zip', true);
     expect(preview.statusCode).toBe(200);
     expect(preview.json()).toEqual({
-      people: 3, added: 3, kept: 0, missing: 0, toReview: 2, withoutTable: 3,
+      people: 3, added: 3, kept: 0, missing: 0, erased: 0, corrected: 0, toReview: 2, withoutTable: 3,
       problems: [
         { where: 'electors:2', problem: 'same_document_other_name' },
         { where: 'electors:3', problem: 'same_person' },
