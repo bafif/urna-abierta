@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { sleep, type Cloud, type Log } from './common.ts';
+import { createdResources, sleep, until, type Cloud, type Log } from './common.ts';
 
 export interface AwsCredentials {
   region: string;
@@ -33,6 +33,7 @@ export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fe
   const { region } = credentials;
   const host = `ec2.${region}.amazonaws.com`;
   let allocationId = '';
+  const resources = createdResources();
 
   async function call(action: string, params: Record<string, string> = {}): Promise<string> {
     const body = new URLSearchParams({ Action: action, Version: '2016-11-15', ...params }).toString();
@@ -51,7 +52,12 @@ export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fe
       log('address');
       const allocated = await call('AllocateAddress', { Domain: 'vpc' });
       allocationId = first(allocated, 'allocationId')!;
-      return first(allocated, 'publicIp')!;
+      const ip = first(allocated, 'publicIp')!;
+      // An address that is not on a running machine is charged by the hour.
+      resources.add(`elastic-ip ${ip} ${allocationId}`, async () => {
+        await call('ReleaseAddress', { AllocationId: allocationId });
+      });
+      return ip;
     },
 
     async createServer(script: string, log: Log) {
@@ -65,6 +71,9 @@ export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fe
 
       const group = await call('CreateSecurityGroup', { GroupName: `urna-abierta-${randomBytes(3).toString('hex')}`, GroupDescription: 'Urna Abierta: web and SSH', VpcId: vpcId });
       const groupId = first(group, 'groupId')!;
+      resources.add(`security-group ${groupId}`, async () => {
+        await call('DeleteSecurityGroup', { GroupId: groupId });
+      });
       const open = [['tcp', '22'], ['tcp', '80'], ['tcp', '443'], ['udp', '443']];
       const rules = Object.fromEntries(open.flatMap(([protocol, port], index) => {
         const n = index + 1;
@@ -93,6 +102,11 @@ export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fe
         'TagSpecification.1.Tag.1.Value': 'urna-abierta',
       });
       const instanceId = first(started, 'instanceId')!;
+      // Its security group can only go once it is terminated, not while it is shutting down.
+      resources.add(`instance ${instanceId}`, async () => {
+        await call('TerminateInstances', { 'InstanceId.1': instanceId });
+        await until(async () => /<instanceState>\s*<code>48<\/code>/.test(await call('DescribeInstances', { 'InstanceId.1': instanceId })), wait, { tries: 120, problem: 'aws_delete_timeout' });
+      });
 
       for (let attempt = 0; ; attempt += 1) {
         const state = await call('DescribeInstances', { 'InstanceId.1': instanceId });
@@ -102,5 +116,7 @@ export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fe
       }
       await call('AssociateAddress', { InstanceId: instanceId, AllocationId: allocationId });
     },
+
+    cleanUp: (log: Log) => resources.cleanUp(log),
   };
 }

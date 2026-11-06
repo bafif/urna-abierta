@@ -1,5 +1,5 @@
 import { createHash, createSign } from 'node:crypto';
-import { sleep, type Cloud, type Log } from './common.ts';
+import { createdResources, sleep, until, type Cloud, type Log } from './common.ts';
 
 export interface OracleCredentials {
   region: string;
@@ -35,6 +35,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
   const core = `https://iaas.${region}.oraclecloud.com/20160918`;
   const identity = `https://identity.${region}.oraclecloud.com/20160918`;
   let reservedId = '';
+  const resources = createdResources();
 
   async function call(method: string, address: string, payload?: object): Promise<any> {
     const url = new URL(address);
@@ -45,6 +46,19 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(`oracle_${method}_${url.pathname.split('/').pop()}: ${data.code ?? response.status} ${data.message ?? ''}`);
     return data;
+  }
+
+  /** Deletes, and waits until it is gone: the network cannot go while the machine or the subnet are still in it. */
+  async function remove(address: string, options = ''): Promise<void> {
+    await call('DELETE', `${address}${options}`);
+    await until(async () => {
+      try {
+        return (await call('GET', address)).lifecycleState === 'TERMINATED';
+      } catch (error) {
+        if (/: (404|NotAuthorizedOrNotFound) /.test((error as Error).message)) return true;
+        throw error;
+      }
+    }, wait, { tries: 120, every: 5_000, problem: 'oracle_delete_timeout' });
   }
 
   async function imageFor(shape: string): Promise<string> {
@@ -72,6 +86,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
             createVnicDetails: { subnetId, assignPublicIp: false },
             metadata: { user_data: Buffer.from(script).toString('base64') },
           });
+          resources.add(`instance ${instance.id}`, () => remove(`${core}/instances/${instance.id}`, '?preserveBootVolume=false'));
           return instance.id;
         } catch (error) {
           lastProblem = String((error as Error).message);
@@ -87,13 +102,20 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
       log('address');
       const address = await call('POST', `${core}/publicIps`, { compartmentId: tenancy, lifetime: 'RESERVED', displayName: 'urna-abierta' });
       reservedId = address.id;
+      resources.add(`publicIp ${address.ipAddress} ${address.id}`, () => call('DELETE', `${core}/publicIps/${address.id}`));
       return address.ipAddress;
     },
 
     async createServer(script: string, log: Log) {
       log('network');
       const vcn = await call('POST', `${core}/vcns`, { compartmentId: tenancy, cidrBlock: '10.0.0.0/16', displayName: 'urna-abierta' });
+      resources.add(`vcn ${vcn.id}`, () => remove(`${core}/vcns/${vcn.id}`));
       const gateway = await call('POST', `${core}/internetGateways`, { compartmentId: tenancy, vcnId: vcn.id, isEnabled: true, displayName: 'urna-abierta' });
+      // The route to it has to go first, or Oracle does not let it go.
+      resources.add(`internetGateway ${gateway.id}`, async () => {
+        await call('PUT', `${core}/routeTables/${vcn.defaultRouteTableId}`, { routeRules: [] });
+        await remove(`${core}/internetGateways/${gateway.id}`);
+      });
       await call('PUT', `${core}/routeTables/${vcn.defaultRouteTableId}`, { routeRules: [{ destination: '0.0.0.0/0', destinationType: 'CIDR_BLOCK', networkEntityId: gateway.id }] });
       const open = (protocol: string, port: number) => ({
         protocol,
@@ -105,6 +127,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
         egressSecurityRules: [{ protocol: 'all', destination: '0.0.0.0/0' }],
       });
       const subnet = await call('POST', `${core}/subnets`, { compartmentId: tenancy, vcnId: vcn.id, cidrBlock: '10.0.0.0/24', displayName: 'urna-abierta' });
+      resources.add(`subnet ${subnet.id}`, () => remove(`${core}/subnets/${subnet.id}`));
       for (let attempt = 0; (await call('GET', `${core}/subnets/${subnet.id}`)).lifecycleState !== 'AVAILABLE'; attempt += 1) {
         if (attempt > 30) throw new Error('oracle_network_did_not_start');
         await wait(3_000);
@@ -121,5 +144,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
       const addresses = await call('GET', `${core}/privateIps?vnicId=${encodeURIComponent(attachments[0].vnicId)}`);
       await call('PUT', `${core}/publicIps/${reservedId}`, { privateIpId: addresses[0].id });
     },
+
+    cleanUp: (log: Log) => resources.cleanUp(log),
   };
 }

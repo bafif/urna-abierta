@@ -95,9 +95,44 @@
       'log.slow': 'Está tardando más de lo normal',
       'log.start': 'Arrancando',
       'log.theme': 'Cargando tu tema',
+      'log.cleanup': 'Borrando lo que se alcanzó a crear en la nube',
+      'server.waiting_system': 'Esperando que el servidor termine de prepararse',
+      'server.packages': 'Instalando lo necesario en el servidor',
+      'server.swap': 'Agregando memoria de intercambio',
+      'server.swap_failed': 'No se pudo agregar memoria de intercambio. Sigue sin ella',
+      'server.firewall': 'Abriendo los puertos 80 y 443',
+      'server.images_load': 'Cargando las imágenes',
+      'server.images_pull': 'Bajando las imágenes',
+      'server.starting': 'Arrancando',
+      'server.ready': 'Listo en {detail}',
       'failed.title': 'Algo no salió',
-      'failed.text': 'No se llegó a terminar. Esto dijo:',
+      'failed.text': 'No se llegó a terminar.',
+      'failed.detail': 'Detalle:',
+      'failed.cleaned': 'Lo que se había creado en la nube ya se borró: no queda nada cobrando.',
+      'failed.left': 'No pudimos borrar esto en la nube: {list}. Borralo desde su consola, porque puede cobrar.',
       'failed.retry': 'Volver a intentar',
+      'why.oracle_capacity': 'Oracle no tiene máquinas gratuitas libres en esa región ahora. Pasa seguido: probá de nuevo en unas horas.',
+      'why.oracle_auth': 'Oracle no aceptó la clave de API. Revisá los OCID del usuario y del tenancy, la huella y la clave privada.',
+      'why.oracle_region': 'Oracle no dejó crear el servidor. Fijate que la región sea la principal de tu cuenta (home region) y que el usuario sea administrador.',
+      'why.oracle_limit': 'Tu cuenta de Oracle llegó a un límite de redes, direcciones o máquinas. Borrá en la consola lo que no uses y volvé a probar.',
+      'why.aws_auth': 'AWS no aceptó la clave de acceso. Revisá las dos partes.',
+      'why.aws_permission': 'Esa clave de AWS no puede crear servidores. Dale el permiso AmazonEC2FullAccess al usuario.',
+      'why.aws_network': 'Tu cuenta de AWS no tiene en esa región la red que viene por defecto. Probá con sa-east-1, o creala en la consola: VPC, «Crear VPC predeterminada».',
+      'why.aws_limit': 'AWS no deja crear más direcciones o máquinas en esa región. Liberá las que no uses, o probá otra región.',
+      'why.aws_account': 'Tu cuenta de AWS todavía no está lista. Terminá de verificarla y volvé a probar.',
+      'why.google_auth': 'Google no aceptó el archivo de la cuenta de servicio. Pegá el JSON completo, y fijate que esa clave no esté borrada.',
+      'why.google_billing': 'El proyecto de Google no tiene la facturación activada.',
+      'why.google_api': 'Falta activar la Compute Engine API en ese proyecto. Después de activarla, puede tardar unos minutos.',
+      'why.google_permission': 'La cuenta de servicio no puede crear servidores. Dale el rol Administrador de Compute.',
+      'why.google_capacity': 'Google no tiene esa máquina disponible ahora. Probá de nuevo en un rato.',
+      'why.slow_cloud': 'La nube tardó demasiado en crear el servidor. Probá de nuevo en un rato.',
+      'why.ssh': 'No pudimos entrar al servidor por SSH. Fijate la dirección, el usuario y la llave, y que el puerto 22 esté abierto.',
+      'why.needs_debian': 'El servidor no tiene Ubuntu ni Debian. Por ahora hace falta uno de esos dos.',
+      'why.apt': 'El servidor no pudo instalar lo que necesita. Suele pasar mientras se actualiza: esperá unos minutos y volvé a probar.',
+      'why.script': 'La instalación se cortó en el servidor. En el detalle están sus últimas líneas.',
+      'why.no_engine': 'Hace falta Podman o Docker abierto en esta computadora.',
+      'why.pull': 'No se pudieron bajar las imágenes de Urna Abierta. Fijate la conexión a internet y volvé a probar.',
+      'why.unknown': 'No sabemos bien qué pasó. El detalle sirve para pedir ayuda.',
       'paste.title': 'Pegá este bloque al crear el servidor',
       'paste.text': 'Elegí Ubuntu 24.04, reservá una dirección fija y abrí los puertos 80 y 443. Pegá esto en «user data» o «cloud-init». Trae claves: no lo compartas.',
       'paste.copy': 'Copiar',
@@ -211,9 +246,44 @@
       'log.slow': 'It is taking longer than usual',
       'log.start': 'Starting',
       'log.theme': 'Loading your theme',
+      'log.cleanup': 'Deleting what had been created in the cloud',
+      'server.waiting_system': 'Waiting for the server to finish setting itself up',
+      'server.packages': 'Installing what the server needs',
+      'server.swap': 'Adding swap memory',
+      'server.swap_failed': 'Swap memory could not be added. It goes on without it',
+      'server.firewall': 'Opening ports 80 and 443',
+      'server.images_load': 'Loading the images',
+      'server.images_pull': 'Downloading the images',
+      'server.starting': 'Starting',
+      'server.ready': 'Ready at {detail}',
       'failed.title': 'Something went wrong',
-      'failed.text': 'It did not finish. This is what it said:',
+      'failed.text': 'It did not finish.',
+      'failed.detail': 'Detail:',
+      'failed.cleaned': 'What had been created in the cloud is already deleted: nothing is left charging.',
+      'failed.left': 'We could not delete this in the cloud: {list}. Delete it from its console, because it may charge.',
       'failed.retry': 'Try again',
+      'why.oracle_capacity': 'Oracle has no free machines available in that region right now. It happens often: try again in a few hours.',
+      'why.oracle_auth': 'Oracle did not accept the API key. Check the user and tenancy OCIDs, the fingerprint and the private key.',
+      'why.oracle_region': 'Oracle did not let the server be created. Check that the region is your account’s home region, and that the user is an administrator.',
+      'why.oracle_limit': 'Your Oracle account reached a limit of networks, addresses or machines. Delete what you do not use in the console and try again.',
+      'why.aws_auth': 'AWS did not accept the access key. Check both parts.',
+      'why.aws_permission': 'That AWS key cannot create servers. Give the user the AmazonEC2FullAccess permission.',
+      'why.aws_network': 'Your AWS account has no default network in that region. Try sa-east-1, or create it in the console: VPC, “Create default VPC”.',
+      'why.aws_limit': 'AWS does not allow more addresses or machines in that region. Release the ones you do not use, or try another region.',
+      'why.aws_account': 'Your AWS account is not ready yet. Finish verifying it and try again.',
+      'why.google_auth': 'Google did not accept the service account file. Paste the whole JSON, and check that the key was not deleted.',
+      'why.google_billing': 'The Google project does not have billing turned on.',
+      'why.google_api': 'The Compute Engine API is not turned on in that project. After turning it on, it can take a few minutes.',
+      'why.google_permission': 'The service account cannot create servers. Give it the Compute Admin role.',
+      'why.google_capacity': 'Google does not have that machine available right now. Try again in a while.',
+      'why.slow_cloud': 'The cloud took too long to create the server. Try again in a while.',
+      'why.ssh': 'We could not get into the server over SSH. Check the address, the user and the key, and that port 22 is open.',
+      'why.needs_debian': 'The server does not run Ubuntu or Debian. For now it needs one of those two.',
+      'why.apt': 'The server could not install what it needs. It usually happens while it is updating itself: wait a few minutes and try again.',
+      'why.script': 'The installation stopped on the server. Its last lines are in the detail.',
+      'why.no_engine': 'Podman or Docker has to be open on this computer.',
+      'why.pull': 'The Urna Abierta images could not be downloaded. Check the internet connection and try again.',
+      'why.unknown': 'We do not know exactly what happened. The detail helps when asking for help.',
       'paste.title': 'Paste this block when creating the server',
       'paste.text': 'Choose Ubuntu 24.04, reserve a fixed address and open ports 80 and 443. Paste this in “user data” or “cloud-init”. It has keys: do not share it.',
       'paste.copy': 'Copy',
@@ -236,6 +306,32 @@
   };
 
   const GUIDE = 'https://github.com/bafif/urna-abierta/blob/main/docs/es/servidores.md';
+
+  /** What usually causes each failure, from the code at the start of what the installer or the server said. */
+  const WHY = [
+    [/^oracle_no_capacity/, 'oracle_capacity'],
+    [/^oracle_\w+: (NotAuthenticated|InvalidKey|401)/, 'oracle_auth'],
+    [/^oracle_\w+: (LimitExceeded|QuotaExceeded)/, 'oracle_limit'],
+    [/^oracle_\w+: (NotAuthorizedOrNotFound|404)/, 'oracle_region'],
+    [/^aws_no_default_network/, 'aws_network'],
+    [/^aws_\w+: (AuthFailure|InvalidClientTokenId|SignatureDoesNotMatch|UnrecognizedClient)/, 'aws_auth'],
+    [/^aws_\w+: (UnauthorizedOperation|AccessDenied)/, 'aws_permission'],
+    [/^aws_\w+: (\w*LimitExceeded|InsufficientInstanceCapacity)/, 'aws_limit'],
+    [/^aws_\w+: (OptInRequired|PendingVerification|Blocked)/, 'aws_account'],
+    [/^google_login/, 'google_auth'],
+    [/^google_.*billing/i, 'google_billing'],
+    [/^google_.*(Compute Engine API|has not been used|is disabled)/i, 'google_api'],
+    [/^google_.*(permission|forbidden)/i, 'google_permission'],
+    [/^google_.*(RESOURCE_POOL_EXHAUSTED|quota)/i, 'google_capacity'],
+    [/_did_not_start|_timeout$/, 'slow_cloud'],
+    [/^script_failed:.*needs_debian/, 'needs_debian'],
+    [/^script_failed:.*(apt|dpkg|lock)/i, 'apt'],
+    [/^script_failed/, 'script'],
+    [/^no_engine/, 'no_engine'],
+    [/^Command failed: \S+ pull /, 'pull'],
+    [/authentication methods failed|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|handshake|privateKey|Cannot parse/i, 'ssh'],
+  ];
+  const why = (problem) => WHY.find(([pattern]) => pattern.test(problem ?? ''))?.[1] ?? 'unknown';
   const READER = {
     es: 'https://github.com/bafif/urna-abierta-padrones#descargar',
     en: 'https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download',
@@ -256,6 +352,7 @@
     mode: matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro',
     engine: undefined,
     problem: '',
+    left: null,
     busy: false,
     job: null,
     result: null,
@@ -266,6 +363,11 @@
   const BUILT_IN = window.TEMAS.map((item) => item.id);
 
   const t = (key, values = {}) => (STRINGS[state.language][key] ?? key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? '');
+  /** A progress line of the server: a key, and sometimes a detail, like the address. */
+  const serverLine = (detail) => {
+    const [key, ...rest] = String(detail ?? '').split(' ');
+    return STRINGS[state.language][`server.${key}`] ? t(`server.${key}`, { detail: rest.join(' ') }) : detail;
+  };
   const escape = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const post = async (path, body) => (await fetch(`api/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json();
   const tema = () => window.TEMAS.find((item) => item.id === state.theme) ?? window.TEMAS[0];
@@ -361,15 +463,17 @@
       title: t('progress.title'), text: t('progress.text'),
       body: `<ul class="progreso" data-testid="progress">${(state.job?.lines ?? []).map((line, index, lines) => {
         const [kind, detail] = line.split(/:(.*)/);
-        const text = kind === 'server' ? detail : kind === 'pull' ? detail : t(`log.${kind}`);
+        const text = kind === 'server' ? serverLine(detail) : kind === 'pull' ? detail : t(`log.${kind}`);
         if (kind === 'try') return '';
         return `<li>${index < lines.length - 1 ? icon('tilde') : '<span class="foco"></span>'}<span>${escape(text)}</span></li>`;
       }).join('')}</ul>`,
     }),
     failed: () => ({
       title: t('failed.title'), text: t('failed.text'),
-      body: `<p class="problema" role="alert" data-testid="install-problem">${escape(state.problem)}</p>`,
-      next: ['failed.retry', 'where'],
+      body: `<p class="problema" role="alert" data-testid="install-problem">${t(`why.${why(state.problem)}`)}</p>
+        ${state.left ? `<p class="aclara" data-testid="install-cleanup">${state.left.length ? t('failed.left', { list: escape(state.left.join(', ')) }) : t('failed.cleaned')}</p>` : ''}
+        <p class="aclara detalle" data-testid="install-detail">${t('failed.detail')} ${escape(state.problem)}</p>`,
+      next: ['failed.retry', 'whereBack'],
     }),
     paste: () => ({
       title: t('paste.title'), text: t('paste.text'),
@@ -456,14 +560,16 @@
       return;
     }
     if (state.job.problem) {
+      // What was typed stays for trying again, only in this window, until it works.
       state.problem = state.job.problem;
+      state.left = state.job.left;
       state.screen = 'failed';
     } else {
       state.result = state.job.result;
       state.screen = state.result.text ? 'paste' : 'done';
+      // Credentials are not kept once the server exists.
+      state.form = {};
     }
-    // Credentials are not kept once they have been used.
-    state.form = {};
     render();
   }
 
