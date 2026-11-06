@@ -4,6 +4,7 @@ import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
 import { audit, can, canReachTable, requires, seal, unseal, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
+import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
@@ -299,12 +300,28 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** After the election: no names remain. Only totals per table are kept. */
   app.post<{ Params: { id: string } }>('/api/elections/:id/purge', { preHandler: requires(pool, 'election.manage') }, async (request, reply) => {
     const { id } = request.params;
-    const status = await pool.query('SELECT status FROM elections WHERE id = $1', [id]);
-    if (status.rows[0]?.status !== 'cerrada') return reply.code(409).send({ error: 'close_it_first' });
-    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
-    await pool.query(`UPDATE electors SET full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1`, [id]);
-    await pool.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
-    await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const status = await client.query('SELECT status FROM elections WHERE id = $1 FOR UPDATE', [id]);
+      if (status.rows[0]?.status !== 'cerrada') {
+        await client.query('ROLLBACK');
+        return reply.code(409).send({ error: 'close_it_first' });
+      }
+      // The same lock a batch from a phone takes: one that arrives meanwhile waits, and then sees the purge.
+      await client.query('SELECT 1 FROM polling_tables WHERE election_id = $1 ORDER BY id FOR UPDATE', [id]);
+      await client.query('DELETE FROM semaphore_marks WHERE election_id = $1', [id]);
+      await client.query(`UPDATE electors SET full_name = '', search = '', document = NULL, file_number = NULL, address = NULL, extra = '{}', review = NULL, consent = NULL WHERE election_id = $1`, [id]);
+      await client.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
+      await client.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    forgetStatuses();
     await audit(pool, request.actor, 'election.purged', id);
     return { status: 'purgada' };
   });

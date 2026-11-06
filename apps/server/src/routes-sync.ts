@@ -18,6 +18,9 @@ async function heardFrom(pool: pg.Pool, table: string): Promise<void> {
   await pool.query('UPDATE polling_tables SET last_contact = now() WHERE id = $1', [table]);
 }
 
+type VoterOperation = Extract<Operation, { type: 'voter.marked' | 'voter.unmarked' }>;
+const isVoter = (operation: Operation): operation is VoterOperation => operation.type === 'voter.marked' || operation.type === 'voter.unmarked';
+
 /**
  * Stores a batch in one transaction. Locking the row of the table gives every operation of
  * that table a number in commit order. With one global sequence, a reader could pass a number
@@ -29,16 +32,20 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
     await client.query('BEGIN');
     const locked = await client.query<{ last_seq: string }>('SELECT last_seq FROM polling_tables WHERE id = $1 FOR UPDATE', [table]);
     const last = Number(locked.rows[0]!.last_seq);
-    const inserted = await client.query(
+    // Asked here, after the lock: the purge holds that same lock while it deletes, so a batch that waited for it sees it.
+    // After the purge nobody's vote is kept, not even from a phone that was offline for days. The phone still hears it arrived, so it stops sending it.
+    const election = await client.query<{ status: string }>('SELECT e.status FROM elections e JOIN polling_tables t ON t.election_id = e.id WHERE t.id = $1', [table]);
+    const kept = election.rows[0]?.status === 'purgada' ? operations.filter((operation) => !isVoter(operation)) : operations;
+    const inserted = kept.length === 0 ? { rowCount: 0 } : await client.query(
       `INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload, author, quarantined)
        SELECT id, $1, $2 + ordinality, type, device, device_seq, device_time, payload, $9, $10
        FROM unnest($3::uuid[], $4::text[], $5::text[], $6::bigint[], $7::timestamptz[], $8::jsonb[])
          WITH ORDINALITY AS t (id, type, device, device_seq, device_time, payload, ordinality)
        ON CONFLICT (id) DO NOTHING`,
-      [table, last, operations.map((o) => o.id), operations.map((o) => o.type), operations.map((o) => o.device), operations.map((o) => o.device_seq), operations.map((o) => o.device_time), operations.map((o) => JSON.stringify(o.payload)), author, quarantined],
+      [table, last, kept.map((o) => o.id), kept.map((o) => o.type), kept.map((o) => o.device), kept.map((o) => o.device_seq), kept.map((o) => o.device_time), kept.map((o) => JSON.stringify(o.payload)), author, quarantined],
     );
     // It writes this row anyway, so it also says the phone was heard from.
-    await client.query('UPDATE polling_tables SET last_seq = $2, last_contact = now() WHERE id = $1', [table, last + (inserted.rowCount ? operations.length : 0)]);
+    await client.query('UPDATE polling_tables SET last_seq = $2, last_contact = now() WHERE id = $1', [table, last + (inserted.rowCount ? kept.length : 0)]);
     heard.set(table, Date.now());
     await client.query('COMMIT');
   } catch (error) {
@@ -49,7 +56,7 @@ async function storeBatch(pool: pg.Pool, table: string, operations: Operation[],
   }
 }
 
-/** A status only changes through one route of this same process, which clears this at that moment. */
+/** A status only changes through two routes of this same process, the step forward and the purge, which clear this at that moment. */
 const statuses = new Map<string, string>();
 export const forgetStatuses = () => statuses.clear();
 async function statusOf(pool: pg.Pool, table: string): Promise<string | null> {
@@ -92,14 +99,14 @@ export async function tableRoll(pool: pg.Pool, table: string): Promise<RollEntry
 /** Changes whenever what a phone holds of its table would: someone added, moved, renamed, a light, the digits shown. */
 export const rollRevision = (electors: RollEntry[]) => createHash('sha256').update(JSON.stringify(electors)).digest('base64url').slice(0, 22);
 
-type VoterOperation = Extract<Operation, { type: 'voter.marked' | 'voter.unmarked' }>;
-const isVoter = (operation: Operation): operation is VoterOperation => operation.type === 'voter.marked' || operation.type === 'voter.unmarked';
-
-/** A phone prepared before the random ids still names people by the id of the roll until it refreshes: that one never gets stored. */
+/**
+ * A phone prepared before the random ids still names people by the id of the roll until it refreshes: that one never gets stored.
+ * Only people of this same table: naming someone of another table must not tell whether they are on the roll.
+ */
 async function usePublicIds(pool: pg.Pool, table: string, operations: VoterOperation[]): Promise<void> {
   if (operations.length === 0) return;
   const found = await pool.query(
-    `SELECT x.id, x.public_id FROM electors x JOIN polling_tables t ON t.election_id = x.election_id WHERE t.id = $1 AND x.id = ANY($2)`,
+    'SELECT id, public_id FROM electors WHERE table_id = $1 AND id = ANY($2)',
     [table, [...new Set(operations.map((operation) => operation.payload.elector))]],
   );
   const publicId = new Map(found.rows.map((row) => [row.id, row.public_id]));
@@ -136,10 +143,8 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     }
     // What arrives after the close may be legitimate, from a phone without signal: it is kept apart for review.
     const late = ['cerrada', 'purgada'].includes(status);
-    // After the purge nobody's vote is kept, not even from a phone that was offline for days. The phone hears it arrived, so it stops sending it.
-    const kept = status === 'purgada' ? valid.filter((operation) => !isVoter(operation)) : valid;
-    await usePublicIds(pool, table, kept.filter(isVoter));
-    if (kept.length > 0) await storeBatch(pool, table, kept, request.actor.userId, late);
+    await usePublicIds(pool, table, valid.filter(isVoter));
+    if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId, late);
     else await heardFrom(pool, table);
     return { acked: valid.map((o) => o.id), rejected, server_time: clock.now().toISOString() };
   });
