@@ -43,7 +43,7 @@ Te hace tres preguntas y hace el resto.
 | Crear un servidor nuevo | Una cuenta en Oracle Cloud, AWS o Google Cloud. [Acá está cómo crearla](servidores.md) |
 | Ya tengo un servidor | Ubuntu o Debian, su dirección y una llave SSH de un usuario con `sudo` sin contraseña |
 | Pegar un texto | Pegar un bloque al crear el servidor, sin darle ninguna credencial al instalador |
-| Probar en esta computadora | Podman o Docker abierto. Solo se ve desde ahí |
+| Probar en esta computadora | Podman o Docker abierto. Para mirarla o hacer un simulacro: [con teléfonos](#probar-con-teléfonos-sin-servidor) |
 
 **2. ¿Cómo leemos los padrones escaneados?** En tu computadora, con el lector de padrones, que es lo recomendado porque un padrón
 trae datos de personas, o lo decidís después. Usar tu propia IA todavía no está disponible. El lector se baja aparte y solo hace falta
@@ -56,6 +56,26 @@ Al terminar te da la dirección de tu servidor y una llave de recuperación para
 asistente para el partido, el equipo y la primera elección: lo recorre [Tu primera elección](primera-eleccion.md).
 
 **Guardá esa llave.** Es lo único que abre tus copias de seguridad, y no se puede volver a generar.
+
+### Probar con teléfonos sin servidor
+
+Un teléfono necesita una dirección `https` para guardar la app y seguir andando sin señal, y tu computadora no tiene una. Hay dos maneras
+de conseguirla sin crear un servidor:
+
+| Manera | Para qué sirve | Qué pasa con los datos |
+|---|---|---|
+| **También desde los teléfonos**, en «Probar en esta computadora» | Un simulacro con varias personas, cada una con su teléfono, con wifi o con datos | Pasan por Cloudflare, que presta la dirección |
+| Un teléfono Android con cable | Probarla vos solo | No salen de tu computadora |
+
+**Con el túnel.** Elegí «También desde los teléfonos». Al terminar, la dirección es del estilo `https://algo.trycloudflare.com`: abrí la
+app desde ahí, también en tu computadora, porque las invitaciones llevan la dirección desde la que se crean. Esa dirección dura mientras
+la computadora esté prendida; si volvés a correr el instalador cambia, y cada teléfono vuelve a preparar la mesa. Para un simulacro con
+un padrón de verdad, tené en cuenta que pasa entero por Cloudflare.
+
+**Con cable.** Elegí «Solo desde esta computadora». Activá la depuración USB en el teléfono, conectalo y corré `adb reverse tcp:8090
+tcp:8090` (`adb` viene en el paquete `android-tools`). En el teléfono, abrí `http://localhost:8090` en Chrome: para el teléfono es su
+propia dirección, y ahí no hace falta `https`. Las invitaciones que crees desde `http://localhost:8090` en la computadora también andan
+en ese teléfono.
 
 ## Cargar el padrón
 

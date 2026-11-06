@@ -43,7 +43,7 @@ It asks three questions and does the rest.
 | Create a new server | An account on Oracle Cloud, AWS or Google Cloud. [This is how to create it](servers.md) |
 | I already have a server | Ubuntu or Debian, its address and an SSH key of a user with passwordless `sudo` |
 | Paste a text | Paste a block when creating the server, without giving the installer any credential |
-| Try it on this computer | Podman or Docker running. It can only be seen from there |
+| Try it on this computer | Podman or Docker running. To look at it or run a drill: [with phones](#trying-it-with-phones-without-a-server) |
 
 **2. How do we read scanned rolls?** On your computer, with the roll reader, which is the recommended way because a roll has people's
 data, or you decide later. Using your own AI is not available yet. The reader is a separate download and is only needed for scanned PDFs:
@@ -56,6 +56,25 @@ At the end it gives you your server's address and a recovery key for the backups
 the party, the team and the first election: [Your first election](first-election.md) goes through it.
 
 **Keep that key.** It is the only thing that opens your backups, and it cannot be generated again.
+
+### Trying it with phones without a server
+
+A phone needs an `https` address to keep the app and go on working without signal, and your computer has none. There are two ways to get
+one without creating a server:
+
+| Way | What it is for | What happens with the data |
+|---|---|---|
+| **From phones too**, in «Try it on this computer» | A drill with several people, each with their own phone, on wifi or mobile data | It goes through Cloudflare, which lends the address |
+| An Android phone with a cable | Trying it on your own | It does not leave your computer |
+
+**With the tunnel.** Choose «From phones too». At the end, the address looks like `https://something.trycloudflare.com`: open the app
+from there, on your computer too, because invitations carry the address they are created from. That address lasts while the computer is
+on; if you run the installer again it changes, and every phone prepares its table again. For a drill with a real roll, keep in mind that
+all of it goes through Cloudflare.
+
+**With a cable.** Choose «Only from this computer». Turn on USB debugging on the phone, plug it in and run `adb reverse tcp:8090
+tcp:8090` (`adb` comes in the Android platform tools). On the phone, open `http://localhost:8090` in Chrome: for the phone it is its own
+address, and there `https` is not needed. Invitations you create from `http://localhost:8090` on the computer work on that phone too.
 
 ## Loading the roll
 

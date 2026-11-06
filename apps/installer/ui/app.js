@@ -31,7 +31,7 @@
       'where.text': 'Prefiero pegar un texto',
       'where.text.text': 'Te damos un bloque para pegar al crear el servidor. No nos das ninguna clave.',
       'where.local': 'Probar en esta computadora',
-      'where.local.text': 'Para mirarla antes de decidir. Solo se ve desde acá.',
+      'where.local.text': 'Para mirarla o hacer un simulacro antes de decidir. No sirve para una elección.',
       'cloud.title': '¿En qué nube?',
       'cloud.oracle': 'Oracle Cloud',
       'cloud.oracle.text': 'Gratis y sin plazo. Recomendado.',
@@ -62,7 +62,11 @@
       'text.title': 'Vas a pegar un texto',
       'text.text': 'Al final te damos un bloque. Lo pegás en el campo de inicio (user data o cloud-init) al crear un servidor con Ubuntu en la nube que quieras.',
       'local.title': 'Probar en esta computadora',
-      'local.text': 'Se levanta acá mismo, y solo se ve desde esta computadora. Sirve para mirarla, no para una elección.',
+      'local.text': 'Se levanta acá mismo. Sirve para mirarla y para un simulacro, no para una elección.',
+      'local.only': 'Solo desde esta computadora',
+      'local.only.text': 'Para mirarla. No sale nada de acá.',
+      'local.phones': 'También desde los teléfonos',
+      'local.phones.text': 'Abre un túnel de Cloudflare: una dirección https que anda en cualquier teléfono, con wifi o con datos, mientras esta computadora esté prendida. Todo lo que pasa por ahí, padrón incluido, atraviesa Cloudflare, y la dirección cambia cada vez que lo volvés a abrir.',
       'local.ok': 'Vamos a usar {engine}, que ya tenés instalado.',
       'local.none': 'Para esto hace falta Podman o Docker abierto. Instalá uno de los dos y volvé a esta pantalla.',
       'local.retry': 'Fijarme de nuevo',
@@ -94,6 +98,7 @@
       'log.waiting': 'Esperando que arranque. Puede tardar varios minutos',
       'log.slow': 'Está tardando más de lo normal',
       'log.start': 'Arrancando',
+      'log.tunnel': 'Abriendo la dirección para los teléfonos',
       'log.theme': 'Cargando tu tema',
       'log.cleanup': 'Borrando lo que se alcanzó a crear en la nube',
       'server.waiting_system': 'Esperando que el servidor termine de prepararse',
@@ -132,6 +137,7 @@
       'why.apt': 'El servidor no pudo instalar lo que necesita. Suele pasar mientras se actualiza: esperá unos minutos y volvé a probar.',
       'why.script': 'La instalación se cortó en el servidor. En el detalle están sus últimas líneas.',
       'why.no_engine': 'Hace falta Podman o Docker abierto en esta computadora.',
+      'why.no_tunnel': 'No se pudo abrir la dirección para los teléfonos. Revisá la conexión a internet y probá de nuevo, o elegí «Solo desde esta computadora».',
       'why.pull': 'No se pudieron bajar las imágenes de Urna Abierta. Fijate la conexión a internet y volvé a probar.',
       'why.unknown': 'No sabemos bien qué pasó. El detalle sirve para pedir ayuda.',
       'paste.title': 'Pegá este bloque al crear el servidor',
@@ -183,7 +189,7 @@
       'where.text': 'I prefer to paste a text',
       'where.text.text': 'We give you a block to paste when creating the server. You give us no keys.',
       'where.local': 'Try it on this computer',
-      'where.local.text': 'To look at it before deciding. It can only be seen from here.',
+      'where.local.text': 'To look at it or run a drill before deciding. Not for an election.',
       'cloud.title': 'Which cloud?',
       'cloud.oracle': 'Oracle Cloud',
       'cloud.oracle.text': 'Free with no time limit. Recommended.',
@@ -214,7 +220,11 @@
       'text.title': 'You will paste a text',
       'text.text': 'At the end we give you a block. Paste it in the startup field (user data or cloud-init) when creating an Ubuntu server on any cloud.',
       'local.title': 'Try it on this computer',
-      'local.text': 'It runs right here, and it can only be seen from this computer. It is for looking at it, not for an election.',
+      'local.text': 'It runs right here. It is for looking at it and for a drill, not for an election.',
+      'local.only': 'Only from this computer',
+      'local.only.text': 'To look at it. Nothing leaves this computer.',
+      'local.phones': 'From phones too',
+      'local.phones.text': 'Opens a Cloudflare tunnel: an https address that works on any phone, on wifi or mobile data, while this computer is on. Everything that goes through it, the roll included, crosses Cloudflare, and the address changes every time you open it again.',
       'local.ok': 'We will use {engine}, which you already have.',
       'local.none': 'This needs Podman or Docker running. Install one of them and come back to this screen.',
       'local.retry': 'Check again',
@@ -246,6 +256,7 @@
       'log.waiting': 'Waiting for it to start. It can take several minutes',
       'log.slow': 'It is taking longer than usual',
       'log.start': 'Starting',
+      'log.tunnel': 'Opening the address for phones',
       'log.theme': 'Loading your theme',
       'log.cleanup': 'Deleting what had been created in the cloud',
       'server.waiting_system': 'Waiting for the server to finish setting itself up',
@@ -284,6 +295,7 @@
       'why.apt': 'The server could not install what it needs. It usually happens while it is updating itself: wait a few minutes and try again.',
       'why.script': 'The installation stopped on the server. Its last lines are in the detail.',
       'why.no_engine': 'Podman or Docker has to be open on this computer.',
+      'why.no_tunnel': 'The address for phones could not be opened. Check the internet connection and try again, or choose «Only from this computer».',
       'why.pull': 'The Urna Abierta images could not be downloaded. Check the internet connection and try again.',
       'why.unknown': 'We do not know exactly what happened. The detail helps when asking for help.',
       'paste.title': 'Paste this block when creating the server',
@@ -333,6 +345,7 @@
     [/^script_failed:.*(apt|dpkg|lock)/i, 'apt'],
     [/^script_failed/, 'script'],
     [/^no_engine/, 'no_engine'],
+    [/^no_tunnel/, 'no_tunnel'],
     [/^Command failed: \S+ pull /, 'pull'],
     [/authentication methods failed|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|handshake|privateKey|Cannot parse/i, 'ssh'],
   ];
@@ -353,6 +366,7 @@
     provider: 'oracle',
     form: {},
     vision: 'local',
+    phones: 'only',
     theme: 'aula',
     mode: matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro',
     engine: undefined,
@@ -443,7 +457,8 @@
     text: () => ({ eyebrow: t('step1'), title: t('text.title'), text: t('text.text'), body: '', next: ['next', 'vision'], back: 'where' }),
     local: () => ({
       eyebrow: t('step1'), title: t('local.title'), text: t('local.text'),
-      body: state.engine ? `<p class="resultado bien">${icon('tilde')}${t('local.ok', { engine: escape(state.engine) })}</p>` : state.engine === null ? `<p class="problema" role="alert">${t('local.none')}</p><button class="enlace" data-action="findEngine">${t('local.retry')}</button>` : '',
+      body: state.engine ? `<p class="resultado bien">${icon('tilde')}${t('local.ok', { engine: escape(state.engine) })}</p>
+        <div class="opciones" role="radiogroup">${option('only', t('local.only'), t('local.only.text'), state.phones, 'phones')}${option('phones', t('local.phones'), t('local.phones.text'), state.phones, 'phones')}</div>` : state.engine === null ? `<p class="problema" role="alert">${t('local.none')}</p><button class="enlace" data-action="findEngine">${t('local.retry')}</button>` : '',
       next: ['next', 'vision'], disabled: !state.engine, back: 'where',
     }),
     vision: () => ({
@@ -552,7 +567,7 @@
       cloud: () => ({ kind: 'cloud', provider: state.provider, credentials: cloudCredentials() }),
       ssh: () => ({ kind: 'ssh', address: state.form.address, target: sshTarget() }),
       text: () => ({ kind: 'text' }),
-      local: () => ({ kind: 'local' }),
+      local: () => ({ kind: 'local', phones: state.phones === 'phones' }),
     }[state.where]();
     return { where, theme: state.theme, vision: state.vision, ...(state.custom ? { customTheme: state.custom } : {}) };
   }
@@ -694,7 +709,7 @@
   document.addEventListener('click', async (event) => {
     const button = event.target.closest('button');
     if (!button) return;
-    const { go: target, where, provider, vision, theme, action } = button.dataset;
+    const { go: target, where, provider, vision, theme, phones, action } = button.dataset;
     if (where) state.where = where;
     if (provider) {
       state.provider = provider;
@@ -702,7 +717,8 @@
     }
     if (vision) state.vision = vision;
     if (theme) state.theme = theme;
-    if (where || provider || vision || theme) return render();
+    if (phones) state.phones = phones;
+    if (where || provider || vision || theme || phones) return render();
     if (action === 'language') {
       state.language = state.language === 'es' ? 'en' : 'es';
       return render();

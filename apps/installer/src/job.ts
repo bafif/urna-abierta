@@ -13,7 +13,8 @@ export type Where =
   | { kind: 'cloud'; provider: 'aws' | 'oracle' | 'google'; credentials: any }
   | { kind: 'ssh'; address: string; target: SshTarget }
   | { kind: 'text' }
-  | { kind: 'local' };
+  /** `phones` opens a temporary tunnel, so that phones on any network can reach this computer. */
+  | { kind: 'local'; phones?: boolean };
 
 export interface InstallRequest {
   where: Where;
@@ -117,9 +118,12 @@ export async function install(request: InstallRequest, log: (line: string) => vo
   const { where, theme } = request;
 
   if (where.kind === 'local') {
-    const { secrets, url } = await startLocal(theme, log);
+    const { secrets, url, phonesUrl } = await startLocal(theme, log, where.phones === true);
     const alive = await waitForHealth(url, log, 3 * 60_000);
-    return { address: url, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${url}/#setup=${secrets.setupCode}`, ...(await sendCustomTheme(request, url, secrets.setupCode, alive, log)) };
+    // Invitations carry the address the app is open at: with phones, everything is set up from the tunnel's.
+    const address = phonesUrl ?? url;
+    if (phonesUrl && alive) await waitForHealth(phonesUrl, log, 60_000);
+    return { address, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${address}/#setup=${secrets.setupCode}`, ...(await sendCustomTheme(request, url, secrets.setupCode, alive, log)) };
   }
 
   const secrets = newSecrets();
