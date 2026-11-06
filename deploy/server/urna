@@ -214,9 +214,15 @@ update() {
   done
   # The database keeps its major version, and gets its fixes when the registry answers.
   podman pull -q "$URNA_IMAGE_DB" >/dev/null 2>&1 || true
+  # The version the last update came from, and the backup made just before it: once the newer version has changed
+  # the database, that backup is the only way back to the older one, which refuses a database it does not know.
+  older='' older_copy=''
+  if [ -f "$home/.antes-de-actualizar" ]; then read -r older older_copy <"$home/.antes-de-actualizar" || true; fi
   echo 'Haciendo una copia antes de actualizar…'
   # As its own process, so that any step that fails stops it.
   copy=$("$0" copia) || { echo 'No se pudo hacer la copia, así que no cambié nada. Mirá «urna estado».' >&2; exit 1; }
+  # Going back keeps the backup from before the update it undoes.
+  [ "$version" = "$older" ] || printf '%s %s\n' "$before" "$copy" >"$home/.antes-de-actualizar"
   # Its commands replace these, but only if they read as a script. The running copy keeps its own file.
   if podman run --rm --network none --entrypoint cat "$server" /app/urna >"$home/urna.nueva" 2>/dev/null && [ -s "$home/urna.nueva" ] && sh -n "$home/urna.nueva"; then
     chmod 755 "$home/urna.nueva"
@@ -227,7 +233,11 @@ update() {
   sed -i "s|^URNA_IMAGE_SERVER=.*|URNA_IMAGE_SERVER=$server|; s|^URNA_IMAGE_WEB=.*|URNA_IMAGE_WEB=$web|" "$home/.env"
   echo "Arrancando la versión $version…"
   if ! "$home/urna" reiniciar >/dev/null; then
-    echo "La versión $version no arrancó. Para volver a la $before con los datos de antes: «urna actualizar $before», y si así tampoco arranca, «urna restaurar $copy TU-LLAVE-DE-RECUPERACION»." >&2
+    if [ "$version" = "$older" ] && [ -f "$older_copy" ]; then
+      echo "La versión $version no abre la base tal como la dejó la $before. Para volver a los datos de antes de actualizar: «urna restaurar $older_copy TU-LLAVE-DE-RECUPERACION». Lo que se cargó después quedó en $copy, que abre la $before." >&2
+    else
+      echo "La versión $version no arrancó. Para volver a la $before con los datos de antes: «urna actualizar $before» y después «urna restaurar $copy TU-LLAVE-DE-RECUPERACION». Si la $version llegó a cambiar la base, la $before no arranca hasta que restaures esa copia." >&2
+    fi
     exit 1
   fi
   echo "Listo: está en la versión $version. La copia de antes quedó en $copy."
