@@ -91,8 +91,10 @@ stops answering for a minute or two. `sudo urna estado` says which version it is
 Update before preparing an election or after closing it, never during voting or in the days before. If a new version brings a problem,
 it has to show up in a [drill](drill.md), not on election day.
 
-If the new version does not start, `urna actualizar` says so, with the last thing the server said, and explains how to go back: first
-`sudo urna actualizar` with the previous version and, if it still does not start, restore the backup it made before updating.
+If the new version does not start, `urna actualizar` says so, with the last thing the server said, and explains how to go back in two
+steps: `sudo urna actualizar` with the previous version, then `sudo urna restaurar` with the backup it made before updating. If the new
+version had already changed the database, the previous one does not start until that backup is restored: `urna actualizar` names it
+again, and not the backup it makes when going back, which that version cannot open.
 
 The database stays in the new version's format. A backup made after updating restores on that version or a newer one.
 

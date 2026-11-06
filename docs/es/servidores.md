@@ -91,8 +91,10 @@ el sitio deja de responder uno o dos minutos. `sudo urna estado` dice en qué ve
 Actualizá antes de preparar una elección o después de cerrarla, nunca durante la votación ni en los días previos. Si una versión nueva
 trae un problema, tiene que aparecer en un [simulacro](simulacro.md), no el día de la elección.
 
-Si la versión nueva no arranca, `urna actualizar` lo dice, con lo último que dijo el servidor, y explica cómo volver: primero
-`sudo urna actualizar` con la versión anterior y, si así tampoco arranca, restaurar la copia que hizo antes de actualizar.
+Si la versión nueva no arranca, `urna actualizar` lo dice, con lo último que dijo el servidor, y explica cómo volver en dos pasos:
+`sudo urna actualizar` con la versión anterior, y después `sudo urna restaurar` con la copia que hizo antes de actualizar. Si la versión
+nueva llegó a cambiar la base, la anterior no arranca hasta restaurar esa copia: `urna actualizar` vuelve a nombrarla, y no la copia que
+hace al volver, que esa versión no puede abrir.
 
 La base queda en el formato de la versión nueva. Una copia hecha después de actualizar se restaura en esa versión o en una más nueva.
 

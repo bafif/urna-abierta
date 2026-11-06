@@ -1,7 +1,8 @@
 /**
  * The real installation, over SSH, on two Ubuntu machines in containers, with invented data:
  * installs on the first, uses the app through its API, makes an encrypted backup that also goes to
- * a bucket, updates it to a next version, restores the backup on the second and checks that
+ * a bucket, updates it to a next version, goes back from one that changes the database and does not
+ * start, restores the backup on the second and checks that
  * everything is there. Then it reboots a machine and looks again.
  *
  *   node apps/installer/e2e/servidor.ts
@@ -81,6 +82,9 @@ const inside = '/tmp/imagenes.tar';
 // Installed as version «anterior», and updated to «nueva»: the same build, plus a migration and a line in its commands.
 const images = { db: 'docker.io/library/postgres:18-alpine', server: `localhost/${name}-server:anterior`, web: `localhost/${name}-web:anterior` };
 const next = { server: `localhost/${name}-server:nueva`, web: `localhost/${name}-web:nueva` };
+// And then to «rota», which changes the database and stops right after, as a version with a bug would.
+const brokenFile = join(work, 'imagenes-rotas.tar');
+const broken = { server: `localhost/${name}-server:rota`, web: `localhost/${name}-web:rota` };
 
 // A bucket, as a party would have it with another provider, that the first machine reaches by name.
 const bucket = { endpoint: `http://127.0.0.1:${port + 4}`, inside: `http://${name}-minio:9000`, name: 'urna-prueba', region: 'us-east-1', accessKeyId: 'urnaprueba', secretAccessKey: 'secreto-de-prueba' };
@@ -132,9 +136,19 @@ writeFileSync(join(nextBuild, 'Containerfile'), [
 ].join('\n'));
 podman('build', '-q', '-t', next.server, nextBuild);
 podman('tag', images.web, next.web);
+const brokenBuild = mkdtempSync(join(work, 'rota-'));
+writeFileSync(join(brokenBuild, 'Containerfile'), [
+  `FROM ${next.server}`,
+  'USER root',
+  `RUN printf 'CREATE TABLE prueba_rota (id int);\\n' > apps/server/src/migrations/9998-prueba-rota.sql && sed -i 's/^  const migrated = await migrate(pool);$/& process.exit(3);/' apps/server/src/main.ts && grep -q 'process.exit(3)' apps/server/src/main.ts`,
+  'USER node',
+].join('\n'));
+podman('build', '-q', '-t', broken.server, brokenBuild);
+podman('tag', images.web, broken.web);
 podman('pull', '-q', images.db);
 podman('save', '-q', '--multi-image-archive', '-o', imageFile, images.db, images.server, images.web);
 podman('save', '-q', '--multi-image-archive', '-o', nextFile, next.server, next.web);
+podman('save', '-q', '--multi-image-archive', '-o', brokenFile, broken.server, broken.web);
 
 cleanup();
 podman('network', 'create', network);
@@ -207,6 +221,21 @@ const same = attempt('exec', first.name, 'urna', 'actualizar', 'nueva');
 const missing = attempt('exec', first.name, 'urna', 'actualizar', 'v0.0.0-no-existe');
 const unchanged = podman('exec', first.name, 'grep', '^URNA_IMAGE_SERVER=', '/opt/urna-abierta/.env');
 record('si ya está en esa versión lo dice, y si la versión no existe no cambia nada', same.said.includes('Ya está en la versión nueva') && !missing.ok && missing.said.includes('No se pudo bajar la versión v0.0.0-no-existe') && unchanged === `URNA_IMAGE_SERVER=${next.server}`, missing.said.split('\n'));
+
+// A version that changes the database and does not start. Going back is two steps, and the backup to restore is
+// the one from before that update, even after going back made another one, which the older version cannot open.
+podman('cp', brokenFile, `${first.name}:/tmp/rotas.tar`);
+podman('exec', first.name, 'chmod', '644', '/tmp/rotas.tar');
+asUrna(first, 'podman', 'load', '-q', '-i', '/tmp/rotas.tar');
+const toBroken = attempt('exec', first.name, 'urna', 'actualizar', 'rota');
+const copyBefore = /«urna actualizar nueva» y después «urna restaurar (\S+) TU-LLAVE-DE-RECUPERACION»/.exec(toBroken.said)?.[1];
+record('si la versión nueva no arranca, dice que se vuelve con «urna actualizar» y después «urna restaurar» con la copia de antes', !toBroken.ok && Boolean(copyBefore), toBroken.said.split('\n'));
+const goingBack = attempt('exec', first.name, 'urna', 'actualizar', 'nueva');
+record('volver no abre la base que cambió, y vuelve a nombrar esa copia, no la que hizo al volver', !goingBack.ok && goingBack.said.includes(`«urna restaurar ${copyBefore} TU-LLAVE-DE-RECUPERACION»`) && goingBack.said.includes('no abre la base'), goingBack.said.split('\n'));
+const restoredFirst = attempt('exec', first.name, 'urna', 'restaurar', copyBefore ?? '-', secrets.recoveryKey);
+const afterBack = api(first, 'GET', '/elections', { token }).elections;
+const backMigrations = asUrna(first, 'podman', 'exec', 'urna-db', 'psql', '-U', 'urna', '-tAc', `SELECT max(version) || ' ' || coalesce(to_regclass('prueba_rota')::text, 'sin-rota') FROM schema_migrations`);
+record('con esa copia vuelve a andar la versión anterior, con sus datos y sus sesiones', restoredFirst.ok && afterBack?.[0]?.name === 'Simulacro' && afterBack[0].people === 30 && backMigrations === '9999 sin-rota' && attempt('exec', first.name, 'urna', 'estado').said.includes('versión: nueva'), { said: restoredFirst.said.split('\n'), backMigrations });
 
 // The drill: the first server is gone, and everything has to be recovered on another one. The backup is
 // uploaded the usual way, to the home of the user that connects, which the user `urna` cannot read.
