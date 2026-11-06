@@ -36,6 +36,9 @@ p { margin: 0 0 14px; max-width: 42em; }
 .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; margin-top: 20px; }
 .tarjeta { background: var(--superficie); border: 2px solid var(--linea); border-radius: 12px; padding: 18px 20px; }
 .tarjeta p { margin: 0; color: var(--suave); }
+.descargas { margin-top: 12px; }
+.descargas .tarjeta { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.descargas .tarjeta p { flex: 1; }
 
 ol.pasos { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 22px; max-width: 42em; position: relative; }
 ol.pasos::before { content: ''; position: absolute; left: 15px; top: 16px; bottom: 26px; width: 4px; background: var(--linea); border-radius: 2px; }
