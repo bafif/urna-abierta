@@ -378,6 +378,14 @@ test('the traffic light starts empty, and the numbers never show a name', async 
   await expect(light.getByRole('searchbox')).toHaveValue('');
   await light.getByRole('searchbox').fill('99000001');
   await expect(light.getByTestId('light-person').first()).toContainText('Puede ser');
+  // And it comes off the same way.
+  await light.getByTestId('light-person').first().click();
+  await button(light, 'Sacarle la categoría').click();
+  await button(light, 'Guardar y seguir').click();
+  await expect(light.getByRole('searchbox')).toHaveValue('');
+  await light.getByRole('searchbox').fill('99000001');
+  await expect(light.getByTestId('light-person').first()).toContainText('Mesa 12');
+  await expect(light.getByTestId('light-person').first()).not.toContainText('Puede ser');
   await other.close();
 
   const third = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });

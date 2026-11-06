@@ -25,12 +25,6 @@ async function votesPerTable(pool: pg.Pool, tables: string[]): Promise<Map<strin
   return new Map(rows.rows.map((row) => [row.table_id, row.voted]));
 }
 
-/** How the audit log names a person: a random reference, never the roll id, which is often their DNI. */
-export async function refOf(pool: pg.Pool, election: string, id: string): Promise<string | null> {
-  const found = await pool.query('SELECT ref FROM electors WHERE election_id = $1 AND id = $2', [election, id]);
-  return found.rows[0]?.ref ?? null;
-}
-
 /** The rows a phone's push locks, all of an election and always in the same order, so that two of these never wait on each other. */
 export async function lockTables(client: pg.PoolClient, election: string): Promise<void> {
   await client.query('SELECT id FROM polling_tables WHERE election_id = $1 ORDER BY id FOR UPDATE', [election]);
@@ -261,7 +255,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const query = foldText(request.query.q ?? '').trim();
     if (query.length < 2) return { people: [] };
     const rows = await pool.query(
-      `SELECT x.id, x.ref, x.full_name, x.order_number, t.name AS table_name, m.category_id, m.sealed
+      `SELECT x.public_id, x.ref, x.full_name, x.order_number, t.name AS table_name, m.category_id, m.sealed
        FROM electors x LEFT JOIN polling_tables t ON t.id = x.table_id
        LEFT JOIN semaphore_marks m ON m.election_id = x.election_id AND m.elector_id = x.id
        WHERE x.election_id = $1 AND x.search LIKE '%' || $2 || '%' ORDER BY x.search LIMIT 25`,
@@ -272,9 +266,10 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const sensitive = can(request.actor, 'semaphore.sensitive');
     const sealed = rows.rows.filter((row) => row.sealed).map((row) => row.ref);
     if (sealed.length > 0 && sensitive) await audit(pool, request.actor, 'semaphore.sensitive_viewed', request.params.id, { people: sealed });
+    // The id the phones know each person by: the roll id stays on the server, since it can be the whole document.
     return {
       people: rows.rows.map((row) => ({
-        id: row.id, name: row.full_name, order: row.order_number, table: row.table_name,
+        id: row.public_id, name: row.full_name, order: row.order_number, table: row.table_name,
         category: row.sealed ? (sensitive ? unseal(row.sealed) : null) : row.category_id,
       })),
     };
@@ -288,26 +283,28 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const found = category === null ? null : await pool.query('SELECT sensitive FROM semaphore_categories WHERE id = $1', [category]);
     if (found && !found.rows[0]) return reply.code(404).send({ error: 'no_such_category' });
     const sensitive: boolean = found?.rows[0].sensitive ?? false;
-    const ref = await refOf(pool, id, elector);
-    if (!ref) return reply.code(404).send({ error: 'not_found' });
+    // `elector` is the id the search gave, never the roll id. Whoever was erased is no longer there to note.
+    const person = await pool.query('SELECT id, ref FROM electors WHERE election_id = $1 AND public_id = $2 AND erased_at IS NULL', [id, elector]);
+    if (!person.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    const { id: rollId, ref } = person.rows[0] as { id: string; ref: string };
     // Whoever cannot see a sensitive mark sees no mark at all: they must not replace it or clear it without knowing.
     // Finding one, or choosing a sensitive category, gets the same refusal, and trying it is recorded.
     if (!can(request.actor, 'semaphore.sensitive')) {
-      const current = await pool.query('SELECT sealed IS NOT NULL AS sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
+      const current = await pool.query('SELECT sealed IS NOT NULL AS sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, rollId]);
       if (sensitive || current.rows[0]?.sealed) {
         await audit(pool, request.actor, 'semaphore.refused', ref);
         return reply.code(403).send({ error: 'sensitive_mark' });
       }
     }
     if (category === null) {
-      await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, elector]);
+      await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [id, rollId]);
       await audit(pool, request.actor, 'semaphore.cleared', ref);
       return { ok: true };
     }
     await pool.query(
       `INSERT INTO semaphore_marks (election_id, elector_id, category_id, sealed, noted_by) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (election_id, elector_id) DO UPDATE SET category_id = $3, sealed = $4, noted_by = $5, noted_at = now()`,
-      [id, elector, sensitive ? null : category, sensitive ? seal(category) : null, request.actor.userId],
+      [id, rollId, sensitive ? null : category, sensitive ? seal(category as string) : null, request.actor.userId],
     );
     await audit(pool, request.actor, 'semaphore.noted', ref, { sensitive });
     return { ok: true };

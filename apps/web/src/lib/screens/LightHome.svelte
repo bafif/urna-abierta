@@ -15,6 +15,7 @@
     sensitive: boolean;
   }
   interface Person {
+    /** The id phones know the person by. The roll id, which can be the whole document, stays on the server. */
     id: string;
     name: string;
     order: number | null;

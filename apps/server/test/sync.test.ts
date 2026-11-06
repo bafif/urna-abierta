@@ -971,8 +971,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color, sensitive: true })).json().id;
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
-      // Whoever notes the light finds people on the server, by their id there: the phones never see it.
-      const electors = (await pool.query('SELECT id FROM electors WHERE table_id = $1 ORDER BY order_number', [table])).rows;
+      // Whoever notes the light names people by the id the phones know them by.
+      const electors = (await pool.query('SELECT public_id AS id FROM electors WHERE table_id = $1 ORDER BY order_number', [table])).rows;
       const mark = (elector: string, category: string) => call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${elector}/semaphore`, { category });
       expect((await mark(electors[0].id, open)).statusCode).toBe(200);
       expect((await mark(electors[1].id, closed)).statusCode).toBe(200);
@@ -1081,7 +1081,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await call('coordinacion', 'POST', `/api/users/${idOf('Juli')}/roles`, { role: 'semaforo_sensible' });
       tokens.otro = await redeem((await call('coordinacion', 'POST', '/api/users', { name: 'Otro semáforo', role: 'semaforo' })).json().invitation);
       const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
-      const mark = (who: string, category: string | null) => call(who, 'PUT', `/api/elections/${found.election_id}/people/${found.id}/semaphore`, { category });
+      const publicId = (await pool.query('SELECT public_id FROM electors WHERE election_id = $1 AND id = $2', [found.election_id, found.id])).rows[0].public_id;
+      const mark = (who: string, category: string | null) => call(who, 'PUT', `/api/elections/${found.election_id}/people/${publicId}/semaphore`, { category });
       expect((await mark('semaforo', closed)).statusCode).toBe(200);
 
       expect((await mark('otro', open)).json().error).toBe('sensitive_mark');
@@ -1100,6 +1101,25 @@ describe.skipIf(!url)('against a real Postgres', () => {
       // With the permission, the mark can be changed again.
       expect((await mark('semaforo', open)).statusCode).toBe(200);
       expect((await mark('otro', null)).statusCode).toBe(200);
+    });
+
+    it('the traffic light names each person by the id phones know them by, never by the roll id, which can be the whole document', async () => {
+      // Ids as the rolls bring them: the whole document inside.
+      await pool.query(`UPDATE electors SET id = 'd-' || document WHERE table_id = $1`, [table]);
+      const documents: string[] = (await pool.query('SELECT document FROM electors WHERE table_id = $1', [table])).rows.map((row) => row.document);
+      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const search = async () => (await call('semaforo', 'GET', `/api/elections/${demo.election}/people?q=ez`)).json().people as { id: string; category: string | null }[];
+      const people = await search();
+      expect(people.length).toBeGreaterThan(1);
+      expect(people.filter((person) => documents.some((document) => JSON.stringify(person).includes(document)))).toEqual([]);
+      // Noted and cleared by that id.
+      const mark = (id: string, category: string | null) => call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${encodeURIComponent(id)}/semaphore`, { category });
+      expect((await mark(people[0]!.id, open)).statusCode).toBe(200);
+      expect((await search()).find((person) => person.id === people[0]!.id)?.category).toBe(open);
+      expect((await mark(people[0]!.id, null)).statusCode).toBe(200);
+      expect((await search()).find((person) => person.id === people[0]!.id)?.category).toBeNull();
+      // The roll id is not a way in.
+      expect((await mark(`d-${documents[0]}`, open)).statusCode).toBe(404);
     });
 
     it('whoever cannot see sensitive marks cannot tell who has one by how a change is refused, and trying it is recorded', async () => {
@@ -1179,7 +1199,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
       const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
-      for (const dni of dnis) expect((await call('semaforo', 'PUT', `/api/elections/${id}/people/d-${dni}/semaphore`, { category: sensitive })).statusCode).toBe(200);
+      const publicIds = (await pool.query('SELECT public_id FROM electors WHERE election_id = $1', [id])).rows.map((row) => row.public_id as string);
+      for (const person of publicIds) expect((await call('semaforo', 'PUT', `/api/elections/${id}/people/${person}/semaphore`, { category: sensitive })).statusCode).toBe(200);
       const base = `/api/persons/${id}/d-${dnis[0]}`;
       await call('coordinacion', 'PUT', `${base}/consent`, { date: '2027-01-01', means: 'firma' });
       await call('coordinacion', 'GET', `${base}/export`);
@@ -1214,8 +1235,9 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
       const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
-      const [erased, kept] = (await pool.query('SELECT id FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 2', [table])).rows.map((row) => row.id as string);
-      for (const person of [erased!, kept!]) expect((await call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${person}/semaphore`, { category: sensitive })).statusCode).toBe(200);
+      const two = (await pool.query('SELECT id, public_id FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 2', [table])).rows as { id: string; public_id: string }[];
+      const erased = two[0]!.id;
+      for (const person of two) expect((await call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${person.public_id}/semaphore`, { category: sensitive })).statusCode).toBe(200);
       const since = Number((await pool.query('SELECT coalesce(max(id), 0) AS n FROM audit_log')).rows[0].n);
       const linked = async () =>
         (await pool.query(`SELECT DISTINCT x.order_number FROM audit_log a JOIN electors x ON x.ref::text = a.target OR a.detail->'people' ? x.ref::text WHERE a.action LIKE 'semaphore.%'`)).rows.map((row) => row.order_number);
@@ -1324,14 +1346,14 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await call('coordinacion', 'PUT', `/api/tables/${table}`, { name: 'Mesa nueva', unit });
       const entries = await logged();
       const searched = entries.find((e) => e.action === 'semaphore.searched');
-      const refs = (await pool.query('SELECT ref FROM electors WHERE id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows.map((row) => row.ref);
+      const refs = (await pool.query('SELECT ref FROM electors WHERE public_id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows.map((row) => row.ref);
       expect(searched.detail.people.sort()).toEqual(refs.sort());
       expect(entries.find((e) => e.action === 'person.searched').detail.people.length).toBeGreaterThan(0);
       const count = (action: string) => entries.filter((e) => e.action === action).length;
       for (const action of ['users.viewed', 'district.viewed', 'table.viewed', 'table.pulled', 'audit.viewed', 'unit.created', 'table.changed']) expect(count(action), action).toBe(1);
       // Nothing in the log names anyone by roll id, document or name.
       const text = JSON.stringify(entries);
-      const seen = (await pool.query('SELECT id, full_name, document FROM electors WHERE id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows;
+      const seen = (await pool.query('SELECT id, full_name, document FROM electors WHERE public_id = ANY($1)', [people.map((p: { id: string }) => p.id)])).rows;
       for (const person of seen) for (const value of [person.id, person.full_name, person.document]) expect(text).not.toContain(value);
     });
 
