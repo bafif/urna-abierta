@@ -1,11 +1,12 @@
 <script lang="ts">
   import { t } from '../i18n.svelte.ts';
+  import { pressDigit } from '../keypad.ts';
 
-  const MAX_DIGITS = 6;
-  let { value = $bindable('') }: { value: string } = $props();
+  /** `code`: what is typed is a code, not a count, and a zero in front stays. */
+  let { value = $bindable(''), code = false }: { value: string; code?: boolean } = $props();
 
   function press(digit: number) {
-    if (value.length < MAX_DIGITS) value = value === '0' ? String(digit) : value + digit;
+    value = pressDigit(value, digit, code);
   }
 </script>
 
