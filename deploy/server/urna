@@ -152,10 +152,21 @@ wait_healthy() {
   return 1
 }
 
-# After wait_healthy failed. If the server already said why, that is enough. If it only did not answer yet, everything
-# keeps running, and it ends with 3: the first time it is almost always the certificate, waiting for the ports.
+# When the certificate of the site ends, empty while there is none.
+certificate_ends() {
+  echo | timeout 10 openssl s_client -connect "${URNA_TLS_CHECK:-localhost:443}" -servername "$(site_address)" 2>/dev/null |
+    openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true
+}
+
+# After wait_healthy failed. If the server already said why, that is enough. If it only did not answer yet and there is no
+# certificate, everything keeps running and it ends with 3: the first time it is almost always the ports. With a
+# certificate, not answering is a real failure.
 not_answering() {
   [ "$1" = 2 ] && exit 1
+  if [ -n "$(certificate_ends)" ]; then
+    echo "Arrancó, pero el servidor no responde, y el certificado ya está. Mirá lo último que dijo con «$(server_logs)»." >&2
+    exit 1
+  fi
   echo 'Arrancó y queda andando, pero todavía no responde. La primera vez casi siempre falta el certificado, que llega cuando los puertos 80 y 443 están abiertos en el firewall de la nube. «urna estado» dice qué falta.' >&2
   exit 3
 }
@@ -167,11 +178,17 @@ first_backup() {
 }
 
 backup() {
+  mkdir -p "$home/copias"
+  # One backup at a time: then what a backup cut short left behind can go before the next one starts.
+  exec 9>"$home/copias/.en-curso"
+  flock -n 9 || { echo 'Ya hay una copia en curso.' >&2; return 0; }
+  rm -f "$home"/copias/urna-*.tar.gpg.parcial
   stamp=$(date -u +%Y%m%d-%H%M%S)
   work=$(mktemp -d)
   # Under another name until it is whole: a backup cut short never passes for one.
   partial="$home/copias/urna-$stamp.tar.gpg.parcial"
   trap 'rm -rf "$work" "$partial"' EXIT
+  trap 'exit 1' INT TERM
   podman exec "$pod-db" pg_dump -U urna -Fc urna >"$work/base.dump"
   # The photos belong to the user inside the container, so it takes its namespace to read them.
   podman unshare tar -C "$home" -cf "$work/fotos.tar" fotos
@@ -357,8 +374,7 @@ status() {
     [ "$state" = running ] && check "$name" ok || check "$name" mal "está $state. Probá «urna arrancar»"
   done
   answer=$(ask_here --max-time 10 "$health" 2>/dev/null || true)
-  address=$(site_address)
-  ends=$(echo | timeout 10 openssl s_client -connect "${URNA_TLS_CHECK:-localhost:443}" -servername "$address" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2 || true)
+  ends=$(certificate_ends)
   if [ -n "$answer" ]; then
     check 'el servidor responde' ok
   elif [ -z "$ends" ]; then
@@ -380,7 +396,7 @@ status() {
     check 'copias en el bucket' mal "ninguna de las últimas 7 horas llegó a $URNA_S3_BUCKET. Corré «urna copia» y fijate qué dice"
   fi
   if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then check 'la hora está sincronizada' ok; else check 'hora' mal 'este servidor no sincroniza la hora'; fi
-  if [ -n "$ends" ]; then check "certificado hasta: $ends" ok; else check 'certificado' mal "todavía no hay, y sin él nadie entra. Let's Encrypt lo da cuando llega a este servidor por los puertos 80 y 443: abrí TCP 80 y 443, y UDP 443, en el firewall de la nube, y en unos minutos llega solo"; fi
+  if [ -n "$ends" ]; then check "certificado hasta: $ends" ok; else check 'certificado' mal "todavía no hay, y sin él nadie entra. Let's Encrypt lo da cuando llega a este servidor por los puertos 80 y 443: abrí TCP 80 y 443, y UDP 443, en el firewall de la nube. Llega solo, aunque si los puertos estuvieron cerrados mucho tiempo puede tardar horas: «urna reiniciar» lo pide de nuevo enseguida"; fi
   [ "$problems" = 0 ] && echo 'Todo en orden.'
   return "$problems"
 }
