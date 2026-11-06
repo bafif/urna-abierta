@@ -254,12 +254,20 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get<{ Params: { id: string }; Querystring: { q?: string } }>('/api/elections/:id/people', { preHandler: readLight }, async (request) => {
     const query = foldText(request.query.q ?? '').trim();
     if (query.length < 2) return { people: [] };
+    // A document is found only whole: part of one would let anyone with the traffic light read it a digit at a time,
+    // since nothing records a search that finds no one. The name is taken as written, with no wildcards.
+    const words = query.split(/\s+/);
+    const documents = [...new Set(words.filter((word) => /\d/.test(word)).map((word) => word.replace(/[^0-9a-z]/g, '')))];
+    if (documents.length > 1) return { people: [] };
+    const name = words.filter((word) => !/\d/.test(word)).join(' ').replace(/[\\%_]/g, (character) => `\\${character}`);
     const rows = await pool.query(
       `SELECT x.public_id, x.ref, x.full_name, x.order_number, t.name AS table_name, m.category_id, m.sealed
        FROM electors x LEFT JOIN polling_tables t ON t.id = x.table_id
        LEFT JOIN semaphore_marks m ON m.election_id = x.election_id AND m.elector_id = x.id
-       WHERE x.election_id = $1 AND x.search LIKE '%' || $2 || '%' ORDER BY x.search LIMIT 25`,
-      [request.params.id, query],
+       WHERE x.election_id = $1 AND x.search LIKE '%' || $2 || '%' ESCAPE '\\'
+         AND ($3::text IS NULL OR lower(regexp_replace(coalesce(x.document, ''), '[^0-9A-Za-z]', '', 'g')) = $3)
+       ORDER BY x.search LIMIT 25`,
+      [request.params.id, name, documents[0] ?? null],
     );
     // Each name comes with what the party thinks of that person's vote: who saw whom is recorded, by reference.
     if (rows.rows.length > 0) await audit(pool, request.actor, 'semaphore.searched', request.params.id, { people: rows.rows.map((row) => row.ref) });
