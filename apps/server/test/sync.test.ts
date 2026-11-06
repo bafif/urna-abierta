@@ -713,7 +713,12 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(found.document).toBeTruthy();
       const base = `/api/persons/${found.election_id}/${found.id}`;
       expect((await call('coordinacion', 'PUT', `${base}/consent`, { date: '2027-01-01', means: 'firma' })).statusCode).toBe(200);
-      expect((await call('coordinacion', 'GET', `${base}/export`)).json().person.consent.means).toBe('firma');
+      const exported = (await call('coordinacion', 'GET', `${base}/export`)).json();
+      expect(exported).toMatchObject({ party: 'Agrupación Ejemplo', consent: { date: '2027-01-01', means: 'firma' }, person: { name: found.full_name, document: found.document }, table: { name: 'Mesa 12' } });
+      expect(exported.election.name).toContain('Elección de prueba');
+      // Nothing internal: no ids, flags or raw columns.
+      expect(Object.keys(exported).sort()).toEqual(['consent', 'election', 'markedVoted', 'party', 'person', 'semaphore', 'table']);
+      expect(JSON.stringify(exported)).not.toMatch(/election_id|needs_review|search|"review"|"ref"/);
       expect((await call('coordinacion', 'DELETE', base)).statusCode).toBe(200);
       expect((await call('coordinacion', 'GET', '/api/persons?q=borrado')).json().people).toEqual([]);
       expect((await pool.query('SELECT 1 FROM electors WHERE id = $1', [found.id])).rowCount).toBe(0);

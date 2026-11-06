@@ -394,7 +394,14 @@ test('someone asks for their data and to be erased', async ({ page, request }) =
   await page.getByTestId('found-person').first().click();
   const download = page.waitForEvent('download');
   await page.getByTestId('person-export').click();
-  expect((await download).suggestedFilename()).toMatch(/^datos-/);
+  // A page anyone can read and print, in the language of the screen, with no internal fields.
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^datos-[a-z0-9-]+\.html$/);
+  const page14 = readFileSync(await file.path(), 'utf8');
+  expect(page14).toContain('Los datos que tenemos de');
+  expect(page14).toContain('Tus derechos');
+  expect(page14).toContain('99000001');
+  expect(page14).not.toMatch(/election_id|needs_review/);
   await page.getByTestId('person-fix-name').fill('Nombre Corregido');
   await page.getByTestId('person-fix').click();
   await expect(page.getByText('Datos corregidos.')).toBeVisible();
