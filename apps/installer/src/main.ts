@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { asset } from './assets.ts';
 import { themeProblems } from '../../../packages/domain/src/theme-check.ts';
-import { install, uploadTheme, waitForHealth, type InstallRequest, type InstallResult } from './job.ts';
+import { CloudFailure, install, uploadTheme, waitForHealth, type InstallRequest, type InstallResult } from './job.ts';
 import { findEngine } from './local.ts';
 import { siteFor, VERSION } from './settings.ts';
 import { checkSsh } from './ssh.ts';
@@ -20,6 +20,8 @@ interface Job {
   lines: string[];
   result: InstallResult | null;
   problem: string | null;
+  /** After a failure in a cloud: what could not be deleted there. Null when nothing was created in one. */
+  left: string[] | null;
   finished: boolean;
 }
 let job: Job | null = null;
@@ -58,7 +60,7 @@ function openBrowser(url: string): void {
 
 async function api(path: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (path === 'state') return send(response, 200, { version: VERSION, engine: await findEngine() });
-  if (path === 'job') return send(response, 200, job ?? { lines: [], result: null, problem: null, finished: false });
+  if (path === 'job') return send(response, 200, job ?? { lines: [], result: null, problem: null, left: null, finished: false });
 
   if (request.method !== 'POST') return send(response, 405, { error: 'post_only' });
   const body = await bodyOf(request);
@@ -79,7 +81,7 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
   }
   if (path === 'install') {
     if (job && !job.finished) return send(response, 409, { error: 'already_running' });
-    const current: Job = { lines: [], result: null, problem: null, finished: false };
+    const current: Job = { lines: [], result: null, problem: null, left: null, finished: false };
     job = current;
     themeToSend = body.where?.kind === 'text' ? (body.customTheme ?? null) : null;
     install(body as InstallRequest, (line) => current.lines.push(line))
@@ -88,6 +90,7 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
       })
       .catch((error: Error) => {
         current.problem = error.message;
+        if (error instanceof CloudFailure) current.left = error.left;
       })
       .finally(() => {
         current.finished = true;
@@ -133,7 +136,7 @@ const server = createServer((request, response) => {
     if (path.startsWith('api/')) return api(path.slice(4), request, response);
     const name = path === '' ? 'index.html' : path;
     const content = asset(name);
-    if (!content || !/^[\w./-]+$/.test(name) || name.includes('..') || name === 'urna' || name === 'instalar.sh') return send(response, 404, { error: 'not_found' });
+    if (!content || !/^[\w./-]+$/.test(name) || name.includes('..') || name === 'instalar.sh') return send(response, 404, { error: 'not_found' });
     response.writeHead(200, { 'content-type': TYPES[name.split('.').pop() ?? ''] ?? 'application/octet-stream', 'cache-control': 'no-store', 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:" });
     response.end(content);
   })().catch((error) => {

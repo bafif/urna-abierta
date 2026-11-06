@@ -1,7 +1,10 @@
 import { createHash, createHmac } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 
 /**
- * Just enough of S3 to keep photos in a bucket: put, get and delete one object, signed with
+ * Just enough of S3 to keep photos and backups in a bucket: put (from memory or from disk), get and delete one object, and list names, signed with
  * Signature Version 4. Path-style addresses, which AWS, Oracle's compatibility API, R2 and
  * MinIO all accept.
  */
@@ -131,32 +134,65 @@ function causeOf(error: unknown): string {
   return why.slice(0, 300);
 }
 
+/** A file to send from disk, with what the signature needs from it, read once beforehand. */
+interface FileBody {
+  path: string;
+  size: number;
+  sha256: string;
+}
+
+async function fileBody(path: string): Promise<FileBody> {
+  const hash = createHash('sha256');
+  let size = 0;
+  for await (const chunk of createReadStream(path)) {
+    hash.update(chunk as Buffer);
+    size += (chunk as Buffer).length;
+  }
+  return { path, size, sha256: hash.digest('hex') };
+}
+
 /** The provider is busy or the network blinked: worth a second try. */
 const TRANSIENT = new Set([408, 429, 500, 502, 503, 504]);
 
+/** The most S3 takes in one PUT. */
+export const MAX_PUT_BYTES = 5 * 1024 ** 3;
+/** A big file may go over a slow connection: its time limit grows as if it went at this speed, in bytes a second. */
+const SLOWEST_UPLOAD = 250_000;
+
 export interface S3Client {
   put(key: string, body: Buffer, contentType?: string): Promise<void>;
+  /** Sends a file from disk a piece at a time, so that its size does not matter to memory. Up to MAX_PUT_BYTES. */
+  putFile(key: string, path: string, contentType?: string): Promise<void>;
   /** Null when there is no such object. */
   get(key: string): Promise<Buffer | null>;
   delete(key: string): Promise<void>;
+  /** Every name that starts with the prefix. It needs permission to list the bucket (s3:ListBucket). */
+  list(prefix: string): Promise<string[]>;
 }
 
 export function s3Client(config: S3Config, options: S3ClientOptions = {}): S3Client {
   const { fetch: request = fetch, attempts = 3, timeoutMs = 20_000, now = () => new Date(), wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = options;
   const endpoint = new URL(config.endpoint);
 
-  async function send(method: 'GET' | 'PUT' | 'DELETE', key: string, body?: Buffer, extra: Record<string, string> = {}): Promise<{ status: number; body: Buffer }> {
+  /** An empty key is the bucket itself, for listing. */
+  async function send(method: 'GET' | 'PUT' | 'DELETE', key: string, body?: Buffer | FileBody, extra: Record<string, string> = {}, query: Record<string, string> = {}): Promise<{ status: number; body: Buffer }> {
+    const file = body && !Buffer.isBuffer(body) ? body : undefined;
     let lastError: unknown;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       if (attempt > 1) await wait(250 * 4 ** (attempt - 2));
       // Signed again on each try: the signature carries the time.
       const signed = signS3({
-        method, host: endpoint.host, path: `/${config.bucket}/${key}`, headers: extra,
-        payloadHash: body ? sha256Hex(body) : EMPTY_SHA256, region: config.region,
+        method, host: endpoint.host, path: key ? `/${config.bucket}/${key}` : `/${config.bucket}`, query, headers: extra,
+        payloadHash: file ? file.sha256 : body ? sha256Hex(body as Buffer) : EMPTY_SHA256, region: config.region,
         accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey, sessionToken: config.sessionToken, date: amzDate(now()),
       });
       try {
-        const response = await request(`${endpoint.origin}${signed.path}`, { method, headers: signed.headers, body, signal: AbortSignal.timeout(timeoutMs) });
+        const address = `${endpoint.origin}${signed.path}${signed.query ? `?${signed.query}` : ''}`;
+        // A file is read again on each try, and goes with its length: S3 does not take a body of unknown size.
+        const init: RequestInit = file
+          ? { method, headers: { ...signed.headers, 'content-length': String(file.size) }, body: Readable.toWeb(createReadStream(file.path)) as ReadableStream, duplex: 'half', signal: AbortSignal.timeout(Math.max(timeoutMs, (file.size / SLOWEST_UPLOAD) * 1000)) }
+          : { method, headers: signed.headers, body: body as Buffer | undefined, signal: AbortSignal.timeout(timeoutMs) };
+        const response = await request(address, init);
         const answer = { status: response.status, body: Buffer.from(await response.arrayBuffer()) };
         if (TRANSIENT.has(answer.status) && attempt < attempts) {
           lastError = failure(method, answer);
@@ -184,6 +220,12 @@ export function s3Client(config: S3Config, options: S3ClientOptions = {}): S3Cli
       const answer = await send('PUT', key, body, { 'content-type': contentType });
       if (answer.status !== 200) throw failure('PUT', answer);
     },
+    async putFile(key, path, contentType = 'application/octet-stream') {
+      const { size } = await stat(path);
+      if (size > MAX_PUT_BYTES) throw new S3Error(`PUT: el archivo pesa ${(size / 1024 ** 3).toFixed(1)} GB, y un bucket no toma más de 5 GB de una vez.`);
+      const answer = await send('PUT', key, await fileBody(path), { 'content-type': contentType });
+      if (answer.status !== 200) throw failure('PUT', answer);
+    },
     async get(key) {
       const answer = await send('GET', key);
       // A missing bucket is a broken setting, not a missing photo.
@@ -195,5 +237,21 @@ export function s3Client(config: S3Config, options: S3ClientOptions = {}): S3Cli
       const answer = await send('DELETE', key);
       if (answer.status !== 204 && answer.status !== 200 && answer.status !== 404) throw failure('DELETE', answer);
     },
+    async list(prefix) {
+      const keys: string[] = [];
+      let token: string | undefined;
+      do {
+        const answer = await send('GET', '', undefined, {}, { 'list-type': '2', prefix, ...(token ? { 'continuation-token': token } : {}) });
+        if (answer.status !== 200) throw failure('LIST', answer);
+        const text = answer.body.toString('utf8');
+        for (const match of text.matchAll(/<Key>([^<]*)<\/Key>/g)) keys.push(fromXml(match[1]!));
+        const next = /<NextContinuationToken>([^<]*)<\/NextContinuationToken>/.exec(text)?.[1];
+        token = /<IsTruncated>true<\/IsTruncated>/.test(text) && next ? fromXml(next) : undefined;
+      } while (token);
+      return keys;
+    },
   };
 }
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+const fromXml = (text: string) => text.replace(/&(amp|lt|gt|quot|apos);/g, (_, name: string) => ENTITIES[name]!);

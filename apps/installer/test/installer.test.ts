@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { createVerify, generateKeyPairSync } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { awsCloud, signAws } from '../src/clouds/aws.ts';
 import { googleCloud, signGoogleAssertion } from '../src/clouds/google.ts';
 import { oracleCloud, signOracle } from '../src/clouds/oracle.ts';
-import { uploadTheme, waitForHealth } from '../src/job.ts';
+import { CloudFailure, createInCloud, uploadTheme, waitForHealth } from '../src/job.ts';
 import { newSecrets, renderScript, siteFor, withoutComments } from '../src/settings.ts';
 
 const noWait = async () => undefined;
@@ -18,15 +19,22 @@ describe('the script that installs a server', () => {
     expect(script.startsWith('#!/bin/sh\n')).toBe(true);
     expect(script).toContain('URNA_SITE=https://203.0.113.24');
     expect(script).toContain(settings.secrets.recoveryKey);
-    expect(script).toContain('URNA_SCRIPT');
     expect(Buffer.byteLength(script)).toBeLessThan(16 * 1024);
   });
 
-  it('leaves out comment lines, but keeps the help of urna and what goes inside files', () => {
+  it('takes the commands of the server from the server image, where its build puts them', () => {
+    const script = renderScript(settings);
+    expect(script).not.toContain('URNA_SCRIPT');
+    expect(script).toContain('"$URNA_IMAGE_SERVER" /app/urna');
+    const containerfile = readFileSync(new URL('../../../deploy/server.Containerfile', import.meta.url), 'utf8');
+    expect(containerfile).toMatch(/^WORKDIR \/app$/m);
+    expect(containerfile).toMatch(/^COPY deploy\/server\/urna urna$/m);
+  });
+
+  it('leaves out comment lines, but keeps the top block and what goes inside files', () => {
     const script = withoutComments(['#!/bin/sh', '# help line', 'set -eu', '# a note', '  # an indented note', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays'].join('\n'));
     expect(script.split('\n')).toEqual(['#!/bin/sh', '# help line', 'set -eu', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays']);
     const block = renderScript(settings);
-    expect(block).toContain('urna estado');
     expect(block).toContain('# Fotos en un almacenamiento S3');
     expect(execFileSync('sh', ['-n'], { input: block }).toString()).toBe('');
   });
@@ -88,10 +96,22 @@ function fakeCloud(answer: (url: URL, method: string, body: string) => unknown) 
     const body = String(init.body ?? '');
     calls.push({ url, method: init.method ?? 'GET', body, headers: new Headers(init.headers) });
     const value = answer(url, init.method ?? 'GET', body);
-    const text = typeof value === 'string' ? value : JSON.stringify(value ?? {});
-    return new Response(text, { status: 200 });
+    // An answer can carry its status, for errors.
+    const failed = value instanceof Failure ? value : null;
+    const shown = failed ? failed.body : value;
+    const text = typeof shown === 'string' ? shown : JSON.stringify(shown ?? {});
+    return new Response(text, { status: failed?.status ?? 200 });
   }) as typeof fetch;
   return { request, calls };
+}
+
+class Failure {
+  readonly status: number;
+  readonly body: unknown;
+  constructor(status: number, body: unknown) {
+    this.status = status;
+    this.body = body;
+  }
 }
 
 describe('creating a server, against a fake of each cloud', () => {
@@ -180,6 +200,155 @@ describe('creating a server, against a fake of each cloud', () => {
   });
 });
 
+describe('when creating a server fails, nothing is left charging', () => {
+  const secrets = newSecrets();
+  const failure = async (promise: Promise<unknown>) => {
+    try {
+      await promise;
+    } catch (error) {
+      return error as CloudFailure;
+    }
+    throw new Error('it did not fail');
+  };
+
+  it('Oracle: without capacity anywhere, deletes the network and the address, newest first', async () => {
+    const deleted = new Set<string>();
+    const { request, calls } = fakeCloud((url, method) => {
+      const last = url.pathname.split('/').pop()!;
+      if (method === 'DELETE') {
+        deleted.add(url.pathname);
+        return {};
+      }
+      if (method === 'GET' && deleted.has(url.pathname)) return { lifecycleState: 'TERMINATED' };
+      if (last === 'publicIps' && method === 'POST') return { id: 'ip-1', ipAddress: '203.0.113.7' };
+      if (last === 'vcns') return { id: 'vcn-1', defaultRouteTableId: 'rt-1', defaultSecurityListId: 'sl-1' };
+      if (last === 'internetGateways') return { id: 'igw-1' };
+      if (last === 'subnets') return { id: 'subnet-1' };
+      if (url.pathname.includes('/subnets/')) return { lifecycleState: 'AVAILABLE' };
+      if (last === 'availabilityDomains') return [{ name: 'AD-1' }];
+      if (last === 'images') return [{ id: 'image-1' }];
+      if (last === 'instances' && method === 'POST') return new Failure(500, { code: 'InternalError', message: 'Out of host capacity.' });
+      return {};
+    });
+    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, request, noWait);
+    const lines: string[] = [];
+    const error = await failure(createInCloud(cloud, secrets, 'aula', (line) => lines.push(line)));
+    expect(error).toBeInstanceOf(CloudFailure);
+    expect(error.message).toMatch(/^oracle_no_capacity/);
+    expect(error.left).toEqual([]);
+    expect(lines).toContain('cleanup');
+    const undone = calls.filter((call) => call.method === 'DELETE' || (call.method === 'PUT' && call.url.pathname.includes('/routeTables/') && JSON.parse(call.body).routeRules.length === 0));
+    expect(undone.map((call) => `${call.method} ${call.url.pathname.split('/').slice(-2).join('/')}`)).toEqual([
+      'DELETE subnets/subnet-1', 'PUT routeTables/rt-1', 'DELETE internetGateways/igw-1', 'DELETE vcns/vcn-1', 'DELETE publicIps/ip-1',
+    ]);
+  });
+
+  it('AWS: a machine that never starts is terminated before its firewall goes, and what does not go is reported', async () => {
+    const { request, calls } = fakeCloud((_url, _method, body) => {
+      const action = new URLSearchParams(body).get('Action');
+      const terminated = calls.some((call) => new URLSearchParams(call.body).get('Action') === 'TerminateInstances');
+      const answers: Record<string, string | Failure> = {
+        AllocateAddress: '<r><publicIp>203.0.113.9</publicIp><allocationId>eipalloc-1</allocationId></r>',
+        DescribeVpcs: '<r><vpcId>vpc-1</vpcId></r>',
+        DescribeSubnets: '<r><subnetId>subnet-1</subnetId></r>',
+        CreateSecurityGroup: '<r><groupId>sg-1</groupId></r>',
+        DescribeImages: '<r><item><imageId>ami-1</imageId><creationDate>2026-01-01</creationDate></item></r>',
+        RunInstances: '<r><instanceId>i-1</instanceId></r>',
+        DescribeInstances: terminated ? '<r><instanceState><code>48</code><name>terminated</name></instanceState></r>' : '<r><instanceState><code>0</code><name>pending</name></instanceState></r>',
+        DeleteSecurityGroup: new Failure(400, '<r><Code>DependencyViolation</Code><Message>in use</Message></r>'),
+      };
+      return answers[action!] ?? '<r/>';
+    });
+    const cloud = awsCloud({ region: 'sa-east-1', accessKeyId: 'AK', secretAccessKey: 'SK' }, request, noWait);
+    const error = await failure(createInCloud(cloud, secrets, 'aula', () => undefined));
+    expect(error.message).toBe('aws_server_did_not_start');
+    const after = calls.map((call) => new URLSearchParams(call.body).get('Action')).slice(calls.findIndex((call) => new URLSearchParams(call.body).get('Action') === 'TerminateInstances'));
+    expect(after).toEqual(['TerminateInstances', 'DescribeInstances', 'DeleteSecurityGroup', 'ReleaseAddress']);
+    expect(error.left).toEqual(['security-group sg-1']);
+  });
+
+  it('Google: deletes the machine, the firewall and the address; when it could not even log in, there is nothing to delete', async () => {
+    const { request, calls } = fakeCloud((url, method) => {
+      if (url.host === 'oauth2.googleapis.com') return { access_token: 'token-1' };
+      if (url.pathname.includes('/operations/op-instance')) return { status: 'DONE', error: { errors: [{ message: 'ZONE_RESOURCE_POOL_EXHAUSTED' }] } };
+      if (url.pathname.includes('/operations/')) return { status: 'DONE' };
+      if (url.pathname.includes('/addresses/') && method === 'GET') return { address: '203.0.113.5' };
+      const operation = method === 'POST' && url.pathname.endsWith('/instances') ? 'op-instance' : 'op-1';
+      return { selfLink: `https://compute.googleapis.com/compute/v1/projects/p/operations/${operation}` };
+    });
+    const cloud = googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, request, noWait);
+    const error = await failure(createInCloud(cloud, secrets, 'aula', () => undefined));
+    expect(error.message).toMatch(/ZONE_RESOURCE_POOL_EXHAUSTED/);
+    expect(error.left).toEqual([]);
+    expect(calls.filter((call) => call.method === 'DELETE').map((call) => call.url.pathname.split('/').slice(-2).join('/'))).toEqual([
+      expect.stringMatching(/^instances\/urna-abierta-/), expect.stringMatching(/^firewalls\/urna-abierta-/), expect.stringMatching(/^addresses\/urna-abierta-/),
+    ]);
+
+    const refused = fakeCloud(() => new Failure(400, { error: 'invalid_grant', error_description: 'Invalid JWT Signature.' }));
+    const login = await failure(createInCloud(googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, refused.request, noWait), secrets, 'aula', () => undefined));
+    expect(login.message).toMatch(/^google_login/);
+    // Null, not empty: the failure screen says that what was created got deleted only when something was.
+    expect(login.left).toBeNull();
+    expect(refused.calls.filter((call) => call.method === 'DELETE')).toEqual([]);
+  });
+
+  it('wrong keys create nothing, so there is nothing to delete or to report', async () => {
+    const refused = fakeCloud(() => new Failure(401, { code: 'NotAuthenticated', message: 'The required information to complete authentication was not provided.' }));
+    const lines: string[] = [];
+    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, refused.request, noWait);
+    const error = await failure(createInCloud(cloud, secrets, 'aula', (line) => lines.push(line)));
+    expect(error.message).toMatch(/NotAuthenticated/);
+    expect(error.left).toBeNull();
+    expect(lines).not.toContain('cleanup');
+    expect(refused.calls.filter((call) => call.method === 'DELETE')).toEqual([]);
+  });
+});
+
+describe('what the failure screen says', () => {
+  const ui = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const patterns = new Function(`return ${/const WHY = (\[[\s\S]*?\n {2}\]);/.exec(ui)![1]}`)() as [RegExp, string][];
+  const why = (problem: string) => patterns.find(([pattern]) => pattern.test(problem))?.[1] ?? 'unknown';
+  const keys = (language: 'es' | 'en') => new Set([...ui.slice(ui.indexOf(`    ${language}: {`)).matchAll(/^ {6}'([\w.]+)':/gm)].map((match) => match[1]));
+
+  it('explains the usual failures from what the clouds, SSH and the server say', () => {
+    expect(why('oracle_no_capacity: oracle_POST_instances: InternalError Out of host capacity.')).toBe('oracle_capacity');
+    expect(why('oracle_POST_vcns: NotAuthenticated The required information to complete authentication was not provided.')).toBe('oracle_auth');
+    expect(why('oracle_POST_publicIps: NotAuthorizedOrNotFound Authorization failed or requested resource not found.')).toBe('oracle_region');
+    expect(why('aws_AllocateAddress: AuthFailure AWS was not able to validate the provided access credentials')).toBe('aws_auth');
+    expect(why('aws_RunInstances: UnauthorizedOperation You are not authorized to perform this operation.')).toBe('aws_permission');
+    expect(why('aws_AllocateAddress: AddressLimitExceeded The maximum number of addresses has been reached.')).toBe('aws_limit');
+    expect(why('aws_no_default_network')).toBe('aws_network');
+    expect(why('google_login: Invalid JWT Signature.')).toBe('google_auth');
+    expect(why('google_POST: Compute Engine API has not been used in project 123 before or it is disabled.')).toBe('google_api');
+    expect(why('google_POST: This API method requires billing to be enabled.')).toBe('google_billing');
+    expect(why('google_operation: ZONE_RESOURCE_POOL_EXHAUSTED')).toBe('google_capacity');
+    expect(why('aws_server_did_not_start')).toBe('slow_cloud');
+    expect(why('script_failed: urna-abierta: needs_debian')).toBe('needs_debian');
+    expect(why('script_failed: E: Could not get lock /var/lib/dpkg/lock-frontend')).toBe('apt');
+    expect(why('script_failed: Error: something else | exit')).toBe('script');
+    expect(why('All configured authentication methods failed')).toBe('ssh');
+    expect(why('connect ECONNREFUSED 203.0.113.24:22')).toBe('ssh');
+    expect(why('Command failed: podman pull ghcr.io/bafif/urna-abierta-server:latest\nError: unauthorized')).toBe('pull');
+    expect(why('no_engine')).toBe('no_engine');
+    expect(why('algo que nadie esperaba')).toBe('unknown');
+  });
+
+  it('has every explanation and every server step in both languages', () => {
+    const es = keys('es');
+    const en = keys('en');
+    for (const name of [...new Set(patterns.map(([, key]) => key)), 'unknown']) {
+      expect(es.has(`why.${name}`), `why.${name} en castellano`).toBe(true);
+      expect(en.has(`why.${name}`), `why.${name} in English`).toBe(true);
+    }
+    const steps = [...readFileSync(new URL('../../../deploy/server/instalar.sh', import.meta.url), 'utf8').matchAll(/\bsay '(\w+)'|\bsay "(\w+) /g)].map((match) => match[1] ?? match[2]);
+    expect(steps.length).toBeGreaterThan(5);
+    for (const step of steps.filter((each) => each !== 'needs_debian')) {
+      expect(es.has(`server.${step}`), `server.${step} en castellano`).toBe(true);
+      expect(en.has(`server.${step}`), `server.${step} in English`).toBe(true);
+    }
+  });
+});
+
 describe('sending the theme of a file', () => {
   it('goes with the installation code, and says when it could not', async () => {
     const { request, calls } = fakeCloud(() => ({ ok: true }));
@@ -210,4 +379,29 @@ describe('waiting for the server', () => {
     }) as typeof fetch;
     expect(await waitForHealth('https://x', () => undefined, 1, never)).toBe(false);
   }, 15_000);
+});
+
+describe('the files a release publishes', () => {
+  it('every installer file that a doc or a page names is one that the build publishes', () => {
+    const root = new URL('../../../', import.meta.url);
+    const build = readFileSync(new URL('apps/installer/build.mjs', root), 'utf8');
+    const friendly = new Function(`return ${/const FRIENDLY = (\{[^}]*\});/.exec(build)![1]}`)() as Record<string, string>;
+    // As build.mjs packs each one: Windows as it is, macOS in a .zip and Linux in a .tar.gz. Each one with its SHA-256 next to it.
+    const published = Object.entries(friendly).map(([platform, name]) => `urna-abierta-instalador-${name}${platform.startsWith('win32') ? '.exe' : platform.startsWith('darwin') ? '.zip' : '.tar.gz'}`);
+    const allowed = new Set(published.flatMap((name) => [name, `${name}.sha256`]));
+    expect(published).toContain('urna-abierta-instalador-windows.exe');
+    const named: string[] = [];
+    for (const folder of ['docs', 'landing']) {
+      for (const file of readdirSync(new URL(`${folder}/`, root), { recursive: true }) as string[]) {
+        if (!/\.(md|html)$/.test(file)) continue;
+        const text = readFileSync(new URL(`${folder}/${file}`, root), 'utf8');
+        for (const [name] of text.matchAll(/urna-abierta-instalador-[\w.-]*[A-Za-z0-9]/g)) named.push(`${folder}/${file}: ${name}`);
+      }
+    }
+    for (const file of ['README.md', 'README.en.md']) {
+      for (const [name] of readFileSync(new URL(file, root), 'utf8').matchAll(/urna-abierta-instalador-[\w.-]*[A-Za-z0-9]/g)) named.push(`${file}: ${name}`);
+    }
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((each) => !allowed.has(each.split(': ')[1]!))).toEqual([]);
+  });
 });

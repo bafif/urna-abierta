@@ -22,8 +22,17 @@ To see the design proposal, just open `design/index.html` in a browser.
 
 ## The installer
 
-It is downloaded from the GitHub releases page, for Windows, macOS or Linux. It opens in your browser and can only be seen from your
-computer. Until a version is published, run it from the source with `node apps/installer/src/main.ts`, with the container images built.
+It is downloaded from the GitHub releases page, for Windows, macOS or Linux: [Downloading and opening it](#downloading-and-opening-it)
+says which one. It opens in your browser and can only be seen from your computer.
+
+Until a version is published, run it from the source, in the repository's folder, with Node 24 and Podman:
+
+```sh
+deploy/instalador.sh
+```
+
+It builds the images of the server and the app from that same code, and opens the installer. Those images are enough for the option
+of trying it on this computer; installing on a server needs published images.
 
 It asks three questions and does the rest.
 
@@ -92,13 +101,22 @@ Two things matter more than the provider:
 - **Free servers are usually outside Argentina.** That has legal consequences, which are up to the party. They are in the
   [legal information](../../LEGAL.en.md).
 
-## System warnings
+## Downloading and opening it
 
-The installer may be unsigned, so your computer will warn you. That is expected:
+On the [releases page](https://github.com/bafif/urna-abierta/releases/latest), download the one for your computer. The installer may be
+unsigned, so your computer will warn you. That is expected:
 
-- **Windows:** tap “More info”, then “Run anyway”.
-- **macOS:** it blocks it the first time. Go to Settings, Privacy & Security, and tap “Open Anyway”.
-- **Linux:** no warning.
+| Your computer | The file | How to open it |
+|---|---|---|
+| Windows | `urna-abierta-instalador-windows.exe` | Double-click. If “Windows protected your PC” shows up, tap “More info”, then “Run anyway” |
+| Mac with an Apple chip | `urna-abierta-instalador-mac-apple.zip` | Double-click the `.zip`, then `urna-abierta-instalador`. The first time macOS blocks it: go to Settings, Privacy & Security, and tap “Open Anyway” |
+| Mac with Intel | `urna-abierta-instalador-mac-intel.zip` | Same as on a Mac with an Apple chip |
+| Linux | `urna-abierta-instalador-linux.tar.gz` | Unpack it and, in a terminal open in that folder, run `./urna-abierta-instalador`. No warning |
+
+To know which Mac you have: Apple menu, “About This Mac”. It says “Chip Apple M…” or “Processor Intel”.
+
+Along with the browser, a window with text on a black background opens. **Leave it open until it finishes:** if you close it, the
+installer stops.
 
 Download it only from the releases page, and check that its SHA-256 matches the published one. A fake installer is the easiest way to
 steal a party's data.
