@@ -34,3 +34,12 @@ describe('the end to end scripts', () => {
     }
   });
 });
+
+describe('what GitHub runs', () => {
+  const workflow = read('.github/workflows/tests.yml');
+
+  it('cancels only an older run of the same pull request, and every commit to main gets its own', () => {
+    // In a group that runs share, GitHub keeps only the newest waiting run and cancels the others.
+    expect(/^concurrency:\n {2}group: (.*)$/m.exec(workflow)?.[1]).toBe("tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}");
+  });
+});
