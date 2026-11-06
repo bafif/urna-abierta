@@ -654,6 +654,35 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(again.category).toBe(closed);
     });
 
+    it('a sensitive mark cannot be seen through an export, nor replaced or cleared, without its own permission', async () => {
+      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
+      const idOf = (name: string) => users.find((u: { name: string }) => u.name === name).id;
+      await call('coordinacion', 'POST', `/api/users/${idOf('Juli')}/roles`, { role: 'semaforo_sensible' });
+      tokens.otro = await redeem((await call('coordinacion', 'POST', '/api/users', { name: 'Otro semáforo', role: 'semaforo' })).json().invitation);
+      const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
+      const mark = (who: string, category: string | null) => call(who, 'PUT', `/api/elections/${found.election_id}/people/${found.id}/semaphore`, { category });
+      expect((await mark('semaforo', closed)).statusCode).toBe(200);
+
+      expect((await mark('otro', open)).json().error).toBe('sensitive_mark');
+      expect((await mark('otro', null)).statusCode).toBe(403);
+      expect((await pool.query('SELECT sealed FROM semaphore_marks')).rows[0].sealed).toBeTruthy();
+
+      const exported = (await call('coordinacion', 'GET', `/api/persons/${found.election_id}/${found.id}/export`)).json();
+      expect(exported.semaphore).toMatchObject({ category: null, sensitive: true, hidden: true });
+      expect(JSON.stringify(exported)).not.toContain('Milita');
+
+      await call('coordinacion', 'POST', `/api/users/${idOf('Coordinación')}/roles`, { role: 'semaforo_sensible' });
+      const opened = (await call('coordinacion', 'GET', `/api/persons/${found.election_id}/${found.id}/export`)).json();
+      expect(opened.semaphore).toMatchObject({ category: 'Milita', sensitive: true, hidden: false });
+      const logged = await pool.query(`SELECT target FROM audit_log WHERE action = 'semaphore.sensitive_viewed' ORDER BY id DESC LIMIT 1`);
+      expect(logged.rows[0].target).toBe((await pool.query('SELECT ref FROM electors WHERE id = $1', [found.id])).rows[0].ref);
+      // With the permission, the mark can be changed again.
+      expect((await mark('semaforo', open)).statusCode).toBe(200);
+      expect((await mark('otro', null)).statusCode).toBe(200);
+    });
+
     it('finds, exports, records consent and erases a person, and purges an election', async () => {
       const found = (await call('coordinacion', 'GET', '/api/persons?q=acu')).json().people[0];
       expect(found.document).toBeTruthy();

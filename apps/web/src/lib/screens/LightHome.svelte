@@ -5,7 +5,7 @@
   import Pantalla from '../components/Pantalla.svelte';
   import { t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
-  import { session } from '../session.svelte.ts';
+  import { ApiError, session } from '../session.svelte.ts';
 
   interface Category {
     id: string;
@@ -28,7 +28,7 @@
   let person = $state<Person | null>(null);
   let choice = $state<string | null>(null);
   let offline = $state(false);
-  let failed = $state(false);
+  let failed = $state<'signal' | 'sensitive' | null>(null);
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   onMount(async () => {
@@ -59,7 +59,7 @@
   function open(found: Person) {
     person = found;
     choice = found.category;
-    failed = false;
+    failed = null;
   }
 
   /** It is only edited with signal, so that two people never hold different versions of it. */
@@ -70,8 +70,8 @@
       person = null;
       query = '';
       people = [];
-    } catch {
-      failed = true;
+    } catch (error) {
+      failed = error instanceof ApiError && error.code === 'sensitive_mark' ? 'sensitive' : 'signal';
     }
   }
 
@@ -82,7 +82,7 @@
   <Pantalla accion="equipo" volver onback={() => (person = null)} ojo={t('light.eyebrow')} titulo={person.name} bajada={person.table ? t('light.where', { table: person.table, order: person.order ?? '' }) : ''} desliza>
     <Options {items} bind:value={choice} />
     {#if choice}<button class="enlace" onclick={() => (choice = null)}>{t('light.clear')}</button>{/if}
-    {#if failed}<p class="problema" role="alert">{t('light.needSignal')}</p>{/if}
+    {#if failed}<p class="problema" role="alert">{t(failed === 'sensitive' ? 'light.sensitiveMark' : 'light.needSignal')}</p>{/if}
     {#snippet pie()}
       <button class="boton primario" onclick={save}><Ic name="flecha" /><span>{t('light.save')}</span></button>
     {/snippet}
