@@ -54,6 +54,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
   });
   beforeEach(async () => {
     await pool.query('TRUNCATE settings, users, elections, invitations, devices, role_assignments, semaphore_categories CASCADE');
+    // What the server remembers of roles a test edited goes with them.
+    forgetActors();
     demo = await seedDemo(pool, { size: 40, tables: 2 });
     table = demo.tables[0]!.table;
     tokens = {
@@ -268,6 +270,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('nueva', 'GET', '/api/users')).statusCode).toBe(200);
       expect((await call('nueva', 'GET', '/api/semaphore/categories')).statusCode).toBe(200);
       expect((await pool.query(`SELECT count(*)::int AS n FROM role_assignments WHERE user_id = $1 AND role = 'semaforo_sensible'`, [marta])).rows[0].n).toBe(0);
+      await call('coordinacion', 'PUT', '/api/roles/fiscal', { permissions: null });
     });
   });
 
