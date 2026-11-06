@@ -59,18 +59,33 @@ network() {
   fi
 }
 
+# The database takes the password .env gives it, each time it starts: it is the one the server uses, and an installer
+# that ran again on the same machine may have made a new one. Then a database made before, which trusted every
+# connection from inside the pod, asks for it on the network from then on. Its socket, which is only inside its own
+# container, keeps trusting: an older «urna», after going back to an older version, still makes and restores backups.
+database_password() {
+  podman exec -i -e POSTGRES_PASSWORD -u postgres "$pod-db" sh -s >/dev/null 2>&1 <<'EOF' || true
+for _ in $(seq 1 60); do pg_isready -q -U urna -d urna && break; sleep 1; done
+psql -X -q -v ON_ERROR_STOP=1 -U urna -d urna <<'SQL' || exit 1
+\getenv password POSTGRES_PASSWORD
+ALTER ROLE urna PASSWORD :'password';
+SQL
+grep -Eq '^[[:space:]]*host.*[[:space:]]trust[[:space:]]*$' "$PGDATA/pg_hba.conf" || exit 0
+sed -i -E '/^[[:space:]]*host/ s/[[:space:]]trust[[:space:]]*$/ scram-sha-256/' "$PGDATA/pg_hba.conf"
+psql -X -q -U urna -d urna -c 'SELECT pg_reload_conf()'
+EOF
+}
+
 start() {
   mkdir -p "$home/fotos" "$home/copias"
   if ! podman pod exists "$pod"; then
     # shellcheck disable=SC2086
     podman pod create --name "$pod" --network "$(network)" $ports >/dev/null
   fi
-  # The database asks for its password on every connection, from the socket too: the web container shares the pod's
-  # network, and gets nowhere without it. PGPASSWORD is for the commands that run inside, such as pg_dump.
+  # The database asks for its password on every connection over the network, which the web container shares in the pod.
   if ! podman container exists "$pod-db"; then
     podman run -d --pod "$pod" --name "$pod-db" --restart=always \
-      -e POSTGRES_USER=urna -e POSTGRES_DB=urna -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" -e PGPASSWORD="$POSTGRES_PASSWORD" \
-      -e POSTGRES_INITDB_ARGS='--auth-host=scram-sha-256 --auth-local=scram-sha-256' \
+      -e POSTGRES_USER=urna -e POSTGRES_DB=urna -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" -e POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 \
       -v "$pod-database:/var/lib/postgresql" "$URNA_IMAGE_DB" \
       postgres -c shared_buffers=128MB -c max_connections=20 -c work_mem=4MB -c effective_cache_size=384MB >/dev/null
   fi
@@ -87,11 +102,10 @@ start() {
       -e URNA_SITE="$URNA_SITE" -e URNA_TLS="$(tls_block)" -e URNA_API=localhost:3000 \
       -v "$pod-caddy-data:/data" -v "$pod-caddy-config:/config" "$URNA_IMAGE_WEB" >/dev/null
   fi
+  # The database first, so that the server finds it with its password.
+  podman start "$pod-db" >/dev/null
+  database_password
   podman pod start "$pod" >/dev/null
-  # A database made before that trusted every connection from inside the pod. Once its container has the password, as
-  # the one above, it asks for it too, from then on: the next «urna actualizar» or «urna reiniciar» does it.
-  podman exec -u postgres "$pod-db" sh -c '[ -n "${PGPASSWORD:-}" ] && grep -qs -- "[[:space:]]trust$" "$PGDATA/pg_hba.conf" || exit 0
-    sed -i -- "s/[[:space:]]trust$/ scram-sha-256/" "$PGDATA/pg_hba.conf" && kill -HUP 1' >/dev/null 2>&1 || true
 }
 
 stop_all() {
@@ -203,11 +217,17 @@ restore() {
   if [ -s "$work/fotos" ]; then member fotos.tar | tar -C "$staging" -xf - --no-same-owner fotos; fi
   mkdir -p "$staging/fotos"
 
+  podman rm -f "$pod-server" >/dev/null 2>&1 || true
+  # If the database does not let its data go, nothing changed yet: the site comes back as it was, and says why.
+  if ! podman exec "$pod-db" psql -q -U urna -d urna -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null 2>"$work/base"; then
+    echo "La base no me dejó reemplazar sus datos, así que no restauré nada. Dijo: $(tail -n 1 "$work/base")" >&2
+    start || true
+    exit 1
+  fi
+  member base.dump | podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner ||
+    { echo 'La copia no terminó de entrar en la base, y el sitio quedó frenado para que no arranque con la mitad de los datos. Volvé a correr «urna restaurar» con la misma copia.' >&2; exit 1; }
   sed -i "s|^URNA_FIELD_KEY=.*|URNA_FIELD_KEY=$field_key|" "$home/.env"
   URNA_FIELD_KEY=$field_key
-  podman rm -f "$pod-server" >/dev/null 2>&1 || true
-  podman exec "$pod-db" psql -q -U urna -d urna -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null 2>&1
-  member base.dump | podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner
   podman unshare rm -rf "$home/fotos"
   mv "$staging/fotos" "$home/fotos"
   start
