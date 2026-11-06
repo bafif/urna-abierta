@@ -111,6 +111,21 @@ describe('Excel spreadsheets', () => {
     expect(readXlsxRoll(file).padron?.electors.map((elector) => elector.full_name)).toEqual(['Prueba, Primera']);
   });
 
+  it('says so when other sheets have something written, since only the first one is read', () => {
+    const first = sheetXml({ 1: [{ inline: 'Nombre' }], 2: [{ inline: 'Prueba, Primera' }] });
+    const more = sheetXml({ 1: [{ inline: 'Nombre' }], 2: [{ inline: 'Prueba, Segunda' }] });
+    const empty = sheetXml({});
+    const notice = { where: 'file', problem: 'other_sheets' };
+    const read = (sheets: string[]) => readXlsxRoll(workbook({ sheets: sheets.map((xml, i) => ({ name: `Hoja${i + 1}`, file: `sheet${i + 1}.xml`, xml })) }));
+    expect(read([first, more]).problems).toContainEqual(notice);
+    expect(read([first, more]).padron?.electors.map((elector) => elector.full_name)).toEqual(['Prueba, Primera']);
+    expect(read([first, empty, more]).problems.filter((item) => item.problem === 'other_sheets')).toHaveLength(1);
+    expect(read([first, empty]).problems).not.toContainEqual(notice);
+    expect(read([first]).problems).not.toContainEqual(notice);
+    // A roll that is not in the first sheet at all: what is wrong, and where the rest may be.
+    expect(read([empty, more]).problems).toContainEqual(notice);
+  });
+
   it('understands cells with a namespace prefix, formulas and errors', () => {
     const xml = `<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData>
       <x:row r="1"><x:c r="A1" t="inlineStr"><x:is><x:t>Nombre</x:t></x:is></x:c><x:c r="B1" t="inlineStr"><x:is><x:t>DNI</x:t></x:is></x:c><x:c r="C1" t="inlineStr"><x:is><x:t>Mesa</x:t></x:is></x:c></x:row>

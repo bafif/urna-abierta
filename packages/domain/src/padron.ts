@@ -357,10 +357,13 @@ export function readCsvRoll(content: string): PadronRead {
   return readTableRoll(lines.map(({ text, line }) => ({ line, cells: splitCsvLine(text, separator) })), 'csv');
 }
 
-/** The first sheet of an Excel file (.xlsx), with the same columns and ids as a CSV. */
+/** The first sheet of an Excel file (.xlsx), with the same columns and ids as a CSV. If other sheets have something, it says so. */
 export function readXlsxRoll(bytes: Uint8Array): PadronRead {
-  const rows = readFirstSheet(bytes);
-  return typeof rows === 'string' ? refused('file', rows) : readTableRoll(rows, 'xlsx');
+  const sheet = readFirstSheet(bytes);
+  if (typeof sheet === 'string') return refused('file', sheet);
+  const read = readTableRoll(sheet.rows, 'xlsx');
+  if (sheet.otherSheetsWithData > 0) read.problems.unshift({ where: 'file', problem: 'other_sheets' });
+  return read;
 }
 
 /** Problems of one kind, in one kind of place, together: «rows 3, 4, 5 and 12 more have no name». */

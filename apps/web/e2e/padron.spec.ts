@@ -89,6 +89,8 @@ test('an Excel spreadsheet goes in as it is, header below a title and all', asyn
   await expect(page.getByTestId('roll-problems')).toContainText('Mirá esto antes de cargarlo');
   await expect(page.getByTestId('roll-problems')).toContainText('Fila 16: no tiene nombre, así que quedó afuera.');
   await expect(page.getByTestId('roll-problems')).not.toContainText('99000300');
+  // Its second sheet has a note: only the first one is read, and it says so.
+  await expect(page.getByTestId('roll-problems')).toContainText('otras hojas con algo escrito, y solo se lee la primera');
   await button(page, 'Cargarlo').click();
   // Its tables came in the file, so the next step is already the poll watchers.
   await expect(page.locator('.estacion.ahora')).toContainText('Fiscales');
