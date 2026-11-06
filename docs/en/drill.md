@@ -50,9 +50,35 @@ The most important part of the whole drill.
 - [ ] Check that the election, the crossed-out names, the photos and the permissions are there. Measure how long it all took: that is your real recovery time.
 - [ ] If the address changed, each poll watcher has to prepare the table again. Measure how long that takes with the whole team.
 
+## Law and security
+
+How each tool is used is in the [personal data](personal-data.md) guide.
+
+- [ ] A person asks for their data. In **Requests from people**, find them, tap “Download everything we hold”, correct their document,
+      record a consent and erase their data. Measure how long each step took: the law's deadlines are 10 calendar days and 5 business
+      days. Can what was downloaded be understood without explanation?
+- [ ] The **Log** shows the search, the download, the correction, the consent and the erasure, with who did each.
+- [ ] Create a traffic light category marked as sensitive and note someone with it. Someone with “Note who votes for us” must not see it,
+      nor be able to change it. Someone with “See the sensitive categories” sees it, and the log says “Looked at sensitive categories”.
+- [ ] Download the roll of a table by preparing it from a phone, and a backup from the app: the log has to say who did it.
+- [ ] Switch security to “Municipal or provincial”. Everyone except poll watchers has to confirm with a code, and the poll watcher has to
+      see only the last 3 digits of each document. Then switch back.
+- [ ] Remove a person from the team: the next time their phone connects, it has to say “This phone no longer has access”.
+- [ ] After closing the election, a poll watcher tries to cross someone out and to prepare the table again. Write down what happens:
+      nothing they send may count.
+
 ## Finishing
 
 - [ ] Close the election and purge it. Check that no name is left: search for one in **Requests from people**.
+- [ ] Check that no document is left in the database. The invented roll's documents start with 9900, so this has to answer `0`:
+
+      ```sh
+      sudo runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta \
+        podman exec urna-db pg_dump -U urna urna | grep -cw '9900[0-9]\{4\}'
+      ```
+
+      If it gives more, write it down: it is one of the [limits of this version](personal-data.md#limits-of-this-version).
+- [ ] Delete the backups from before the purge, on the server and on your computer, as [Backups](personal-data.md#backups) says.
 - [ ] Delete the server. Check in the cloud console that nothing is left charging.
 
 ## What to write down
