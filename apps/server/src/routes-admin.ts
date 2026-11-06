@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText, isRole, isSecurityProfile, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, securityProfile, setSetting } from './actor.ts';
+import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, isErasedId, requires, securityProfile, setSetting } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -129,7 +129,8 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   // ---------- People ----------
-  app.get('/api/users', { preHandler: manageUsers }, async () => {
+  app.get('/api/users', { preHandler: manageUsers }, async (request) => {
+    await auditView(pool, request.actor, 'users.viewed');
     const users = await pool.query(
       `SELECT u.id, u.name, u.phone,
               COALESCE(json_agg(json_build_object('role', a.role, 'table', a.table_id, 'unit', a.unit_id)) FILTER (WHERE a.id IS NOT NULL), '[]') AS roles,
@@ -386,7 +387,9 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   app.put<{ Params: { table: string }; Body: { name?: unknown; place?: unknown; unit?: unknown; fiscal?: unknown } }>('/api/tables/:table', { preHandler: manageElection }, async (request) => {
     const { place, unit, fiscal } = request.body ?? {};
-    await pool.query('UPDATE polling_tables SET name = COALESCE($2, name), place = COALESCE($3, place), unit_id = COALESCE($4, unit_id) WHERE id = $1', [request.params.table, text(request.body?.name, 80), typeof place === 'string' ? place : null, typeof unit === 'string' ? unit : null]);
+    const name = text(request.body?.name, 80);
+    await pool.query('UPDATE polling_tables SET name = COALESCE($2, name), place = COALESCE($3, place), unit_id = COALESCE($4, unit_id) WHERE id = $1', [request.params.table, name, typeof place === 'string' ? place : null, typeof unit === 'string' ? unit : null]);
+    if (name || typeof place === 'string' || typeof unit === 'string') await audit(pool, request.actor, 'table.changed', request.params.table, { name: Boolean(name), place: typeof place === 'string', unit: typeof unit === 'string' ? unit : undefined });
     if (typeof fiscal === 'string') {
       await pool.query(`DELETE FROM role_assignments WHERE table_id = $1 AND role = 'fiscal'`, [request.params.table]);
       await pool.query(`INSERT INTO role_assignments (id, user_id, role, table_id) VALUES ($1, $2, 'fiscal', $3)`, [randomUUID(), fiscal, request.params.table]);
@@ -412,6 +415,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     const id = randomUUID();
     await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [id, request.params.id, name]);
+    await audit(pool, request.actor, 'unit.created', id, { election: request.params.id });
     return { id };
   });
 

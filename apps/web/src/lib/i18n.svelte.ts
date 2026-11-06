@@ -640,6 +640,14 @@ const es = {
   'roll.upload.closed': 'Esta elección ya cerró: su padrón no se puede cambiar.',
   'light.sensitiveMark': 'Ya tiene una categoría sensible, que ve solo quien tiene ese permiso. No la podés cambiar ni sacar.',
   'security.held': 'Hay una elección abierta que pide más cuidado. Vas a poder bajarlo cuando cierre.',
+  'action.semaphore.searched': 'Buscó personas en el semáforo',
+  'action.users.viewed': 'Miró el equipo',
+  'action.district.viewed': 'Miró cómo van las mesas',
+  'action.table.viewed': 'Miró una mesa',
+  'action.table.pulled': 'Leyó lo que se tachó en una mesa',
+  'action.audit.viewed': 'Leyó el registro',
+  'action.unit.created': 'Creó un distrito',
+  'action.table.changed': 'Cambió una mesa',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -1286,6 +1294,14 @@ const en: Record<MessageKey, string> = {
   'roll.upload.closed': 'This election is closed: its roll cannot be changed.',
   'light.sensitiveMark': 'They already have a sensitive category, which only people with that permission can see. You cannot change it or remove it.',
   'security.held': 'An open election asks for more care. You will be able to lower it once it closes.',
+  'action.semaphore.searched': 'Searched for people in the traffic light',
+  'action.users.viewed': 'Looked at the team',
+  'action.district.viewed': 'Looked at how the tables are doing',
+  'action.table.viewed': 'Looked at a table',
+  'action.table.pulled': 'Read what was crossed out at a table',
+  'action.audit.viewed': 'Read the log',
+  'action.unit.created': 'Created a district',
+  'action.table.changed': 'Changed a table',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;

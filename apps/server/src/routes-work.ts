@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, can, canReachTable, erasedId, isErasedId, requires, seal, unseal, type Actor } from './actor.ts';
+import { audit, auditView, can, canReachTable, erasedId, isErasedId, requires, seal, unseal, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
@@ -51,6 +51,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** Not a dashboard: what needs someone now comes first, and the rest fits in one line. */
   app.get<{ Params: { id: string } }>('/api/district/:id', { preHandler: watch }, async (request) => {
     const scope = await tablesInScope(request, request.params.id);
+    await auditView(pool, request.actor, 'district.viewed', request.params.id);
     const key = `${request.actor.userId}:${request.params.id}`;
     const cached = cache.get(key);
     if (cached && Date.now() - cached.at < SUMMARY_CACHE_MS) return cached.value;
@@ -113,6 +114,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       [table],
     );
     if (!info.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await auditView(pool, request.actor, 'table.viewed', table);
     const operations = await pool.query(`SELECT id, type, payload, device_time, author FROM operations WHERE table_id = $1 AND type IN ('incident.reported', 'envelopes.counted', 'tally.submitted', 'tally.photo') AND NOT quarantined ORDER BY seq`, [table]);
     const decisions = await pool.query('SELECT category, operation_id FROM tally_decisions WHERE table_id = $1', [table]);
     const states = await pool.query('SELECT operation_id FROM incident_states WHERE operation_id = ANY($1)', [operations.rows.filter((o) => o.type === 'incident.reported').map((o) => o.id)]);
@@ -211,14 +213,17 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const query = foldText(request.query.q ?? '').trim();
     if (query.length < 2) return { people: [] };
     const rows = await pool.query(
-      `SELECT x.id, x.full_name, x.order_number, t.name AS table_name, m.category_id, m.sealed
+      `SELECT x.id, x.ref, x.full_name, x.order_number, t.name AS table_name, m.category_id, m.sealed
        FROM electors x LEFT JOIN polling_tables t ON t.id = x.table_id
        LEFT JOIN semaphore_marks m ON m.election_id = x.election_id AND m.elector_id = x.id
        WHERE x.election_id = $1 AND x.search LIKE '%' || $2 || '%' ORDER BY x.search LIMIT 25`,
       [request.params.id, query],
     );
+    // Each name comes with what the party thinks of that person's vote: who saw whom is recorded, by reference.
+    if (rows.rows.length > 0) await audit(pool, request.actor, 'semaphore.searched', request.params.id, { people: rows.rows.map((row) => row.ref) });
     const sensitive = can(request.actor, 'semaphore.sensitive');
-    if (rows.rows.some((row) => row.sealed) && sensitive) await audit(pool, request.actor, 'semaphore.sensitive_viewed', request.params.id, { rows: rows.rows.length });
+    const sealed = rows.rows.filter((row) => row.sealed).map((row) => row.ref);
+    if (sealed.length > 0 && sensitive) await audit(pool, request.actor, 'semaphore.sensitive_viewed', request.params.id, { people: sealed });
     return {
       people: rows.rows.map((row) => ({
         id: row.id, name: row.full_name, order: row.order_number, table: row.table_name,
@@ -261,14 +266,14 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const query = foldText(request.query.q ?? '').trim();
     if (query.length < 3) return { people: [] };
     const rows = await pool.query(
-      `SELECT x.election_id, e.name AS election, x.id, x.full_name, x.document, x.file_number, x.address, x.consent, t.name AS table_name, m.elector_id IS NOT NULL AS has_mark
+      `SELECT x.election_id, e.name AS election, x.id, x.ref, x.full_name, x.document, x.file_number, x.address, x.consent, t.name AS table_name, m.elector_id IS NOT NULL AS has_mark
        FROM electors x JOIN elections e ON e.id = x.election_id LEFT JOIN polling_tables t ON t.id = x.table_id
        LEFT JOIN semaphore_marks m ON m.election_id = x.election_id AND m.elector_id = x.id
        WHERE x.search LIKE '%' || $1 || '%' ORDER BY x.search LIMIT 25`,
       [query],
     );
-    await audit(pool, request.actor, 'person.searched');
-    return { people: rows.rows };
+    await audit(pool, request.actor, 'person.searched', undefined, { people: rows.rows.map((row) => row.ref) });
+    return { people: rows.rows.map(({ ref: _ref, ...row }) => row) };
   });
 
   app.get<{ Params: { election: string; id: string } }>('/api/persons/:election/:id/export', { preHandler: managePersons }, async (request, reply) => {
@@ -371,6 +376,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   app.get<{ Querystring: { before?: string } }>('/api/audit', { preHandler: requires(pool, 'audit.read') }, async (request) => {
     const before = Number(request.query.before) || Number.MAX_SAFE_INTEGER;
+    await auditView(pool, request.actor, 'audit.viewed');
     const rows = await pool.query(
       `SELECT l.id, l.at, l.action, l.target, u.name AS who FROM audit_log l LEFT JOIN users u ON u.id = l.user_id
        WHERE l.id < $1 ORDER BY l.id DESC LIMIT 100`,
