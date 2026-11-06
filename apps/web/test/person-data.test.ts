@@ -34,6 +34,17 @@ describe('the page with what is held about a person', () => {
     expect(empty).not.toContain('data.others');
   });
 
+  it('also names a plain category kept under a sensitive one, whether that one came opened or not', () => {
+    const under = { ...data.semaphore!, under: 'Puede <ser>' };
+    const hidden = personDataPage({ ...data, semaphore: under }, say as never, 'es');
+    expect(hidden).toContain('data.light.hidden');
+    expect(hidden).toContain('[data.light.under category=Puede &lt;ser&gt;]');
+    const opened = personDataPage({ ...data, semaphore: { ...under, category: 'Milita', hidden: false } }, say as never, 'es');
+    expect(opened).toContain('category=Milita');
+    expect(opened).toContain('[data.light.under category=Puede &lt;ser&gt;]');
+    expect(personDataPage(data, say as never, 'es')).not.toContain('data.light.under');
+  });
+
   it('says that it is about one roll, and names the others where the same document is', () => {
     const page = personDataPage({ ...data, others: ['Claustro', 'Consejo <Superior>'] }, say as never, 'es');
     expect(page).toContain('[data.intro party=Agrupación &lt;Ejemplo&gt; election=Centro de estudiantes]');

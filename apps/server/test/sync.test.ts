@@ -1126,22 +1126,31 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const mark = (who: string, category: string | null) => call(who, 'PUT', `/api/elections/${found.election_id}/people/${publicId}/semaphore`, { category });
       expect((await mark('semaforo', closed)).statusCode).toBe(200);
 
-      expect((await mark('otro', open)).json().error).toBe('sensitive_mark');
-      expect((await mark('otro', null)).statusCode).toBe(403);
-      expect((await pool.query('SELECT sealed FROM semaphore_marks')).rows[0].sealed).toBeTruthy();
+      // Whoever cannot see it notes a plain category, which stays under it, and clears only that.
+      expect((await mark('otro', open)).statusCode).toBe(200);
+      expect((await pool.query('SELECT category_id, sealed IS NOT NULL AS sealed FROM semaphore_marks')).rows).toEqual([{ category_id: open, sealed: true }]);
+      const seen = async (who: string) => (await call(who, 'GET', `/api/elections/${found.election_id}/people?q=acu`)).json().people.find((p: { id: string }) => p.id === publicId).category;
+      expect(await seen('otro')).toBe(open);
+      expect(await seen('semaforo')).toBe(closed);
 
       const exported = (await call('coordinacion', 'GET', `/api/persons/${found.election_id}/${found.id}/export`)).json();
-      expect(exported.semaphore).toMatchObject({ category: null, sensitive: true, hidden: true });
+      expect(exported.semaphore).toMatchObject({ category: null, sensitive: true, hidden: true, under: 'Puede ser' });
       expect(JSON.stringify(exported)).not.toContain('Milita');
+      expect((await mark('otro', null)).statusCode).toBe(200);
+      expect((await pool.query('SELECT category_id, sealed IS NOT NULL AS sealed FROM semaphore_marks')).rows).toEqual([{ category_id: null, sealed: true }]);
+      expect(await seen('otro')).toBeNull();
 
       await call('coordinacion', 'POST', `/api/users/${idOf('Coordinación')}/roles`, { role: 'semaforo_sensible' });
       const opened = (await call('coordinacion', 'GET', `/api/persons/${found.election_id}/${found.id}/export`)).json();
       expect(opened.semaphore).toMatchObject({ category: 'Milita', sensitive: true, hidden: false });
+      expect(opened.semaphore.under).toBeUndefined();
       const logged = await pool.query(`SELECT target FROM audit_log WHERE action = 'semaphore.sensitive_viewed' ORDER BY id DESC LIMIT 1`);
       expect(logged.rows[0].target).toBe((await pool.query('SELECT ref FROM electors WHERE id = $1', [found.id])).rows[0].ref);
       // With the permission, the mark can be changed again.
       expect((await mark('semaforo', open)).statusCode).toBe(200);
+      expect((await pool.query('SELECT category_id, sealed FROM semaphore_marks')).rows).toEqual([{ category_id: open, sealed: null }]);
       expect((await mark('otro', null)).statusCode).toBe(200);
+      expect((await pool.query('SELECT 1 FROM semaphore_marks')).rowCount).toBe(0);
     });
 
     it('the traffic light names each person by the id phones know them by, never by the roll id, which can be the whole document', async () => {
@@ -1163,7 +1172,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await mark(`d-${documents[0]}`, open)).statusCode).toBe(404);
     });
 
-    it('whoever cannot see sensitive marks cannot tell who has one by how a change is refused, and trying it is recorded', async () => {
+    it('whoever cannot see sensitive marks cannot tell who has one by how a change is answered, nor touch it', async () => {
       const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
       const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
@@ -1180,12 +1189,17 @@ describe.skipIf(!url)('against a real Postgres', () => {
       // A category that is not one is checked first, the same for everyone.
       for (const wrong of [0, 'no-existe']) expect(await answer(marked!, wrong)).toEqual(await answer(unmarked!, wrong));
       expect(await refusals()).toBe(0);
-      // Changing a sensitive mark and choosing a sensitive category get the same refusal, and both are recorded.
-      const refused = await answer(marked!, open);
+      // A plain category, or none, is taken the same with a sensitive mark or without one.
+      for (const plain of [open, null]) expect(await answer(marked!, plain)).toEqual(await answer(unmarked!, plain));
+      expect(await answer(marked!, open)).toEqual([200, { ok: true }]);
+      // A sensitive category is refused to everyone alike, and trying it is recorded.
+      const refused = await answer(marked!, closed);
       expect(refused).toEqual([403, { error: 'sensitive_mark' }]);
       expect(await answer(unmarked!, closed)).toEqual(refused);
-      expect(await answer(marked!, null)).toEqual(refused);
-      expect(await refusals()).toBe(3);
+      expect(await refusals()).toBe(2);
+      // The sensitive mark is still there, as it was.
+      const kept = await pool.query('SELECT sealed IS NOT NULL AS sealed FROM semaphore_marks m JOIN electors x ON x.election_id = m.election_id AND x.id = m.elector_id WHERE x.public_id = $1', [marked!.id]);
+      expect(kept.rows).toEqual([{ sealed: true }]);
     });
 
     it('finds, exports, records consent and erases a person, and purges an election', async () => {
