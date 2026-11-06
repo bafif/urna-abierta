@@ -231,7 +231,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const fromCoordination = (await call('coordinacion', 'POST', `/api/users/${marta}/invitation`)).json().invitation as string;
       await call('coordinacion', 'POST', `/api/users/${marta}/roles`, { role: 'semaforo' });
       await pool.query(`INSERT INTO settings (key, value) VALUES ('security_profile', '"local"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`);
-      expect((await call('copia', 'GET', '/api/me')).json().secondFactorNeeded).toBe(true);
+      // That device stays a poll watcher, who needs no second step; and it cannot set it up either.
+      expect((await call('copia', 'GET', '/api/me')).json()).toMatchObject({ roles: ['fiscal'], secondFactorNeeded: false });
       const start = await call('copia', 'POST', '/api/auth/second-factor/start');
       expect([start.statusCode, start.json()]).toEqual([403, { error: 'needs_new_invitation' }]);
       expect((await call('copia', 'POST', '/api/auth/second-factor/verify', { code: '123456' })).json()).toEqual({ error: 'needs_new_invitation' });
@@ -245,6 +246,28 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('nueva', 'POST', '/api/auth/second-factor/verify', { code: code() })).statusCode).toBe(200);
       expect((await call('copia', 'POST', '/api/auth/second-factor/start')).json()).toEqual({ enrolled: true });
       expect((await call('copia', 'POST', '/api/auth/second-factor/verify', { code: code() })).statusCode).toBe(200);
+    });
+
+    it('a device from the link of someone who does not manage people stays the poll watcher it was made for, whatever the person gets later', async () => {
+      const marta = ((await call('coordinacion', 'GET', '/api/users')).json().users as { id: string; name: string }[]).find((user) => user.name === 'Marta')!.id;
+      tokens.copia = await redeem((await call('jefe', 'POST', `/api/users/${marta}/invitation`)).json().invitation);
+      tokens.instalada = await redeem((await call('copia', 'POST', '/api/auth/handoff')).json().code);
+      await call('coordinacion', 'POST', `/api/users/${marta}/roles`, { role: 'coordinacion' });
+      await call('coordinacion', 'PUT', '/api/roles/fiscal', { permissions: ['table.work', 'semaphore.read'] });
+      for (const device of ['copia', 'instalada']) {
+        expect((await call(device, 'GET', '/api/users')).statusCode).toBe(403);
+        expect((await call(device, 'GET', '/api/elections')).statusCode).toBe(403);
+        expect((await call(device, 'GET', '/api/semaphore/categories')).statusCode).toBe(403);
+        expect((await call(device, 'POST', `/api/users/${marta}/roles`, { role: 'semaforo_sensible' })).statusCode).toBe(403);
+        expect((await call(device, 'GET', '/api/me')).json().roles).toEqual(['fiscal']);
+        // Their table, as the chief could hand it.
+        expect((await call(device, 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      }
+      // With a link from whoever manages people, the person gets all they were given.
+      tokens.nueva = await redeem((await call('coordinacion', 'POST', `/api/users/${marta}/invitation`)).json().invitation);
+      expect((await call('nueva', 'GET', '/api/users')).statusCode).toBe(200);
+      expect((await call('nueva', 'GET', '/api/semaphore/categories')).statusCode).toBe(200);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM role_assignments WHERE user_id = $1 AND role = 'semaforo_sensible'`, [marta])).rows[0].n).toBe(0);
     });
   });
 
