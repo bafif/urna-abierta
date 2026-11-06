@@ -204,7 +204,8 @@ restore() {
   tar -tvf "$work/copia.tar" | grep -qv '^-' && strange 'un enlace'
   # Each file is read out of the backup when it is needed, never copied next to it: besides the photos, which have to
   # land somewhere, restoring takes no more room than the backup itself, where /tmp may be a small part of the memory.
-  member() { tar -xOf "$work/copia.tar" "$1"; }
+  # What reads them says when one is not whole; a read cut short on purpose, as by head, says nothing.
+  member() { tar -xOf "$work/copia.tar" "$1" 2>/dev/null; }
   [ "$(member base.dump | head -c 1 | wc -c)" -eq 1 ] || incomplete
   field_key=$(member clave-campos)
   case "$field_key" in *[!0-9a-f]*) strange 'una clave de campos rara' ;; esac
