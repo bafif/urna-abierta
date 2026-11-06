@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, auditView, can, canReachTable, erasedId, getSetting, requires, rollKey, seal, unseal, type Actor } from './actor.ts';
+import { audit, auditView, can, canReachTable, erasedId, getSetting, requires, rollKey, seal, tablesInScope, unseal } from './actor.ts';
 import { clock } from './clock.ts';
 import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
@@ -86,16 +86,6 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   const watch = requires(pool, 'district.watch');
   const cache = new Map<string, { at: number; value: unknown }>();
 
-  async function tablesInScope(request: { actor: Actor }, election: string): Promise<string[]> {
-    const { actor } = request;
-    if (can(actor, 'election.manage')) {
-      return (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [election])).rows.map((r) => r.id);
-    }
-    const units = actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);
-    const everything = units.includes(null);
-    return (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1 AND ($2 OR unit_id = ANY($3))', [election, everything, units])).rows.map((r) => r.id);
-  }
-
   app.get('/api/district/elections', { preHandler: watch }, async () => {
     const rows = await pool.query(`SELECT id, name, status, days FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
     return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((day: Date) => day.toISOString().slice(0, 10)) })) };
@@ -103,7 +93,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   /** Not a dashboard: what needs someone now comes first, and the rest fits in one line. */
   app.get<{ Params: { id: string } }>('/api/district/:id', { preHandler: watch }, async (request) => {
-    const scope = await tablesInScope(request, request.params.id);
+    const scope = await tablesInScope(pool, request.actor, request.params.id);
     await auditView(pool, request.actor, 'district.viewed', request.params.id);
     const key = `${request.actor.userId}:${request.params.id}`;
     const cached = cache.get(key);

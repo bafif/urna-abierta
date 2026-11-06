@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -154,6 +154,25 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const marta = users.find((u: { name: string }) => u.name === 'Marta');
       await call('coordinacion', 'DELETE', `/api/users/${marta.id}`);
       expect((await call('fiscal', 'GET', '/api/me')).statusCode).toBe(401);
+    });
+  });
+
+  describe('invitations', () => {
+    /** The second table goes to a district of its own: the chief of the demo keeps only the first. */
+    const twoDistricts = async () => {
+      const other = randomUUID();
+      await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [other, demo.election, 'Otro distrito']);
+      await pool.query('UPDATE polling_tables SET unit_id = $2 WHERE id = $1', [demo.tables[1]!.table, other]);
+    };
+    const newFiscal = async (name: string, mesa: string) => (await call('coordinacion', 'POST', '/api/users', { name, role: 'fiscal', table: mesa, phone: '+54 9 341 333-3333' })).json().id as string;
+    const names = (response: { json: () => { invitations: { name: string }[] } }) => response.json().invitations.map((item) => item.name).sort();
+
+    it('a district chief gets links only for the poll watchers of their own tables', async () => {
+      await twoDistricts();
+      await newFiscal('Propia', table);
+      await newFiscal('Ajena', demo.tables[1]!.table);
+      expect(names(await call('jefe', 'POST', `/api/elections/${demo.election}/invitations`))).toEqual(['Propia']);
+      expect(names(await call('coordinacion', 'POST', `/api/elections/${demo.election}/invitations`))).toEqual(['Ajena', 'Propia']);
     });
   });
 

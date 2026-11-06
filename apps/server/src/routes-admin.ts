@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { DEFAULT_TIME_ZONE, foldText, isRole, isSecurityProfile, isTimeZone, storedPhone, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronElector, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, requires, rollKey, securityProfile, setSetting, type Actor } from './actor.ts';
+import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, requires, rollKey, securityProfile, setSetting, tablesInScope, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
 
@@ -511,14 +511,15 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { id };
   });
 
-  /** One invitation for each poll watcher of the election who has not joined yet. */
+  /** One invitation for each poll watcher who has not joined yet, of the tables this person looks after. */
   app.post<{ Params: { id: string } }>('/api/elections/:id/invitations', { preHandler: requires(pool, 'team.invite') }, async (request) => {
+    const scope = await tablesInScope(pool, request.actor, request.params.id);
     const pending = await pool.query(
       `SELECT DISTINCT u.id, u.name, u.phone, t.name AS table_name FROM role_assignments a
        JOIN polling_tables t ON t.id = a.table_id JOIN users u ON u.id = a.user_id
-       WHERE t.election_id = $1 AND a.role = 'fiscal' AND u.removed_at IS NULL
+       WHERE t.election_id = $1 AND t.id = ANY($2) AND a.role = 'fiscal' AND u.removed_at IS NULL
          AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL)`,
-      [request.params.id],
+      [request.params.id, scope],
     );
     const invitations = [];
     for (const row of pending.rows) invitations.push({ name: row.name, phone: row.phone, table: row.table_name, invitation: await createInvitation(pool, row.id) });
