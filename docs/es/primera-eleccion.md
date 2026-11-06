@@ -235,7 +235,8 @@ No le digas a nadie que siga igual. Ese aviso puede ser alguien en el medio, y l
 Esta lista es de noviembre de 2026. Una versión nueva puede resolver alguno: fijate en sus notas.
 
 - Una elección no se puede editar desde la app después de crearla: revisá los días y las listas antes de «Crear la elección».
-- A una persona del equipo no se le puede cambiar la tarea, ni darle una segunda: hay que sacarla y sumarla de nuevo.
+- A una persona del equipo no se le puede cambiar la tarea, ni darle una segunda: hay que sacarla y sumarla de nuevo. Por eso, «Ver las
+  categorías sensibles» todavía no sirve: necesita ir junto con «Anotar quién nos vota».
 - De las mesas se puede cambiar solo el nombre y dónde quedan.
 - No hay una vista con todas las mesas a la vez para el escrutinio: se revisa mesa por mesa.
 - Cerrar la elección no le corta al fiscal el acceso al padrón de su mesa.
