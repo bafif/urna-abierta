@@ -452,8 +452,11 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { created: needed };
   });
 
-  app.put<{ Params: { table: string }; Body: { name?: unknown; place?: unknown; unit?: unknown; fiscal?: unknown } }>('/api/tables/:table', { preHandler: manageElection }, async (request) => {
+  app.put<{ Params: { table: string }; Body: { name?: unknown; place?: unknown; unit?: unknown; fiscal?: unknown } }>('/api/tables/:table', { preHandler: manageElection }, async (request, reply) => {
     const { place, unit, fiscal } = request.body ?? {};
+    const election = (await pool.query('SELECT election_id FROM polling_tables WHERE id = $1', [request.params.table])).rows[0]?.election_id;
+    if (!election) return reply.code(404).send({ error: 'not_found' });
+    if (await closedElection(pool, election)) return reply.code(409).send({ error: 'election_closed' });
     const name = text(request.body?.name, 80);
     await pool.query('UPDATE polling_tables SET name = COALESCE($2, name), place = COALESCE($3, place), unit_id = COALESCE($4, unit_id) WHERE id = $1', [request.params.table, name, typeof place === 'string' ? place : null, typeof unit === 'string' ? unit : null]);
     if (name || typeof place === 'string' || typeof unit === 'string') await audit(pool, request.actor, 'table.changed', request.params.table, { name: Boolean(name), place: typeof place === 'string', unit: typeof unit === 'string' ? unit : undefined });
@@ -480,6 +483,9 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.post<{ Params: { id: string }; Body: { name?: unknown } }>('/api/elections/:id/units', { preHandler: manageElection }, async (request, reply) => {
     const name = text(request.body?.name, 120);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
+    const closed = await closedElection(pool, request.params.id);
+    if (closed === null) return reply.code(404).send({ error: 'not_found' });
+    if (closed) return reply.code(409).send({ error: 'election_closed' });
     const id = randomUUID();
     await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [id, request.params.id, name]);
     await audit(pool, request.actor, 'unit.created', id, { election: request.params.id });

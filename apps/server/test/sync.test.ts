@@ -485,13 +485,20 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(rows.some((row) => row.id === 'p-1')).toBe(false);
       expect(rows.filter((row) => row.id.startsWith('x-'))).toEqual([expect.objectContaining({ full_name: 'Borrado a pedido', document: null })]);
 
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/tables/propose`, { size: 10 })).json().created).toBe(1);
+      const mesa = (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [id])).rows[0].id as string;
       for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
       expect((await upload(id, file)).json().error).toBe('election_closed');
       expect((await upload(id, file, true)).statusCode).toBe(409);
       expect((await call('coordinacion', 'POST', `/api/elections/${id}/tables/propose`, { size: 10 })).statusCode).toBe(409);
       expect((await call('coordinacion', 'PUT', `/api/elections/${id}/electors/p-2`, { full_name: 'Otra, Eva' })).statusCode).toBe(409);
+      // Nor its tables or districts: who watched where stays as it was.
+      expect((await call('coordinacion', 'PUT', `/api/tables/${mesa}`, { name: 'Otra mesa' })).statusCode).toBe(409);
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/units`, { name: 'Distrito tarde' })).statusCode).toBe(409);
+      expect((await pool.query('SELECT name FROM polling_tables WHERE id = $1', [mesa])).rows[0].name).toBe('Mesa 1');
       await call('coordinacion', 'POST', `/api/elections/${id}/purge`);
       expect((await upload(id, file)).statusCode).toBe(409);
+      expect((await call('coordinacion', 'PUT', `/api/tables/${mesa}`, { place: 'Otra escuela' })).statusCode).toBe(409);
       expect((await pool.query(`SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND full_name <> ''`, [id])).rows[0].n).toBe(0);
     });
 
