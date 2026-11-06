@@ -1,10 +1,11 @@
+import { execFileSync } from 'node:child_process';
 import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { awsCloud, signAws } from '../src/clouds/aws.ts';
 import { googleCloud, signGoogleAssertion } from '../src/clouds/google.ts';
 import { oracleCloud, signOracle } from '../src/clouds/oracle.ts';
 import { uploadTheme, waitForHealth } from '../src/job.ts';
-import { newSecrets, renderScript, siteFor } from '../src/settings.ts';
+import { newSecrets, renderScript, siteFor, withoutComments } from '../src/settings.ts';
 
 const noWait = async () => undefined;
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
@@ -19,6 +20,15 @@ describe('the script that installs a server', () => {
     expect(script).toContain(settings.secrets.recoveryKey);
     expect(script).toContain('URNA_SCRIPT');
     expect(Buffer.byteLength(script)).toBeLessThan(16 * 1024);
+  });
+
+  it('leaves out comment lines, but keeps the help of urna and what goes inside files', () => {
+    const script = withoutComments(['#!/bin/sh', '# help line', 'set -eu', '# a note', '  # an indented note', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays'].join('\n'));
+    expect(script.split('\n')).toEqual(['#!/bin/sh', '# help line', 'set -eu', 'cat >f <<EOF', '# inside the file', 'EOF', 'echo ok # stays']);
+    const block = renderScript(settings);
+    expect(block).toContain('urna estado');
+    expect(block).toContain('# Fotos en un almacenamiento S3');
+    expect(execFileSync('sh', ['-n'], { input: block }).toString()).toBe('');
   });
 
   it('never lets a strange value into the script', () => {

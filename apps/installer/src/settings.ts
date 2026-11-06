@@ -79,6 +79,31 @@ function assign(name: string, value: string): string {
   return `${name}=${value}`;
 }
 
+/**
+ * A script without its comment lines, so that the whole block fits in what clouds accept. The block at the top stays,
+ * because `urna` prints it as its help, and so does every here-document, because those lines are a file's content.
+ */
+export function withoutComments(script: string): string {
+  const kept: string[] = [];
+  let hereEnd: string | null = null;
+  let top = true;
+  for (const line of script.split('\n')) {
+    if (hereEnd !== null) {
+      kept.push(line);
+      if (line.trim() === hereEnd) hereEnd = null;
+      continue;
+    }
+    const comment = /^\s*#/.test(line);
+    if (top && comment) { kept.push(line); continue; }
+    top = false;
+    if (comment) continue;
+    kept.push(line);
+    const here = /<<-?\s*['"]?(\w+)['"]?/.exec(line);
+    if (here) hereEnd = here[1]!;
+  }
+  return kept.join('\n');
+}
+
 /** One block that does the whole installation: what runs over SSH, and what gets pasted when creating a server. */
 export function renderScript({ secrets, site, cert, theme, images: chosen = images(), imagesTar, extraEnv = [] }: ScriptSettings): string {
   if (extraEnv.some((line) => !/^[A-Z_]+=/.test(line) || !SAFE_VALUE.test(line.slice(line.indexOf('=') + 1)))) throw new Error('unsafe extra setting');
@@ -102,10 +127,10 @@ export function renderScript({ secrets, site, cert, theme, images: chosen = imag
     ...settings,
     'write_urna() {',
     "cat <<'URNA_SCRIPT'",
-    assetText('urna').trimEnd(),
+    withoutComments(assetText('urna')).trimEnd(),
     'URNA_SCRIPT',
     '}',
-    assetText('instalar.sh').trimEnd(),
+    withoutComments(assetText('instalar.sh')).trimEnd(),
     '',
   ].join('\n');
 }
