@@ -32,6 +32,7 @@ html, body { margin: 0; height: 100%; }
 .campos { display: flex; flex-direction: column; gap: 10px; }
 .doble { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .problema { margin: 0; color: var(--peligro-texto); background: var(--peligro-fondo); padding: 10px 14px; border-radius: var(--radio); font-weight: 600; }
+.detalle { font-family: ui-monospace, monospace; font-size: 14px; overflow-wrap: anywhere; }
 .bloque { width: 100%; height: 200px; padding: 12px; font-family: ui-monospace, monospace; font-size: 13px; background: var(--superficie); color: var(--texto); border: 2px solid var(--linea); border-radius: var(--radio); resize: vertical; }
 .progreso { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .progreso li { display: flex; gap: 10px; align-items: center; }

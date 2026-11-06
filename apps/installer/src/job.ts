@@ -6,7 +6,7 @@ import { sleep, type Cloud } from './clouds/common.ts';
 import { googleCloud } from './clouds/google.ts';
 import { oracleCloud } from './clouds/oracle.ts';
 import { startLocal } from './local.ts';
-import { newSecrets, renderScript, siteFor } from './settings.ts';
+import { newSecrets, renderScript, siteFor, type Secrets } from './settings.ts';
 import { runScript, type SshTarget } from './ssh.ts';
 
 export type Where =
@@ -76,6 +76,26 @@ function cloudFor(where: Extract<Where, { kind: 'cloud' }>): Cloud {
   return googleCloud(where.credentials);
 }
 
+/** A cloud installation that failed. `left` is what could not be deleted afterwards: empty when nothing stays charging. */
+export class CloudFailure extends Error {
+  readonly left: string[];
+  constructor(message: string, left: string[]) {
+    super(message);
+    this.left = left;
+  }
+}
+
+/** Creates the server, and if any step fails, deletes what was created, so that trying again starts clean. */
+export async function createInCloud(cloud: Cloud, secrets: Secrets, theme: string, log: (line: string) => void): Promise<string> {
+  try {
+    const place = siteFor(await cloud.reserveAddress(log));
+    await cloud.createServer(renderScript({ secrets, site: place.site, cert: place.cert, theme }), log);
+    return place.url;
+  } catch (error) {
+    throw new CloudFailure((error as Error).message, await cloud.cleanUp(log));
+  }
+}
+
 function rememberPreferences(request: InstallRequest): void {
   try {
     const folder = process.env.URNA_CONFIG_DIR ?? join(homedir(), '.urna-abierta');
@@ -118,11 +138,7 @@ export async function install(request: InstallRequest, log: (line: string) => vo
       if (line.startsWith('urna-abierta: ')) log(`server:${line.slice('urna-abierta: '.length)}`);
     });
   } else {
-    const cloud = cloudFor(where);
-    const address = await cloud.reserveAddress(log);
-    const place = siteFor(address);
-    url = place.url;
-    await cloud.createServer(renderScript({ secrets, site: place.site, cert: place.cert, theme }), log);
+    url = await createInCloud(cloudFor(where), secrets, theme, log);
   }
   const healthy = await waitForHealth(url, log);
   if (!healthy) log('slow');

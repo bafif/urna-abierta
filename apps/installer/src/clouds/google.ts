@@ -1,5 +1,5 @@
 import { createSign, randomBytes } from 'node:crypto';
-import { sleep, type Cloud, type Log } from './common.ts';
+import { createdResources, sleep, type Cloud, type Log } from './common.ts';
 
 /** The JSON file of a service account, as Google hands it over. */
 export interface GoogleCredentials {
@@ -25,6 +25,7 @@ export function googleCloud(credentials: GoogleCredentials, request: typeof fetc
   const suffix = randomBytes(3).toString('hex');
   let token = '';
   let reserved = '';
+  const resources = createdResources();
 
   async function authorize(): Promise<void> {
     if (token) return;
@@ -64,33 +65,52 @@ export function googleCloud(credentials: GoogleCredentials, request: typeof fetc
     throw new Error('google_operation_timeout');
   }
 
+  /** Deletes and waits for it. What is already gone counts as deleted. */
+  async function remove(address: string): Promise<void> {
+    try {
+      await finished(await call('DELETE', address));
+    } catch (error) {
+      if (!/not found/i.test((error as Error).message)) throw error;
+    }
+  }
+
   return {
     async reserveAddress(log: Log) {
       log('address');
       reserved = `urna-abierta-${suffix}`;
-      await finished(await call('POST', `${project}/regions/${REGION}/addresses`, { name: reserved }));
+      const name = reserved;
+      const creating = await call('POST', `${project}/regions/${REGION}/addresses`, { name });
+      // From here on it may exist even if the operation fails. It is charged by the hour, used or not.
+      resources.add(`address ${name}`, () => remove(`${project}/regions/${REGION}/addresses/${name}`));
+      await finished(creating);
       return (await call('GET', `${project}/regions/${REGION}/addresses/${reserved}`)).address;
     },
 
     async createServer(script: string, log: Log) {
       log('network');
-      await finished(await call('POST', `${project}/global/firewalls`, {
+      const firewall = await call('POST', `${project}/global/firewalls`, {
         name: `urna-abierta-${suffix}`,
         network: 'global/networks/default',
         allowed: [{ IPProtocol: 'tcp', ports: ['22', '80', '443'] }, { IPProtocol: 'udp', ports: ['443'] }],
         sourceRanges: ['0.0.0.0/0'],
         targetTags: ['urna-abierta'],
-      }));
+      });
+      resources.add(`firewall urna-abierta-${suffix}`, () => remove(`${project}/global/firewalls/urna-abierta-${suffix}`));
+      await finished(firewall);
       log('server');
       const address = (await call('GET', `${project}/regions/${REGION}/addresses/${reserved}`)).address;
-      await finished(await call('POST', `${project}/zones/${ZONE}/instances`, {
+      const instance = await call('POST', `${project}/zones/${ZONE}/instances`, {
         name: `urna-abierta-${suffix}`,
         machineType: `zones/${ZONE}/machineTypes/e2-micro`,
         tags: { items: ['urna-abierta'] },
         disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: 'projects/ubuntu-os-cloud/global/images/family/ubuntu-2404-lts-amd64', diskSizeGb: '30', diskType: `zones/${ZONE}/diskTypes/pd-standard` } }],
         networkInterfaces: [{ network: 'global/networks/default', accessConfigs: [{ type: 'ONE_TO_ONE_NAT', natIP: address }] }],
         metadata: { items: [{ key: 'user-data', value: script }] },
-      }));
+      });
+      resources.add(`instance urna-abierta-${suffix}`, () => remove(`${project}/zones/${ZONE}/instances/urna-abierta-${suffix}`));
+      await finished(instance);
     },
+
+    cleanUp: (log: Log) => resources.cleanUp(log),
   };
 }
