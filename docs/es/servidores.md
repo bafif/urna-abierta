@@ -130,7 +130,8 @@ cierra la cuenta, se pierden con él. Para tener siempre una afuera:
   `backups/` dentro de la de las fotos (`fotos/backups/`, si no cambiaste `URNA_S3_PREFIX`), y ahí quedan las 28 más nuevas. Siguen
   cifradas con la llave de recuperación: el proveedor guarda algo que no puede abrir.
   Para borrar las viejas, la clave de acceso necesita permiso de listar el bucket; sin él se mandan igual, pero se acumulan. Conviene un
-  bucket de otro proveedor que el del servidor, así la copia sobrevive si se cierra esa cuenta.
+  bucket de otro proveedor que el del servidor, así la copia sobrevive si se cierra esa cuenta. Una copia de más de 5 GB (por las fotos
+  que quedaron en el disco de antes del bucket) no entra de una vez: queda solo en el servidor, y `urna estado` lo marca.
 
 `urna estado` dice si la última copia llegó al bucket. Sin S3, lo recuerda con una línea `aviso`: las copias quedan solo en ese
 servidor.

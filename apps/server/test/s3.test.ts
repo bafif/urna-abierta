@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EMPTY_SHA256, s3Client, signS3, uriEncode, type S3Signing } from '../src/s3.ts';
+import { EMPTY_SHA256, MAX_PUT_BYTES, s3Client, signS3, uriEncode, type S3Signing } from '../src/s3.ts';
 import { fakeS3 } from './fake-s3.ts';
 
 // The examples of AWS's page "Signature Calculations for the Authorization Header: Transferring
@@ -93,6 +96,41 @@ describe('the S3 client', () => {
       await expect(client.list('backups/')).rejects.toThrow(/LIST: 403 AccessDenied/);
     } finally {
       await server.close();
+    }
+  });
+
+  it('sends a file from disk as a stream with its length, reads it again on each try, and refuses one over 5 GB', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'urna-s3-archivo-'));
+    const server = await fakeS3(credentials);
+    try {
+      const file = join(folder, 'copia.tar.gpg');
+      const content = Buffer.alloc(3 * 1024 * 1024 + 7, 'cifrado');
+      await writeFile(file, content);
+      const sent: { body: unknown; length: string | null }[] = [];
+      const watched: typeof fetch = (address, init) => {
+        sent.push({ body: init?.body, length: new Headers(init?.headers).get('content-length') });
+        return fetch(address, init);
+      };
+      const client = s3Client({ ...credentials, endpoint: server.endpoint, bucket: 'fotos-prueba' }, { fetch: watched, wait: async () => undefined });
+      server.failNext(1);
+      await client.putFile('fotos/backups/copia.tar.gpg', file, 'application/pgp-encrypted');
+      expect(server.objects.get('/fotos-prueba/fotos/backups/copia.tar.gpg')?.equals(content)).toBe(true);
+      expect(server.badSignatures).toBe(0);
+      expect(sent).toHaveLength(2);
+      for (const each of sent) {
+        expect(each.body).toBeInstanceOf(ReadableStream);
+        expect(each.length).toBe(String(content.length));
+      }
+      // Sparse: it takes no room, and it is refused before anything is read or sent.
+      const huge = join(folder, 'enorme.tar.gpg');
+      const handle = await open(huge, 'w');
+      await handle.truncate(MAX_PUT_BYTES + 1);
+      await handle.close();
+      await expect(client.putFile('fotos/backups/enorme.tar.gpg', huge)).rejects.toThrow(/5\.0 GB.*no toma más de 5 GB/);
+      expect(sent).toHaveLength(2);
+    } finally {
+      await server.close();
+      await rm(folder, { recursive: true, force: true });
     }
   });
 

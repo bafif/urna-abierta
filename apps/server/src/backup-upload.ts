@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { s3Client, type S3Client } from './s3.ts';
@@ -35,8 +34,9 @@ export async function uploadBackup(client: S3Client, file: string, keep: number,
   const name = basename(file);
   if (!NAME.test(name)) throw new Error(`${name} no es una copia de Urna Abierta.`);
   const key = `${folder}${name}`;
-  // With the photos in the bucket, a backup is the database and little else: it fits in memory.
-  await client.put(key, await readFile(file), 'application/pgp-encrypted');
+  // From the disk, a piece at a time: the photos taken before the bucket stay in every backup, and may weigh more than
+  // the memory of a small server.
+  await client.putFile(key, file, 'application/pgp-encrypted');
   log.info(`copia mandada al bucket: ${key}`);
   // It got there: from here on, a problem only leaves old copies behind. Only copies right in this folder count:
   // a folder inside it belongs to another installation.
