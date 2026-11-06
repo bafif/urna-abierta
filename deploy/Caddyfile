@@ -1,6 +1,9 @@
 {
 	admin off
 	skip_install_trust
+	# A browser that opens a bare IP address names no site, and behind a cloud's NAT the machine does not have
+	# that address either: without this, it gets no certificate. `urna` passes the address of the site.
+	default_sni {$URNA_SNI:localhost}
 }
 
 {$URNA_SITE::80} {
