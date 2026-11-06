@@ -678,7 +678,9 @@ describe.skipIf(!url)('against a real Postgres', () => {
 
     it('a database from before the random ids gets them, and the marks already sent are renamed', async () => {
       await pool.query(`UPDATE electors SET id = 'd-' || document WHERE table_id = $1`, [table]);
+      // As the database was before 0003: without the column, and without having run it.
       await pool.query('ALTER TABLE electors DROP COLUMN public_id');
+      await pool.query('DELETE FROM schema_migrations WHERE version >= 3');
       const old = operation(table, 1, 'd-99000001');
       await pool.query(`INSERT INTO operations (id, table_id, seq, type, device, device_seq, device_time, payload) VALUES ($1, $2, 1, 'voter.marked', 'd-1', 1, now(), $3)`, [old.id, table, JSON.stringify(old.payload)]);
       await migrate(pool);
@@ -1112,8 +1114,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
         const { id, mesa } = await load(dni);
         await Promise.all([push('coordinacion', mesa, [{ ...operation(mesa, round + 1), payload: { elector: `d-${dni}` } }]), call('coordinacion', 'DELETE', `/api/persons/${id}/d-${dni}`)]);
         expect(await left(mesa, dni), `erasure, round ${round}`).toBe(0);
-        // The mark counts once, under the new id, whichever came first.
-        expect((await pool.query(`SELECT count(*)::int AS n FROM operations o JOIN electors x ON x.id = o.payload->>'elector' WHERE o.table_id = $1`, [mesa])).rows[0].n).toBe(1);
+        // The mark counts once, under the random id, whichever came first.
+        expect((await pool.query(`SELECT count(*)::int AS n FROM operations o JOIN electors x ON x.public_id = o.payload->>'elector' WHERE o.table_id = $1`, [mesa])).rows[0].n).toBe(1);
       }
       for (let round = 0; round < 8; round += 1) {
         const dni = `9931${String(round).padStart(4, '0')}`;
@@ -1140,8 +1142,10 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await pool.query(`UPDATE electors SET full_name = '', search = '', document = NULL WHERE election_id = $1`, [closed.id]);
       await pool.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [closed.id]);
 
-      await migrate(pool);
-      await migrate(pool);
+      // As a database before 0004: the server runs it, and the erasures that need the field key, once.
+      await pool.query('DELETE FROM schema_migrations WHERE version >= 4');
+      expect((await migrate(pool)).at(0)).toBe(4);
+      expect(await migrate(pool)).toEqual([]);
       let dump = '';
       for (const name of ['electors', 'operations']) dump += (await pool.query(`SELECT coalesce(string_agg(row_to_json(t)::text, E'\\n'), '') AS rows FROM ${name} t`)).rows[0].rows;
       expect(dump).not.toContain('99320001');
