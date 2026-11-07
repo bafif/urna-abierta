@@ -109,6 +109,9 @@
 {:else}
   <Pantalla ojo={formatDay(app.today)} titulo={title} bajada={subtitle} desliza>
     <Stations steps={stations} />
+    {#if app.movedTo}
+      <p class="resultado bien" role="status" data-testid="moved"><Ic name="tilde" />{t('plan.moved', { table: app.movedTo })}</p>
+    {/if}
     {#if app.correctionSaved}
       <p class="resultado bien" role="status" data-testid="correction-saved"><Ic name="tilde" />{chief ? t('correct.saved', { name: chief }) : t('correct.saved.noName')}</p>
     {/if}

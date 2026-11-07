@@ -193,6 +193,8 @@ class AppState {
   clockOffset = $state(0);
   /** A correction was just saved: the plan says so for a moment. */
   correctionSaved = $state(false);
+  /** The table this phone was moved to, prepared by itself: the plan says why it changed. */
+  movedTo = $state<string | null>(null);
   private correctionTimer: ReturnType<typeof setTimeout> | undefined;
   /** The roll of the table changed on the server, and the phone already has the new one. */
   rollUpdated = $state(false);
@@ -396,7 +398,14 @@ class AppState {
     const lastDay = me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
     const timeZone = me?.table ? me.table.timeZone : await this.db.getMeta<string>('timeZone');
     const roll = { tableId: this.tableId, reached: reached && me !== null, assigned: me?.table?.id, lastDay, hoursKept: me?.security.localHoursAfterClose, timeZone, clockOffset: this.clockOffset };
-    if (rollCanGo(roll)) await this.wipe();
+    if (!rollCanGo(roll)) return;
+    // Moved to another table: the old roll goes, and the new one is prepared right away.
+    const moved = roll.reached && roll.assigned && roll.assigned !== roll.tableId ? me?.table : null;
+    await this.wipe();
+    if (moved) {
+      this.movedTo = moved.name;
+      await this.prepare().catch(() => undefined);
+    }
   }
 
   private async wipe(): Promise<void> {

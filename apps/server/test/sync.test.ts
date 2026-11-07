@@ -690,6 +690,24 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await pool.query('SELECT count(*)::int AS n FROM elections WHERE id = $1', [fresh])).rows[0].n).toBe(0);
     });
 
+    it('someone on the team changes name and table, loses a task, and a lost phone stops working while they stay', async () => {
+      const me = async () => (await call('fiscal', 'GET', '/api/me')).json();
+      const { user } = await me();
+      const person = (await call('coordinacion', 'GET', '/api/users')).json().users.find((found: { id: string }) => found.id === user.id);
+      const task = person.roles.find((found: { role: string }) => found.role === 'fiscal');
+      expect(task).toMatchObject({ table, tableName: expect.any(String), election: demo.election });
+      expect((await call('coordinacion', 'PUT', `/api/users/${user.id}`, { name: 'Nombre Nuevo', phone: '351 555 0000' })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'PUT', `/api/users/${user.id}/roles/${task.id}`, { table: demo.tables[1]!.table })).statusCode).toBe(200);
+      expect(await me()).toMatchObject({ user: { name: 'Nombre Nuevo' }, table: { id: demo.tables[1]!.table } });
+      expect((await call('jefe', 'PUT', `/api/users/${user.id}`, { name: 'Otro' })).statusCode).toBe(403);
+      const lost = (await call('coordinacion', 'POST', `/api/users/${user.id}/lost-phone`)).json();
+      expect(typeof lost.invitation).toBe('string');
+      expect((await call('fiscal', 'GET', '/api/me')).statusCode).toBe(401);
+      expect((await call('coordinacion', 'DELETE', `/api/users/${user.id}/roles/${task.id}`)).statusCode).toBe(200);
+      const after = (await call('coordinacion', 'GET', '/api/users')).json().users.find((found: { id: string }) => found.id === user.id);
+      expect(after.roles).toEqual([]);
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');

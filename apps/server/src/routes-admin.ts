@@ -220,9 +220,11 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     await auditView(pool, request.actor, 'users.viewed');
     const users = await pool.query(
       `SELECT u.id, u.name, u.phone,
-              COALESCE(json_agg(json_build_object('role', a.role, 'table', a.table_id, 'unit', a.unit_id)) FILTER (WHERE a.id IS NOT NULL), '[]') AS roles,
-              EXISTS (SELECT 1 FROM devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL) AS joined
-       FROM users u LEFT JOIN role_assignments a ON a.user_id = u.id
+              COALESCE(json_agg(json_build_object('id', a.id, 'role', a.role, 'table', a.table_id, 'tableName', t.name, 'unit', a.unit_id, 'unitName', un.name,
+                'election', COALESCE(t.election_id, un.election_id, a.election_id), 'days', a.days) ORDER BY a.created_at) FILTER (WHERE a.id IS NOT NULL), '[]') AS roles,
+              EXISTS (SELECT 1 FROM devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL) AS joined,
+              (SELECT min(d.created_at) FROM devices d WHERE d.user_id = u.id) AS joined_at
+       FROM users u LEFT JOIN role_assignments a ON a.user_id = u.id LEFT JOIN polling_tables t ON t.id = a.table_id LEFT JOIN units un ON un.id = a.unit_id
        WHERE u.removed_at IS NULL GROUP BY u.id ORDER BY u.created_at`,
     );
     return { users: users.rows };
@@ -258,6 +260,50 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!allowed) return reply.code(403).send({ error: 'forbidden' });
     await audit(pool, request.actor, 'invitation.created', request.params.id);
     return { invitation: await createInvitation(pool, request.params.id, request.actor) };
+  });
+
+  /** Their name or their phone, as the team knows them. */
+  app.put<{ Params: { id: string }; Body: { name?: unknown; phone?: unknown } }>('/api/users/:id', { preHandler: manageUsers }, async (request, reply) => {
+    const name = text(request.body?.name, 120);
+    if (!name) return reply.code(400).send({ error: 'invalid_name' });
+    const changed = await pool.query('UPDATE users SET name = $2, phone = $3 WHERE id = $1 AND removed_at IS NULL', [request.params.id, name, storedPhone(request.body?.phone)]);
+    if (!changed.rowCount) return reply.code(404).send({ error: 'not_found' });
+    forgetActors();
+    await audit(pool, request.actor, 'user.changed', request.params.id);
+    return { ok: true };
+  });
+
+  /** Another table or district for one of their tasks. A phone that had the old table prepares the new one by itself. */
+  app.put<{ Params: { id: string; assignment: string }; Body: { table?: unknown; unit?: unknown } }>('/api/users/:id/roles/:assignment', { preHandler: manageUsers }, async (request, reply) => {
+    const { table, unit } = request.body ?? {};
+    if (typeof table !== 'string' && typeof unit !== 'string') return reply.code(400).send({ error: 'invalid_request' });
+    const changed = await pool.query(
+      `UPDATE role_assignments SET table_id = COALESCE($3, table_id), unit_id = COALESCE($4, unit_id) WHERE id::text = $2 AND user_id::text = $1`,
+      [request.params.id, request.params.assignment, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null],
+    );
+    if (!changed.rowCount) return reply.code(404).send({ error: 'not_found' });
+    forgetActors();
+    await audit(pool, request.actor, 'role.changed', request.params.id, { table: typeof table === 'string' ? table : undefined, unit: typeof unit === 'string' ? unit : undefined });
+    return { ok: true };
+  });
+
+  app.delete<{ Params: { id: string; assignment: string } }>('/api/users/:id/roles/:assignment', { preHandler: manageUsers }, async (request, reply) => {
+    const removed = await pool.query('DELETE FROM role_assignments WHERE id::text = $2 AND user_id::text = $1 RETURNING role', [request.params.id, request.params.assignment]);
+    if (!removed.rowCount) return reply.code(404).send({ error: 'not_found' });
+    forgetActors();
+    await audit(pool, request.actor, 'role.removed', request.params.id, { role: removed.rows[0].role });
+    return { ok: true };
+  });
+
+  /** A lost phone stops working the next time it connects, and the person stays in the team, with a new invitation if this one may give it. */
+  app.post<{ Params: { id: string } }>('/api/users/:id/lost-phone', { preHandler: manageUsers }, async (request, reply) => {
+    const found = await pool.query('SELECT 1 FROM users WHERE id::text = $1 AND removed_at IS NULL', [request.params.id]);
+    if (!found.rowCount) return reply.code(404).send({ error: 'not_found' });
+    await pool.query('UPDATE devices SET revoked_at = now() WHERE user_id::text = $1 AND revoked_at IS NULL', [request.params.id]);
+    forgetActors();
+    await audit(pool, request.actor, 'user.phone_lost', request.params.id);
+    const invite = can(request.actor, 'team.invite') && (await mayInvite(pool, request.actor, request.params.id));
+    return invite ? { invitation: await createInvitation(pool, request.params.id, request.actor) } : {};
   });
 
   /** Takes someone out: their phones stop working the next time they connect. */
