@@ -41,7 +41,7 @@ It asks three questions and does the rest.
 | Option | What you need |
 |---|---|
 | Create a new server | An account on Oracle Cloud, AWS or Google Cloud. [This is how to create it](servers.md) |
-| I already have a server | Ubuntu or Debian, its address and an SSH key of a user with passwordless `sudo` |
+| I already have a server | Ubuntu or Debian, its address and an SSH key of a user with passwordless `sudo`, or root's password: it is only for getting in the first time, and then the server stops taking passwords |
 | Paste a text | Paste a block when creating the server, without giving the installer any credential |
 | Try it on this computer | Podman or Docker running. To look at it or run a drill: [with phones](#trying-it-with-phones-without-a-server) |
 
@@ -52,7 +52,7 @@ see [Loading the roll](#loading-the-roll).
 **3. How do you want it to look?** You choose one of the themes, seeing them first in light and dark. Each person can change it later on
 their phone. You can also [make your own](themes.md) and load it here, by dragging the file.
 
-At the end it gives you your server's address and a recovery key for the backups, and opens the app. An assistant then continues with
+At the end it gives you your server's address, a recovery key for the backups and the access file, with the key to get into the server and how to update it or restore a copy. Once you tick «I saved the key», it opens the app. An assistant then continues with
 the party, the team and the first election: [Your first election](first-election.md) goes through it.
 
 **Keep that key.** It is the only thing that opens your backups, and it cannot be generated again.

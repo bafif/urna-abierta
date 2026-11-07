@@ -7,6 +7,7 @@ import { CloudFailure, install, uploadTheme, waitForHealth, type InstallRequest,
 import { findEngine } from './local.ts';
 import { siteFor, VERSION } from './settings.ts';
 import { checkSsh } from './ssh.ts';
+import { accessFile } from './access.ts';
 
 /**
  * The installer is a small server that only this computer can reach, and its screens open in the
@@ -60,7 +61,28 @@ function openBrowser(url: string): void {
 
 async function api(path: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (path === 'state') return send(response, 200, { version: VERSION, engine: await findEngine() });
-  if (path === 'job') return send(response, 200, job ?? { lines: [], result: null, problem: null, left: null, finished: false });
+  if (path === 'job') {
+    if (!job) return send(response, 200, { lines: [], result: null, problem: null, left: null, finished: false });
+    const access = job.result?.access;
+    return send(response, 200, access ? { ...job, result: { ...job.result, access: { ...access, key: undefined } } } : job);
+  }
+  if (path === 'access') {
+    // A pasted server says its address after the installation: the screen passes it, checked like any other.
+    const access = job?.result?.access;
+    if (!access) return send(response, 404, { error: 'no_access' });
+    const query = new URL(request.url ?? '', 'http://127.0.0.1').searchParams;
+    let address = access.address;
+    try {
+      if (!address && query.get('address')) address = siteFor(query.get('address')!).url;
+    } catch {
+      // Without an address, the file says where it goes.
+    }
+    const language = query.get('lang') === 'en' ? 'en' : 'es';
+    const file = accessFile({ ...access, address, setupLink: access.setupLink || (address ? `${address}/#setup=${job!.result!.setupCode}` : '') }, language);
+    response.writeHead(200, { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="urna-abierta-acceso.zip"', 'cache-control': 'no-store' });
+    response.end(file);
+    return;
+  }
 
   if (request.method !== 'POST') return send(response, 405, { error: 'post_only' });
   const body = await bodyOf(request);
@@ -76,7 +98,8 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
     try {
       return send(response, 200, { result: await checkSsh(body.target) });
     } catch (error) {
-      return send(response, 200, { result: 'cannot_connect', detail: (error as Error).message });
+      const { message } = error as Error;
+      return send(response, 200, { result: message === 'host_changed' ? 'host_changed' : 'cannot_connect', detail: message });
     }
   }
   if (path === 'install') {
@@ -110,6 +133,14 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
     const sent = !themeToSend || (await uploadTheme(place.url, job?.result?.setupCode ?? '', themeToSend));
     themeToSend = null;
     return send(response, 200, { result: 'ok', url: place.url, themeFailed: !sent });
+  }
+  if (path === 'check-again') {
+    // The address that did not answer in time: once more, briefly.
+    const address = job?.result?.address;
+    if (!address) return send(response, 404, { error: 'no_address' });
+    const answered = await waitForHealth(address, () => undefined, 8_000);
+    if (answered && job?.result) job.result.answered = true;
+    return send(response, 200, { answered });
   }
   if (path === 'open') {
     if (typeof body.url !== 'string' || !/^https?:\/\//.test(body.url)) return send(response, 400, { error: 'bad_url' });

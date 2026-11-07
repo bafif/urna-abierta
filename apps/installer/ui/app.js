@@ -57,8 +57,26 @@
       'ssh.key': 'Llave privada SSH',
       'ssh.bad_address': 'Esa dirección no parece válida.',
       'ssh.no_sudo': 'Entramos, pero ese usuario no puede actuar como administrador sin contraseña (sudo).',
-      'ssh.cannot_connect': 'No pudimos entrar. Fijate la dirección, el usuario y la llave.',
+      'ssh.cannot_connect': 'No pudimos entrar. Fijate la dirección, el usuario y la llave o la contraseña.',
       'ssh.checking': 'Comprobando…',
+      'ssh.port': 'Puerto',
+      'ssh.password': 'Contraseña, si no tenés llave',
+      'ssh.password.text': 'La contraseña sirve solo para entrar esta vez: dejamos una llave en el servidor, que queda en el archivo de acceso, y el servidor deja de aceptar contraseñas.',
+      'ssh.host_changed': 'La huella de ese servidor cambió desde la última vez. Puede ser un servidor nuevo en la misma dirección, o alguien en el medio: no le mandamos nada.',
+      'log.fingerprint': 'Huella del servidor: {fingerprint}',
+      'why.host_changed': 'La huella del servidor cambió desde la última vez, así que no le mandamos nada. Si lo reinstalaste, borrá esa dirección de huellas.json, en la carpeta .urna-abierta de tu usuario.',
+      'done.local.text': 'Ya podés abrirla y crear tu cuenta.',
+      'done.local': 'En este modo no hay copias de seguridad, así que no hay llave para guardar.',
+      'done.copy': 'Copiar la llave',
+      'done.copied': 'Llave copiada',
+      'done.access': 'Guardar el archivo de acceso',
+      'done.access.text': 'El archivo de acceso trae la llave y cómo entrar al servidor para actualizarlo o restaurar una copia. Guardalo en un pendrive o en un gestor de contraseñas, y no lo mandes por chat.',
+      'notYet.title': 'Tu servidor todavía no contesta',
+      'notYet.text': 'Lo creamos y arrancó, pero su dirección todavía no responde. Casi siempre es el certificado, que a veces tarda más.',
+      'notYet.what': 'Esperá unos minutos y probá de nuevo. Si sigue igual, fijate que los puertos 80 y 443 estén abiertos en tu nube.',
+      'notYet.key': 'Tu llave de recuperación ya está creada. Guardá el archivo de acceso ahora, por si cerrás esta ventana.',
+      'notYet.retry': 'Comprobar de nuevo',
+      'notYet.still': 'Todavía no contesta.',
       'text.title': 'Vas a pegar un texto',
       'text.text': 'Al final te damos un bloque. Lo pegás en el campo de inicio (user data o cloud-init) al crear un servidor con Ubuntu en la nube que quieras.',
       'local.title': 'Probar en esta computadora',
@@ -215,8 +233,26 @@
       'ssh.key': 'SSH private key',
       'ssh.bad_address': 'That address does not look valid.',
       'ssh.no_sudo': 'We got in, but that user cannot act as administrator without a password (sudo).',
-      'ssh.cannot_connect': 'We could not get in. Check the address, the user and the key.',
+      'ssh.cannot_connect': 'We could not get in. Check the address, the user and the key or the password.',
       'ssh.checking': 'Checking…',
+      'ssh.port': 'Port',
+      'ssh.password': 'Password, if you have no key',
+      'ssh.password.text': 'The password is only to get in this time: we leave a key on the server, which goes in the access file, and the server stops taking passwords.',
+      'ssh.host_changed': 'The fingerprint of that server changed since last time. It may be a new server at the same address, or someone in between: we sent it nothing.',
+      'log.fingerprint': 'Server fingerprint: {fingerprint}',
+      'why.host_changed': 'The fingerprint of the server changed since last time, so we sent it nothing. If you reinstalled it, remove that address from huellas.json, in the .urna-abierta folder of your user.',
+      'done.local.text': 'You can open it and create your account now.',
+      'done.local': 'In this mode there are no backups, so there is no key to keep.',
+      'done.copy': 'Copy the key',
+      'done.copied': 'Key copied',
+      'done.access': 'Save the access file',
+      'done.access.text': 'The access file has the key and how to get into the server to update it or restore a copy. Keep it on a USB stick or in a password manager, and do not send it over chat.',
+      'notYet.title': 'Your server does not answer yet',
+      'notYet.text': 'It was created and started, but its address does not answer yet. It is almost always the certificate, which sometimes takes longer.',
+      'notYet.what': 'Wait a few minutes and try again. If nothing changes, check that ports 80 and 443 are open in your cloud.',
+      'notYet.key': 'Your recovery key already exists. Save the access file now, in case you close this window.',
+      'notYet.retry': 'Check again',
+      'notYet.still': 'It still does not answer.',
       'text.title': 'You will paste a text',
       'text.text': 'At the end we give you a block. Paste it in the startup field (user data or cloud-init) when creating an Ubuntu server on any cloud.',
       'local.title': 'Try it on this computer',
@@ -345,6 +381,7 @@
     [/^script_failed:.*(apt|dpkg|lock)/i, 'apt'],
     [/^script_failed/, 'script'],
     [/^no_engine/, 'no_engine'],
+    [/host_changed/, 'host_changed'],
     [/^no_tunnel/, 'no_tunnel'],
     [/^Command failed: \S+ pull /, 'pull'],
     [/authentication methods failed|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|handshake|privateKey|Cannot parse/i, 'ssh'],
@@ -451,7 +488,8 @@
     },
     ssh: () => ({
       eyebrow: t('step1'), title: t('ssh.title'), text: t('ssh.text'),
-      body: `<div class="campos"><div class="doble">${field('address', t('ssh.address'))}${field('sshUser', t('ssh.user'), { value: 'ubuntu' })}</div>${field('privateKey', t('ssh.key'), { big: true })}</div>`,
+      body: `<div class="campos"><div class="doble">${field('address', t('ssh.address'))}${field('sshUser', t('ssh.user'), { value: 'ubuntu' })}</div>${field('privateKey', t('ssh.key'), { big: true })}
+        <div class="doble">${field('sshPassword', t('ssh.password'), { type: 'password' })}${field('sshPort', t('ssh.port'), { value: '22' })}</div><p class="aclara">${t('ssh.password.text')}</p></div>`,
       next: [state.busy ? 'ssh.checking' : 'next', 'sshNext'], back: 'where',
     }),
     text: () => ({ eyebrow: t('step1'), title: t('text.title'), text: t('text.text'), body: '', next: ['next', 'vision'], back: 'where' }),
@@ -483,7 +521,7 @@
       title: t('progress.title'), text: t('progress.text'),
       body: `<ul class="progreso" data-testid="progress">${(state.job?.lines ?? []).map((line, index, lines) => {
         const [kind, detail] = line.split(/:(.*)/);
-        const text = kind === 'server' ? serverLine(detail) : kind === 'pull' ? detail : t(`log.${kind}`);
+        const text = kind === 'server' ? serverLine(detail) : kind === 'pull' ? detail : kind === 'fingerprint' ? t('log.fingerprint', { fingerprint: detail }) : t(`log.${kind}`);
         if (kind === 'try') return '';
         return `<li>${index < lines.length - 1 ? icon('tilde') : '<span class="foco"></span>'}<span>${escape(text)}</span></li>`;
       }).join('')}</ul>`,
@@ -503,14 +541,36 @@
         ${state.problem ? `<p class="problema" role="alert">${escape(state.problem)}</p>` : ''}`,
       next: [state.busy ? 'paste.checking' : 'paste.check', 'checkAddress'],
     }),
-    done: () => ({
-      title: t('done.title'), text: t('done.text'),
-      body: `<div class="tarjeta llave"><span>${t('done.address')}</span><strong data-testid="address">${escape(state.result?.address)}</strong><span>${t('done.key')}</span><strong class="mono" data-testid="recovery-key">${escape(state.result?.recoveryKey)}</strong></div>
-        ${state.result?.themeFailed ? `<p class="problema" role="alert" data-testid="theme-failed">${t('done.themeFailed')}</p>` : ''}
-        <p class="aclara">${t('done.reader')} <a class="enlace ayuda-enlace" href="${READER[state.language]}" target="_blank" rel="noreferrer" data-testid="reader-link">${t('done.reader.link')}</a></p>`,
-      next: ['done.open', 'openApp'],
-    }),
+    done: () => {
+      const result = state.result ?? {};
+      if (result.answered === false && !result.local) {
+        return {
+          title: t('notYet.title'), text: t('notYet.text'),
+          body: `<div class="tarjeta llave"><span>${t('done.address')}</span><strong data-testid="address">${escape(result.address)}</strong></div>
+            <p class="aclara">${t('notYet.what')}</p>
+            ${result.access ? `<p class="aclara">${t('notYet.key')}</p>${accessLink()}` : ''}
+            ${state.problem ? `<p class="problema" role="alert">${escape(state.problem)}</p>` : ''}`,
+          next: [state.busy ? 'ssh.checking' : 'notYet.retry', 'checkAgain'],
+        };
+      }
+      // On this computer there are no backups: no key to keep.
+      const keep = !result.local;
+      return {
+        title: t('done.title'), text: keep ? t('done.text') : t('done.local.text'),
+        body: `<div class="tarjeta llave"><span>${t('done.address')}</span><strong data-testid="address">${escape(result.address)}</strong>${keep ? `<span>${t('done.key')}</span><strong class="mono" data-testid="recovery-key">${escape(result.recoveryKey)}</strong>` : ''}</div>
+          ${keep ? `<div class="acciones-llave"><button class="boton secundario" data-action="copyKey">${state.copiedKey ? t('done.copied') : t('done.copy')}</button>${result.access ? accessLink() : ''}</div>
+            ${result.access ? `<p class="aclara">${t('done.access.text')}</p>` : ''}
+            <label class="casilla"><input type="checkbox" data-check="saved" data-testid="key-saved" ${state.saved ? 'checked' : ''}><span>${t('done.saved')}</span></label>` : `<p class="aclara" data-testid="local-note">${t('done.local')}</p>`}
+          ${result.themeFailed ? `<p class="problema" role="alert" data-testid="theme-failed">${t('done.themeFailed')}</p>` : ''}
+          <p class="aclara">${t('done.reader')} <a class="enlace ayuda-enlace" href="${READER[state.language]}" target="_blank" rel="noreferrer" data-testid="reader-link">${t('done.reader.link')}</a></p>`,
+        next: ['done.open', 'openApp'], disabled: keep && !state.saved,
+      };
+    },
   };
+
+  /** The access file, made by this computer's installer: a pasted server passes the address it got. */
+  const accessLink = () =>
+    `<a class="boton secundario" data-testid="access-file" download="urna-abierta-acceso.zip" href="api/access?lang=${state.language}&address=${encodeURIComponent(state.result?.address ?? '')}">${t('done.access')}</a>`;
 
   function render() {
     const screen = SCREENS[state.screen]();
@@ -560,7 +620,13 @@
     }
   }
 
-  const sshTarget = () => ({ host: (state.form.address ?? '').trim().replace(/^https?:\/\//, ''), user: (state.form.sshUser ?? 'ubuntu').trim(), privateKey: state.form.privateKey ?? '' });
+  const sshTarget = () => ({
+    host: (state.form.address ?? '').trim().replace(/^https?:\/\//, ''),
+    port: Number(state.form.sshPort) || 22,
+    user: (state.form.sshUser ?? 'ubuntu').trim(),
+    privateKey: state.form.privateKey ?? '',
+    ...(state.form.sshPassword ? { password: state.form.sshPassword } : {}),
+  });
 
   function request() {
     const where = {
@@ -644,6 +710,16 @@
       render();
     },
     openApp: () => post('open', { url: state.result.setupLink }),
+    checkAgain: async () => {
+      state.busy = true;
+      state.problem = '';
+      render();
+      const { answered } = await post('check-again');
+      state.busy = false;
+      if (answered) state.result.answered = true;
+      else state.problem = t('notYet.still');
+      render();
+    },
   };
 
   /** A theme from a file: it is checked here and also by the server that receives it. */
@@ -706,6 +782,12 @@
     if (name) state.form[name] = event.target.value;
   });
 
+  document.addEventListener('change', (event) => {
+    if (event.target.dataset?.check !== 'saved') return;
+    state.saved = event.target.checked;
+    render();
+  });
+
   document.addEventListener('click', async (event) => {
     const button = event.target.closest('button');
     if (!button) return;
@@ -725,6 +807,11 @@
     }
     if (action === 'findEngine') {
       state.engine = (await (await fetch('api/state')).json()).engine;
+      return render();
+    }
+    if (action === 'copyKey') {
+      await navigator.clipboard.writeText(state.result.recoveryKey);
+      state.copiedKey = true;
       return render();
     }
     if (action === 'copy') {
