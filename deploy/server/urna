@@ -204,11 +204,21 @@ backup() {
   mv "$partial" "$home/copias/urna-$stamp.tar.gpg"
   # shellcheck disable=SC2012
   ls -1t "$home"/copias/urna-*.tar.gpg | tail -n +"$((keep + 1))" | while read -r old; do rm -f "$old"; done
+  # The copies made before the last purge still have the names it erased: only the ones since then stay.
+  purged=$(podman exec "$pod-db" psql -U urna -tAc "SELECT COALESCE(extract(epoch FROM max(purged_at))::bigint, 0) FROM elections" 2>/dev/null || echo 0)
+  if [ "${purged:-0}" -gt 0 ]; then
+    for old in "$home"/copias/urna-*.tar.gpg; do
+      [ "$old" = "$home/copias/urna-$stamp.tar.gpg" ] && continue
+      [ "$(stat -c %Y "$old")" -lt "$purged" ] && rm -f "$old"
+    done
+  fi
   echo "$home/copias/urna-$stamp.tar.gpg"
   # Out of the server too, when there is a bucket: a free account can close with the machine and its copies inside.
   # The server sends it, because it already has the bucket's keys. Only the path goes to standard output.
   if has_bucket; then
-    if podman exec "$pod-server" node apps/server/src/backup-upload.ts "/copias/urna-$stamp.tar.gpg" "$keep" >&2; then
+    purged_stamp=''
+    [ "${purged:-0}" -gt 0 ] && purged_stamp=$(date -u -d "@$purged" +%Y%m%d-%H%M%S)
+    if podman exec "$pod-server" node apps/server/src/backup-upload.ts "/copias/urna-$stamp.tar.gpg" "$keep" "$purged_stamp" >&2; then
       touch "$home/.copia-en-bucket"
     else
       echo "No se pudo mandar la copia al bucket $URNA_S3_BUCKET: quedó solo en este servidor." >&2

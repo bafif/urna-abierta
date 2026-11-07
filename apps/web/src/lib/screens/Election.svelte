@@ -3,7 +3,9 @@
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import Stations, { type Station } from '../components/Stations.svelte';
-  import { formatRange, t } from '../i18n.svelte.ts';
+  import { formatDay, formatRange, t } from '../i18n.svelte.ts';
+  import { daysUntil } from '../purge.ts';
+  import { app } from '../app.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
   import type { ElectionSummary } from '../types.ts';
@@ -46,7 +48,7 @@
       { text: t('election.st.fiscales'), when: e.tables && e.tables_without_fiscal ? t('election.st.fiscalesMissing', { count: e.tables_without_fiscal }) : t('election.st.fiscales.when'), state: state('fiscales'), help: t('election.st.fiscales.help') },
       { text: t('election.st.day'), when: formatRange(e.days), state: state('open', 'running'), help: now === 'open' ? t('election.st.open.help') : t('election.st.running.help') },
       { text: t('election.st.count'), when: t('election.st.count.when'), state: state('counting'), help: t('election.st.count.help') },
-      { text: t('election.st.close'), when: t('election.st.close.when'), state: state('closed'), help: t('election.st.close.help') },
+      { text: t('election.st.close'), when: e.purge_by ? t('keep.station', { date: formatDay(e.purge_by) }) : t('election.st.close.when'), state: state('closed'), help: closeHelp(e) },
     ];
   });
 
@@ -59,6 +61,14 @@
     } catch {
       failed = true;
     }
+  }
+
+  /** At the close, how long is left until the day the party chose, or that it passed. */
+  function closeHelp(e: ElectionSummary): string {
+    if (!e.purge_by || e.status === 'purgada') return t('election.st.close.help');
+    const left = daysUntil(e.purge_by, app.today);
+    if (left < 0) return t('keep.late', { date: formatDay(e.purge_by) });
+    return t('keep.left', { date: formatDay(e.purge_by), count: left });
   }
 
   async function purge() {

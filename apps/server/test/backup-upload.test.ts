@@ -46,6 +46,18 @@ describe('backups to the bucket', () => {
     }
   });
 
+  it('after a purge, only the copies made since then stay: the older ones still have the names', async () => {
+    server = await fakeS3(credentials, ['fotos-prueba']);
+    try {
+      for (const name of ['fotos/backups/urna-20270401-003000.tar.gpg', 'fotos/backups/urna-20270402-003000.tar.gpg']) server.objects.set(`/fotos-prueba/${name}`, Buffer.from('con nombres'));
+      const result = await uploadBackup(client(), await backup('urna-20270403-003000.tar.gpg', 'sin nombres'), 28, quiet, undefined, '20270402-120000');
+      expect(result.removed).toEqual(['fotos/backups/urna-20270402-003000.tar.gpg', 'fotos/backups/urna-20270401-003000.tar.gpg']);
+      expect(stored()).toEqual(['/fotos-prueba/fotos/backups/urna-20270403-003000.tar.gpg']);
+    } finally {
+      await server.close();
+    }
+  });
+
   it('two installations sharing a bucket with their own prefixes keep their own copies, and never delete the other ones', async () => {
     expect([undefined, '', 'fotos/', 'prueba', 'prueba/', 'partido/fotos/'].map(backupsFolder)).toEqual(['fotos/backups/', 'fotos/backups/', 'fotos/backups/', 'prueba/backups/', 'prueba/backups/', 'partido/fotos/backups/']);
     expect(() => backupsFolder('../otra')).toThrow(/URNA_S3_PREFIX/);

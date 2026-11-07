@@ -7,12 +7,17 @@
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
   import type { ElectionSummary } from '../types.ts';
+  import { addDays, KEEP_DAYS, type KeepChoice } from '../purge.ts';
+  import { formatDay } from '../i18n.svelte.ts';
 
   /** With `edit`, the same steps change one part of an election that exists, starting from what it had. */
-  let { edit, part }: { edit?: string; part?: 'name' | 'days' | 'lists' } = $props();
-  const STEP_OF = { name: 'kind', days: 'days', lists: 'voted' } as const;
+  let { edit, part }: { edit?: string; part?: 'name' | 'days' | 'lists' | 'keep' } = $props();
+  const STEP_OF = { name: 'kind', days: 'days', lists: 'voted', keep: 'keep' } as const;
   // svelte-ignore state_referenced_locally
-  let step = $state<'kind' | 'days' | 'voted'>(part ? STEP_OF[part] : 'kind');
+  let step = $state<'kind' | 'days' | 'voted' | 'keep'>(part ? STEP_OF[part] : 'kind');
+  /** Until when the names are kept: a month after the last day comes chosen, the recommended for every level. */
+  let keep = $state<KeepChoice>('month');
+  let keepDate = $state('');
   let status = $state('');
   let kind = $state<string | null>('estudiantil');
   let name = $state('');
@@ -36,7 +41,22 @@
     if (groups.length === 0) groups = [{ name: '', lists: '' }];
     const first = days[0];
     if (first) month = new Date(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1, 1);
+    if (election.purge_by) {
+      const last = [...days].sort().at(-1) ?? '';
+      const matching = (Object.keys(KEEP_DAYS) as (keyof typeof KEEP_DAYS)[]).find((choice) => addDays(last, KEEP_DAYS[choice]) === election.purge_by);
+      keep = matching ?? 'other';
+      keepDate = election.purge_by;
+    }
   });
+
+  const lastDay = $derived([...days].sort().at(-1) ?? '');
+  const purgeBy = $derived(keep === 'other' ? keepDate : lastDay ? addDays(lastDay, KEEP_DAYS[keep]) : '');
+  const keeps = $derived([
+    { id: 'week', title: t('keep.week'), detail: t('keep.week.text') },
+    { id: 'month', title: t('keep.month'), detail: t('keep.month.text') },
+    { id: 'quarter', title: t('keep.quarter'), detail: t('keep.quarter.text') },
+    { id: 'other', title: t('keep.other') },
+  ]);
 
   /** Only the part that was asked for goes to the server. Moving a day already voted asks first. */
   async function save() {
@@ -44,7 +64,7 @@
     if (part === 'days' && status === 'jornada' && !confirm(t('electionEdit.days.confirm'))) return;
     failed = false;
     try {
-      const body = part === 'name' ? { name: name.trim() } : part === 'days' ? { days } : { categories: categories() };
+      const body = part === 'name' ? { name: name.trim() } : part === 'days' ? { days } : part === 'keep' ? { purgeBy } : { categories: categories() };
       await session.api(`/elections/${edit}`, { method: 'PUT', body });
       nav.back();
     } catch {
@@ -96,7 +116,7 @@
   async function create() {
     failed = false;
     try {
-      const { id } = await session.api<{ id: string }>('/elections', { method: 'POST', body: { name, kind, days, categories: categories() } });
+      const { id } = await session.api<{ id: string }>('/elections', { method: 'POST', body: { name, kind, days, categories: categories(), ...(purgeBy ? { purgeBy } : {}) } });
       // The server holds the level of care the election's kind asks for while it is open: this only shows it.
       await session.refresh();
       // That level may ask this device for a second step: the start screen asks for it before anything else.
@@ -147,7 +167,7 @@
       {/if}
     {/snippet}
   </Pantalla>
-{:else}
+{:else if step === 'voted'}
   <Pantalla accion="eleccion" volver onback={edit ? undefined : () => (step = 'days')} titulo={t('election.voted.title')} bajada={t('election.voted.text')} desliza>
     {#each groups as group}
       <label class="campo"><span>{t('election.voted.category')}</span><input bind:value={group.name} placeholder={t('election.voted.categoryHint')} data-testid="category-name" /></label>
@@ -156,7 +176,23 @@
     <button class="enlace" onclick={() => groups.push({ name: '', lists: '' })}>{t('election.voted.another')}</button>
     {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
     {#snippet pie()}
-      <button class="boton primario" disabled={!ready} onclick={edit ? save : create}><Ic name="tilde" /><span>{edit ? t('save') : t('election.create')}</span></button>
+      {#if edit}
+        <button class="boton primario" disabled={!ready} onclick={save}><Ic name="tilde" /><span>{t('save')}</span></button>
+      {:else}
+        <button class="boton primario" disabled={!ready} onclick={() => (step = 'keep')}><Ic name="flecha" /><span>{t('next')}</span></button>
+      {/if}
+    {/snippet}
+  </Pantalla>
+{:else}
+  <Pantalla accion="eleccion" volver onback={edit ? undefined : () => (step = 'voted')} titulo={t('keep.title')} bajada={t('keep.text')} desliza>
+    <Options items={keeps} bind:value={keep} />
+    {#if keep === 'other'}
+      <label class="campo"><span>{t('keep.date')}</span><input type="date" min={lastDay} bind:value={keepDate} data-testid="keep-date" /></label>
+    {/if}
+    {#if purgeBy}<p class="resultado bien" data-testid="keep-when"><Ic name="tilde" />{t('keep.when', { date: formatDay(purgeBy) })}</p>{/if}
+    {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
+    {#snippet pie()}
+      <button class="boton primario" disabled={!purgeBy || purgeBy < lastDay} onclick={edit ? save : create}><Ic name="tilde" /><span>{edit ? t('save') : t('election.create')}</span></button>
     {/snippet}
   </Pantalla>
 {/if}

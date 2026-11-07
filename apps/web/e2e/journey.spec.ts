@@ -76,6 +76,7 @@ test('creating an election that asks for a second step leads to it, not to an em
   await button(page, 'Seguir').click();
   await page.getByTestId('category-name').fill('Concejales');
   await page.getByTestId('category-lists').fill('Lista Azul');
+  await button(page, 'Seguir').click();
   await button(page, 'Crear la elección').click();
 
   const secret = await page.getByTestId('totp-secret').innerText();
@@ -110,6 +111,7 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   await button(page, 'Seguir').click();
   await page.getByTestId('category-name').fill('Centro');
   await page.getByTestId('category-lists').fill('Lista Azul\nLista Verde');
+  await button(page, 'Seguir').click();
   await button(page, 'Crear la elección').click();
 
   // The roll: it shows what it understood before loading anything.

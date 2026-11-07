@@ -7,6 +7,8 @@
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
   import type { ElectionSummary } from '../types.ts';
+  import { purgeNotice } from '../purge.ts';
+  import { app } from '../app.svelte.ts';
 
   const TEAM_SKIPPED = 'urna-abierta-equipo-despues';
 
@@ -67,6 +69,15 @@
 
 {#if elections && elections.length > 0}
   <Pantalla accion="eleccion" ojo={me.party.name} titulo={t('elections.title')} desliza>
+    {#each elections as election (election.id)}
+      {@const notice = purgeNotice(election, app.today)}
+      {#if notice}
+        <button class="tarjeta alerta" data-testid="purge-notice" onclick={() => nav.go('election', { id: election.id })}>
+          <strong>{notice.left < 0 ? t('keep.notice.late', { name: election.name }) : t('keep.notice', { name: election.name, count: notice.left })}</strong>
+          <span>{t('keep.notice.see')}</span>
+        </button>
+      {/if}
+    {/each}
     <div class="tarjetas">
       {#each elections as election (election.id)}
         <button class="tarjeta eleccion" class:apagada={['cerrada', 'purgada'].includes(election.status)} data-testid="election" onclick={() => nav.go('election', { id: election.id })}>

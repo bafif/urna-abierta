@@ -723,7 +723,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       await client.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
       // What arrived after the close and nobody added: it was never counted. A late alert stays, as the chief saw it.
       await client.query('DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND quarantined AND type = ANY($2)', [id, LATE_TYPES]);
-      await client.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+      await client.query(`UPDATE elections SET status = 'purgada', purged_at = now() WHERE id = $1`, [id]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');

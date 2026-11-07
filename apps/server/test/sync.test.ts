@@ -761,6 +761,21 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('fiscal', 'GET', `/api/elections/${demo.election}/schedule`)).statusCode).toBe(403);
     });
 
+    it('the party chooses until when the names are kept, and the purge says when they went', async () => {
+      const categories = [{ id: 'c', name: 'Consejo', lists: [{ id: 'l', name: 'Lista' }] }];
+      const create = (purgeBy: string) => call('coordinacion', 'POST', '/api/elections', { name: 'Con plazo', kind: 'estudiantil', days: ['2027-05-01'], categories, purgeBy });
+      expect((await create('2027-04-01')).statusCode).toBe(400);
+      const { id } = (await create('2027-05-31')).json();
+      const listed = async () => (await call('coordinacion', 'GET', '/api/elections')).json().elections.find((found: { id: string }) => found.id === id);
+      expect((await listed()).purge_by).toBe('2027-05-31');
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { purgeBy: '2027-06-30' })).statusCode).toBe(200);
+      expect((await listed()).purge_by).toBe('2027-06-30');
+      for (const status of ['jornada', 'escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${id}/status`, { status });
+      expect((await call('coordinacion', 'POST', `/api/elections/${id}/purge`)).statusCode).toBe(200);
+      expect((await pool.query('SELECT purged_at FROM elections WHERE id = $1', [id])).rows[0].purged_at).toBeInstanceOf(Date);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { purgeBy: '2027-07-30' })).statusCode).toBe(409);
+    });
+
     it('a traffic light category turns sensitive sealing the marks it has, only the permission undoes it, and it goes only once empty', async () => {
       const { id } = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Simpatiza', color: '#1E9E5A' })).json();
       const elector = (await pool.query('SELECT id FROM electors WHERE election_id = $1 LIMIT 1', [demo.election])).rows[0].id;

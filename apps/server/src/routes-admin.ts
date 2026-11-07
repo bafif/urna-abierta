@@ -366,7 +366,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   // ---------- Elections ----------
   app.get('/api/elections', { preHandler: manageElection }, async () => {
     const rows = await pool.query(
-      `SELECT e.id, e.name, e.kind, e.days, e.status, e.categories, e.hours,
+      `SELECT e.id, e.name, e.kind, e.days, e.status, e.categories, e.hours, to_char(e.purge_by, 'YYYY-MM-DD') AS purge_by,
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id) AS people,
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id AND x.needs_review) AS to_review,
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id AND x.table_id IS NULL) AS without_table,
@@ -388,8 +388,8 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { elections: rows.rows };
   });
 
-  app.post<{ Body: { name?: unknown; kind?: unknown; days?: unknown; categories?: unknown; timeZone?: unknown } }>('/api/elections', { preHandler: manageElection }, async (request, reply) => {
-    const { kind, days, categories, timeZone } = request.body ?? {};
+  app.post<{ Body: { name?: unknown; kind?: unknown; days?: unknown; categories?: unknown; timeZone?: unknown; purgeBy?: unknown } }>('/api/elections', { preHandler: manageElection }, async (request, reply) => {
+    const { kind, days, categories, timeZone, purgeBy } = request.body ?? {};
     const name = text(request.body?.name);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     if (typeof kind !== 'string' || !KINDS.includes(kind)) return reply.code(400).send({ error: 'invalid_kind' });
@@ -398,8 +398,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     // Postgres has to know it too: the panel works out the day there, and a zone it lacks would break it for the whole election.
     const zoneKnown = async (zone: string) => (await pool.query('SELECT 1 FROM pg_timezone_names WHERE name = $1', [zone])).rowCount !== 0;
     if (timeZone !== undefined && !(isTimeZone(timeZone) && (await zoneKnown(timeZone)))) return reply.code(400).send({ error: 'invalid_time_zone' });
+    if (purgeBy !== undefined && (typeof purgeBy !== 'string' || !DAY.test(purgeBy) || purgeBy < [...dates].sort().at(-1)!)) return reply.code(400).send({ error: 'invalid_purge_by' });
     const id = randomUUID();
     await pool.query('INSERT INTO elections (id, name, kind, days, categories, time_zone) VALUES ($1, $2, $3, $4::date[], $5, $6)', [id, name, kind, dates, JSON.stringify(Array.isArray(categories) ? categories : []), timeZone ?? DEFAULT_TIME_ZONE]);
+    if (typeof purgeBy === 'string') await pool.query('UPDATE elections SET purge_by = $2 WHERE id = $1', [id, purgeBy]);
     await audit(pool, request.actor, 'election.created', id);
     return { id };
   });
@@ -408,13 +410,18 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
    * The lists change only while it is prepared: after that, counts name them. The days, until it closes: a day that
    * gets suspended moves, and the screen asks first. The name, always.
    */
-  app.put<{ Params: { id: string }; Body: { categories?: unknown; days?: unknown; name?: unknown; hours?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request, reply) => {
-    const { categories, days, name, hours } = request.body ?? {};
+  app.put<{ Params: { id: string }; Body: { categories?: unknown; days?: unknown; name?: unknown; hours?: unknown; purgeBy?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request, reply) => {
+    const { categories, days, name, hours, purgeBy } = request.body ?? {};
     const status = (await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.id])).rows[0]?.status;
     if (!status) return reply.code(404).send({ error: 'not_found' });
     if (categories !== undefined && status !== 'preparacion') return reply.code(409).send({ error: 'lists_locked' });
     if (days !== undefined && ['cerrada', 'purgada'].includes(status)) return reply.code(409).send({ error: 'days_locked' });
     if (Array.isArray(days) && (days.length === 0 || days.some((day) => typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)))) return reply.code(400).send({ error: 'invalid_days' });
+    if (purgeBy !== undefined) {
+      if (typeof purgeBy !== 'string' || !DAY.test(purgeBy)) return reply.code(400).send({ error: 'invalid_purge_by' });
+      if (status === 'purgada') return reply.code(409).send({ error: 'already_purged' });
+      await pool.query('UPDATE elections SET purge_by = $2 WHERE id = $1', [request.params.id, purgeBy]);
+    }
     if (hours !== undefined) {
       const valid = hoursOf(hours);
       if (!valid) return reply.code(400).send({ error: 'invalid_hours' });
@@ -422,7 +429,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       await pool.query('UPDATE elections SET hours = $2 WHERE id = $1', [request.params.id, JSON.stringify(valid)]);
     }
     await pool.query('UPDATE elections SET categories = COALESCE($2, categories), days = COALESCE($3::date[], days), name = COALESCE($4, name) WHERE id = $1', [request.params.id, Array.isArray(categories) ? JSON.stringify(categories) : null, Array.isArray(days) ? days : null, text(name)]);
-    await audit(pool, request.actor, 'election.changed', request.params.id, { name: name !== undefined, days: days !== undefined, lists: categories !== undefined, hours: hours !== undefined });
+    await audit(pool, request.actor, 'election.changed', request.params.id, { name: name !== undefined, days: days !== undefined, lists: categories !== undefined, hours: hours !== undefined, purgeBy: purgeBy !== undefined });
     forgetStatuses();
     return { ok: true };
   });

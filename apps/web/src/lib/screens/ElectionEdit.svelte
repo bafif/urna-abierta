@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
-  import { formatRange, t } from '../i18n.svelte.ts';
+  import { formatDay, formatRange, t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
   import type { ElectionSummary } from '../types.ts';
@@ -60,6 +60,10 @@
       <button class="tarjeta fila-cambio" disabled={!daysOpen} data-testid="edit-hours" onclick={() => nav.go('electionHours', { id })}>
         <span class="item-texto"><strong>{t('hours.title')}</strong><span>{hoursText}</span></span>
         {#if daysOpen}<span class="ver">{t('electionEdit.change')}</span>{/if}
+      </button>
+      <button class="tarjeta fila-cambio" disabled={election.status === 'purgada'} data-testid="edit-keep" onclick={() => nav.go('electionNew', { edit: id, part: 'keep' })}>
+        <span class="item-texto"><strong>{t('keep.title.short')}</strong><span>{election.purge_by ? t('keep.when', { date: formatDay(election.purge_by) }) : t('keep.none')}</span></span>
+        <span class="ver">{t('electionEdit.change')}</span>
       </button>
       <button class="tarjeta fila-cambio" disabled={!preparing} data-testid="edit-lists" onclick={() => nav.go('electionNew', { edit: id, part: 'lists' })}>
         <span class="item-texto"><strong>{t('electionEdit.lists')}</strong><span>{t('electionEdit.lists.count', { categories: election.categories.length, lists })} {preparing ? t('electionEdit.lists.until') : t('electionEdit.lists.locked')}</span></span>

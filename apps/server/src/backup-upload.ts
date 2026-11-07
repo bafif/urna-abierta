@@ -30,7 +30,11 @@ export interface Logger {
   error(message: string): void;
 }
 
-export async function uploadBackup(client: S3Client, file: string, keep: number, log: Logger = console, folder = backupsFolder()): Promise<{ key: string; removed: string[] }> {
+/**
+ * `purgedBefore`, as a copy's stamp (20270406-063000): the copies made before the last purge still have the names it
+ * erased, and go too.
+ */
+export async function uploadBackup(client: S3Client, file: string, keep: number, log: Logger = console, folder = backupsFolder(), purgedBefore = ''): Promise<{ key: string; removed: string[] }> {
   const name = basename(file);
   if (!NAME.test(name)) throw new Error(`${name} no es una copia de Urna Abierta.`);
   const key = `${folder}${name}`;
@@ -42,7 +46,9 @@ export async function uploadBackup(client: S3Client, file: string, keep: number,
   // a folder inside it belongs to another installation.
   try {
     const names = await client.list(folder);
-    const old = names.filter((each) => NAME.test(each.slice(folder.length))).sort().reverse().slice(Math.max(1, keep));
+    const stampOf = (each: string) => each.slice(folder.length + 'urna-'.length, folder.length + 'urna-'.length + 15);
+    const copies = names.filter((each) => NAME.test(each.slice(folder.length))).sort().reverse();
+    const old = copies.filter((each, index) => each !== key && (index >= Math.max(1, keep) || (purgedBefore !== '' && stampOf(each) < purgedBefore)));
     for (const each of old) await client.delete(each);
     if (old.length) log.info(`copias viejas borradas del bucket: ${old.length}`);
     return { key, removed: old };
@@ -63,9 +69,9 @@ function clientFromEnv(env: NodeJS.ProcessEnv = process.env): S3Client {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [file = '', keep = '28'] = process.argv.slice(2);
+  const [file = '', keep = '28', purgedBefore = ''] = process.argv.slice(2);
   try {
-    await uploadBackup(clientFromEnv(), file, Number(keep) || 28, console, backupsFolder(process.env.URNA_S3_PREFIX));
+    await uploadBackup(clientFromEnv(), file, Number(keep) || 28, console, backupsFolder(process.env.URNA_S3_PREFIX), /^\d{8}-\d{6}$/.test(purgedBefore) ? purgedBefore : '');
   } catch (error) {
     console.error(`El bucket no la tomó: ${(error as Error).message}`);
     process.exit(1);

@@ -89,6 +89,7 @@ async function toUpload(page: Page, request: Parameters<typeof seed>[0]) {
   await button(page, 'Seguir').click();
   await page.getByTestId('category-name').fill('Centro');
   await page.getByTestId('category-lists').fill('Lista Azul\nLista Verde');
+  await button(page, 'Seguir').click();
   await button(page, 'Crear la elección').click();
   await button(page, 'Subir el padrón').click();
   await expect(page.getByRole('heading')).toHaveText('Subí el padrón');
