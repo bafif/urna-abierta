@@ -103,3 +103,6 @@ label.boton { text-align: center; }
 .distinto { background: color-mix(in srgb, var(--acento) 22%, transparent); border-radius: 4px; padding: 0 3px; }
 .item.sellado { border-style: dashed; }
 .enlace-fila { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.texto-legal h2 { font-size: 20px; margin: 18px 0 6px; }
+.texto-legal p { margin: 0 0 10px; line-height: 1.45; }
+.texto-legal .item-legal { padding-left: 10px; }

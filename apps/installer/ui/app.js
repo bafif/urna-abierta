@@ -8,6 +8,8 @@
       'hello.card.text': 'Dónde va a vivir tu Urna Abierta, cómo leer los padrones y cómo querés que se vea. Lo demás lo hacemos solos.',
       'hello.start': 'Empezar',
       'hello.language': 'Read this in English',
+      'hello.legal': 'Al instalarla, tu partido pasa a ser el responsable de los datos que cargue y de cumplir la ley de datos personales. El proyecto no ve tu servidor ni tus padrones.',
+      'hello.legal.link': 'Leer el texto completo',
       'next': 'Seguir',
       'back': 'Volver',
       'rail.where': 'Dónde va a vivir',
@@ -184,6 +186,8 @@
       'hello.card.text': 'Where your Urna Abierta will live, how to read the rolls, and how you want it to look. We do the rest.',
       'hello.start': 'Start',
       'hello.language': 'Leer en castellano',
+      'hello.legal': 'Once installed, your party is responsible for the data it loads and for complying with the personal data law. The project does not see your server or your rolls.',
+      'hello.legal.link': 'Read the full text',
       'next': 'Continue',
       'back': 'Back',
       'rail.where': 'Where it will live',
@@ -387,6 +391,11 @@
     [/authentication methods failed|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|handshake|privateKey|Cannot parse/i, 'ssh'],
   ];
   const why = (problem) => WHY.find(([pattern]) => pattern.test(problem ?? ''))?.[1] ?? 'unknown';
+  /** The legal text of the project; the app shows the one of its own version, without going online. */
+  const LEGAL = {
+    es: 'https://github.com/bafif/urna-abierta/blob/main/LEGAL.md',
+    en: 'https://github.com/bafif/urna-abierta/blob/main/LEGAL.en.md',
+  };
   const READER = {
     es: 'https://github.com/bafif/urna-abierta-padrones#descargar',
     en: 'https://github.com/bafif/urna-abierta-padrones/blob/main/README.en.md#download',
@@ -464,6 +473,7 @@
     hello: () => ({
       title: t('hello.title'), text: t('hello.text'),
       body: `<div class="tarjeta"><strong>${t('hello.card.title')}</strong><span>${t('hello.card.text')}</span></div>
+        <p class="aclara" data-testid="hello-legal">${t('hello.legal')} <a class="enlace ayuda-enlace" href="${LEGAL[state.language]}" target="_blank" rel="noreferrer">${t('hello.legal.link')}</a></p>
         <button class="enlace" data-action="language">${t('hello.language')}</button>`,
       next: ['hello.start', 'where'], noBack: true,
     }),

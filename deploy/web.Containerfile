@@ -7,6 +7,8 @@ COPY apps/web/package.json apps/web/
 RUN COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install --frozen-lockfile --filter @urna-abierta/web...
 COPY packages/domain/src packages/domain/src
 COPY apps/web apps/web
+# The legal text of this version goes inside the app, to be read without going online.
+COPY LEGAL.md LEGAL.en.md ./
 RUN pnpm --filter @urna-abierta/web build
 
 FROM docker.io/library/caddy:2-alpine
