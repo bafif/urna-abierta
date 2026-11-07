@@ -195,6 +195,7 @@
   {#snippet pie()}
     <div class="pila">
       {#if counting && election}<button class="boton secundario" data-testid="see-totals" onclick={() => nav.go('results', { election: election!.id })}>{t('district.totals')}</button>{/if}
+      {#if !session.allows('audit.read')}<button class="enlace" data-testid="district-audit" onclick={() => nav.go('audit')}>{t('audit.title')}</button>{/if}
       {#if election}<button class="enlace" data-testid="schedule-link" onclick={() => nav.go('schedule', { election: election!.id })}>{t('schedule.open')}</button>{/if}
       {#if !given}<button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>{/if}
     </div>

@@ -9,6 +9,8 @@ export interface PersonData {
   consent: { date: string; means: string; withdrawn?: { date: string; means: string } } | null;
   semaphore: { category: string | null; sensitive: boolean; hidden: boolean; notedAt: string; under?: string } | null;
   markedVoted: string[];
+  /** Who saw or changed their data, oldest first. */
+  log?: { at: string; action: string; who: string | null }[];
   /** Other elections whose roll has the same document: this page is only about one. */
   others?: string[];
 }
@@ -64,6 +66,14 @@ export function personDataPage(data: PersonData, say: Say, language: string, now
         : paragraph(say('data.light.category', { category: semaphore.category ?? '', when: when(semaphore.notedAt) }))) +
     (semaphore?.under ? paragraph(say('data.light.under', { category: semaphore.under })) : '');
 
+  /** An action in words; one this version does not know shows as it is. */
+  const actionText = (action: string) => {
+    try {
+      return say(`action.${action}` as Parameters<typeof say>[0]) ?? action;
+    } catch {
+      return action;
+    }
+  };
   const agreed = consent
     ? paragraph(say('data.consent.yes', { date: day(consent.date), means: consent.means })) + (consent.withdrawn ? paragraph(say('data.consent.withdrawn', { date: day(consent.withdrawn.date), means: consent.withdrawn.means })) : '')
     : paragraph(say('data.consent.no'));
@@ -81,6 +91,7 @@ export function personDataPage(data: PersonData, say: Say, language: string, now
     section(say('data.voted'), voted),
     section(say('data.light'), light),
     section(say('data.consent'), agreed),
+    data.log?.length ? section(say('data.log'), data.log.map((entry) => paragraph(`${when(entry.at)} · ${entry.who ?? say('audit.system')}: ${actionText(entry.action)}`)).join('')) : '',
     section(say('data.rights'), paragraph(say('data.rights.text'))),
     `<footer>${escape(say('data.made', { when: when(now.toISOString()) }))}</footer>`,
     '</body></html>',

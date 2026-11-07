@@ -106,3 +106,5 @@ label.boton { text-align: center; }
 .texto-legal h2 { font-size: 20px; margin: 18px 0 6px; }
 .texto-legal p { margin: 0 0 10px; line-height: 1.45; }
 .texto-legal .item-legal { padding-left: 10px; }
+.registro .dia-registro { border: 0; padding-top: 14px; }
+.registro .sobre { display: block; color: var(--suave); }

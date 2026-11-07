@@ -761,6 +761,26 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('fiscal', 'GET', `/api/elections/${demo.election}/schedule`)).statusCode).toBe(403);
     });
 
+    it('the log says what each entry was about, finds everything about a person of the roll, and a chief sees their district', async () => {
+      const elector = (await pool.query('SELECT x.id, t.name AS table_name FROM electors x JOIN polling_tables t ON t.id = x.table_id WHERE x.election_id = $1 AND x.table_id = $2 LIMIT 1', [demo.election, table])).rows[0];
+      const base = `/api/persons/${demo.election}/${encodeURIComponent(elector.id)}`;
+      expect((await call('coordinacion', 'PUT', base, { full_name: 'Zapatería Prueba, Ana' })).statusCode).toBe(200);
+      const exported = (await call('coordinacion', 'GET', `${base}/export`)).json();
+      expect(exported.log.map((entry: { action: string }) => entry.action)).toEqual(['elector.corrected', 'person.exported']);
+      const log = async (who: string, query = '') => (await call(who, 'GET', `/api/audit${query}`)).json();
+      const request = await log('coordinacion', '?q=zapateria');
+      expect(request.people).toEqual(['Zapatería Prueba, Ana']);
+      expect(request.counts).toEqual({ seen: 1, changed: 1 });
+      expect(request.entries.find((entry: { action: string }) => entry.action === 'elector.corrected')).toMatchObject({ about: 'Zapatería Prueba, Ana', about_table: elector.table_name, seen: false });
+      expect((await log('coordinacion', '?kind=seen')).entries.every((entry: { seen: boolean }) => entry.seen)).toBe(true);
+      // A chief sees what was about the tables of their district, and nothing of the party's settings.
+      await call('coordinacion', 'PUT', '/api/party', { name: 'Agrupación de prueba' });
+      const chief = await log('jefe');
+      expect(chief.entries.some((entry: { action: string }) => entry.action === 'elector.corrected')).toBe(true);
+      expect(chief.entries.some((entry: { action: string }) => entry.action === 'party.changed')).toBe(false);
+      expect((await call('fiscal', 'GET', '/api/audit')).statusCode).toBe(403);
+    });
+
     it('consent is taken back with when and how, and the mark goes; one loaded by mistake is removed; all of it logged', async () => {
       const elector = (await pool.query('SELECT id FROM electors WHERE election_id = $1 LIMIT 1', [demo.election])).rows[0].id;
       const base = `/api/persons/${demo.election}/${encodeURIComponent(elector)}`;

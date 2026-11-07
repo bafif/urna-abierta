@@ -11,6 +11,8 @@ const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
 /** What a person reviews when it arrives after the close. A late alert already reaches the chief, marked as late. */
 const LATE_TYPES = ['envelopes.counted', 'tally.submitted', 'tally.photo'];
+/** What only looked at something, besides every «…viewed». Everything else changed something. */
+const SEEN_ACTIONS = ['roll.downloaded', 'roll.review_opened', 'person.exported', 'person.searched', 'results.downloaded', 'semaphore.searched', 'semaphore.sensitive_viewed', 'backup.downloaded'];
 const OPERATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Results = Record<string, number>;
@@ -633,6 +635,12 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     );
     const { ref } = person.rows[0];
     await audit(pool, request.actor, 'person.exported', ref);
+    // Art. 14: who saw or changed their data, as the log keeps it by their reference. This export is the last line.
+    const log = await pool.query(
+      `SELECT l.at, l.action, u.name AS who FROM audit_log l LEFT JOIN users u ON u.id = l.user_id
+       WHERE l.target = $1 OR l.detail->'people' ? $1 ORDER BY l.id`,
+      [String(ref)],
+    );
     const row = mark.rows[0];
     // A sensitive category is opened only for whoever has its own permission, and that is recorded as such.
     const hidden = Boolean(row?.sealed) && !can(request.actor, 'semaphore.sensitive');
@@ -664,6 +672,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       consent: found.consent,
       semaphore: row ? { category: name, sensitive: Boolean(row.sealed), hidden, notedAt: row.noted_at, ...(under ? { under } : {}) } : null,
       markedVoted: voted.rows.map((r) => r.device_time),
+      log: log.rows.map((r) => ({ at: r.at, action: r.action, who: r.who })),
       others: others.rows.map((r) => r.name as string),
     };
   });
@@ -759,15 +768,58 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { status: 'purgada' };
   });
 
-  app.get<{ Querystring: { before?: string } }>('/api/audit', { preHandler: requires(pool, 'audit.read') }, async (request) => {
-    const before = Number(request.query.before) || Number.MAX_SAFE_INTEGER;
+  /**
+   * Who saw or changed what, newest first, with what each entry was about. Filtered by who, by whether it only looked,
+   * and by the people of the roll with a surname, which is what a request needs. A chief sees what was about their
+   * district. Old values are never kept here: the log cannot be erased, and a name would outlive the purge.
+   */
+  app.get<{ Querystring: { before?: string; who?: string; kind?: string; q?: string } }>('/api/audit', { preHandler: authenticated(pool) }, async (request, reply) => {
+    const all = can(request.actor, 'audit.read');
+    if (!all && !can(request.actor, 'district.watch')) return reply.code(403).send({ error: 'forbidden' });
     await auditView(pool, request.actor, 'audit.viewed');
+    const params: unknown[] = [SEEN_ACTIONS];
+    const where: string[] = [];
+    const param = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+    const { who, kind, q } = request.query;
+    if (typeof who === 'string' && OPERATION_ID.test(who)) where.push(`l.user_id = ${param(who)}`);
+    if (kind === 'seen' || kind === 'changed') where.push(`${kind === 'seen' ? '' : 'NOT '}(l.action LIKE '%.viewed' OR l.action = ANY($1))`);
+    let people: string[] = [];
+    if (typeof q === 'string' && q.trim().length >= 3) {
+      const found = await pool.query('SELECT ref::text AS ref, full_name FROM electors WHERE search LIKE $1 AND erased_at IS NULL ORDER BY search LIMIT 50', [`%${foldText(q)}%`]);
+      if (found.rows.length === 0) return { entries: [], counts: { seen: 0, changed: 0 }, people: [] };
+      people = found.rows.map((row) => row.full_name);
+      const refs = param(found.rows.map((row) => row.ref));
+      where.push(`(l.target = ANY(${refs}) OR l.detail->'people' ?| ${refs})`);
+    }
+    if (!all) {
+      const units = request.actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);
+      const tables = (await pool.query('SELECT id FROM polling_tables WHERE $1 OR unit_id = ANY($2)', [units.includes(null), units])).rows.map((row) => row.id);
+      const scope = param(tables);
+      where.push(`(l.target = ANY(${scope}) OR x.table_id = ANY(${scope}))`);
+    }
+    const from = `FROM audit_log l
+       LEFT JOIN users u ON u.id = l.user_id
+       LEFT JOIN elections e ON e.id::text = l.target
+       LEFT JOIN polling_tables t ON t.id = l.target
+       LEFT JOIN electors x ON x.ref::text = l.target
+       LEFT JOIN polling_tables xt ON xt.id = x.table_id
+       LEFT JOIN users tu ON tu.id::text = l.target`;
+    const filter = where.length ? `AND ${where.join(' AND ')}` : '';
+    const counts = people.length
+      ? (await pool.query(`SELECT count(*) FILTER (WHERE l.action LIKE '%.viewed' OR l.action = ANY($1))::int AS seen, count(*) FILTER (WHERE NOT (l.action LIKE '%.viewed' OR l.action = ANY($1)))::int AS changed ${from} WHERE true ${filter}`, params)).rows[0]
+      : undefined;
+    const before = param(Number(request.query.before) || Number.MAX_SAFE_INTEGER);
     const rows = await pool.query(
-      `SELECT l.id, l.at, l.action, l.target, u.name AS who FROM audit_log l LEFT JOIN users u ON u.id = l.user_id
-       WHERE l.id < $1 ORDER BY l.id DESC LIMIT 100`,
-      [before],
+      `SELECT l.id, l.at, l.action, u.name AS who, COALESCE(e.name, t.name, NULLIF(x.full_name, ''), tu.name) AS about, xt.name AS about_table,
+              CASE WHEN jsonb_typeof(l.detail->'people') = 'array' THEN jsonb_array_length(l.detail->'people') END AS people,
+              (l.action LIKE '%.viewed' OR l.action = ANY($1)) AS seen
+       ${from} WHERE l.id < ${before} ${filter} ORDER BY l.id DESC LIMIT 100`,
+      params,
     );
-    return { entries: rows.rows };
+    return { entries: rows.rows, ...(counts ? { counts, people } : {}) };
   });
 }
 
