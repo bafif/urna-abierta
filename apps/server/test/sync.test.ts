@@ -674,6 +674,22 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await pool.query(`SELECT action FROM audit_log WHERE action LIKE 'late.%'`)).rows).toEqual([{ action: 'late.added' }]);
     });
 
+    it('an election changes its lists only while prepared, its days until it closes, and is deleted only while prepared', async () => {
+      const id = demo.election;
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { categories: [] })).statusCode).toBe(409);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { days: ['2027-04-07'] })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { days: [] })).statusCode).toBe(400);
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { name: 'Otra' })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'DELETE', `/api/elections/${id}`, { name: 'Otra' })).statusCode).toBe(409);
+      const categories = [{ id: 'c', name: 'Consejo', lists: [{ id: 'l', name: 'Lista' }] }];
+      const { id: fresh } = (await call('coordinacion', 'POST', '/api/elections', { name: 'Prueba', kind: 'estudiantil', days: ['2027-05-01'], categories })).json();
+      expect((await call('coordinacion', 'PUT', `/api/elections/${fresh}`, { categories })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'DELETE', `/api/elections/${fresh}`, { name: 'otra cosa' })).statusCode).toBe(400);
+      expect((await call('jefe', 'DELETE', `/api/elections/${fresh}`, { name: 'Prueba' })).statusCode).toBe(403);
+      expect((await call('coordinacion', 'DELETE', `/api/elections/${fresh}`, { name: 'Prueba' })).statusCode).toBe(200);
+      expect((await pool.query('SELECT count(*)::int AS n FROM elections WHERE id = $1', [fresh])).rows[0].n).toBe(0);
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');

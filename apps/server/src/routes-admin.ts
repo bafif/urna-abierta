@@ -311,10 +311,32 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { id };
   });
 
-  app.put<{ Params: { id: string }; Body: { categories?: unknown; days?: unknown; name?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request) => {
+  /**
+   * The lists change only while it is prepared: after that, counts name them. The days, until it closes: a day that
+   * gets suspended moves, and the screen asks first. The name, always.
+   */
+  app.put<{ Params: { id: string }; Body: { categories?: unknown; days?: unknown; name?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request, reply) => {
     const { categories, days, name } = request.body ?? {};
+    const status = (await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.id])).rows[0]?.status;
+    if (!status) return reply.code(404).send({ error: 'not_found' });
+    if (categories !== undefined && status !== 'preparacion') return reply.code(409).send({ error: 'lists_locked' });
+    if (days !== undefined && ['cerrada', 'purgada'].includes(status)) return reply.code(409).send({ error: 'days_locked' });
+    if (Array.isArray(days) && (days.length === 0 || days.some((day) => typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)))) return reply.code(400).send({ error: 'invalid_days' });
     await pool.query('UPDATE elections SET categories = COALESCE($2, categories), days = COALESCE($3::date[], days), name = COALESCE($4, name) WHERE id = $1', [request.params.id, Array.isArray(categories) ? JSON.stringify(categories) : null, Array.isArray(days) ? days : null, text(name)]);
-    await audit(pool, request.actor, 'election.changed', request.params.id);
+    await audit(pool, request.actor, 'election.changed', request.params.id, { name: name !== undefined, days: days !== undefined, lists: categories !== undefined });
+    forgetStatuses();
+    return { ok: true };
+  });
+
+  /** Only while it is prepared, and with its name written: its roll, its tables and who goes where go. The team stays. */
+  app.delete<{ Params: { id: string }; Body: { name?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request, reply) => {
+    const found = (await pool.query('SELECT name, status FROM elections WHERE id = $1', [request.params.id])).rows[0];
+    if (!found) return reply.code(404).send({ error: 'not_found' });
+    if (found.status !== 'preparacion') return reply.code(409).send({ error: 'only_while_preparing' });
+    if (request.body?.name !== found.name) return reply.code(400).send({ error: 'name_does_not_match' });
+    await pool.query('DELETE FROM elections WHERE id = $1', [request.params.id]);
+    forgetStatuses();
+    await audit(pool, request.actor, 'election.deleted', request.params.id, { name: found.name });
     return { ok: true };
   });
 

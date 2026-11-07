@@ -78,3 +78,26 @@ label.boton { text-align: center; }
 .pie .renglon-enlaces .enlace { width: auto; }
 /* What changed in a correction: the old number crossed out, the new one beside it. */
 .antes { color: var(--suave); text-decoration: line-through 2px; font-weight: 400; margin-right: 8px; }
+
+/* Administration: rows that open what they name, and what cannot be undone, apart. */
+.items { display: flex; flex-direction: column; gap: 6px; }
+.item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 12px; background: var(--superficie); border: var(--borde) solid var(--linea); border-radius: var(--radio); cursor: pointer; }
+.item-texto { flex: 1; min-width: 0; }
+.item strong { display: block; font-size: 17px; line-height: 1.2; }
+.item small { display: block; font-size: 15px; color: var(--suave); line-height: 1.25; }
+.item.elegido { box-shadow: inset 0 0 0 3px var(--acento); border-color: transparent; }
+.item.falta { background: var(--peligro-fondo); border-color: var(--peligro-borde); color: var(--peligro-texto); }
+.item.falta small { color: inherit; }
+.dos-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tarea { display: flex !important; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 14px !important; }
+.tarea .renglon-botones { flex: none; display: flex; }
+.tarjeta span.tarea-texto, .tarjeta span.item-texto { color: inherit; font-size: inherit; }
+.boton.chico { width: auto; min-height: 50px; font-size: 18px !important; align-self: flex-start; padding: 8px 16px; }
+.enlace.peligro { color: var(--peligro-texto); }
+.sello { display: inline-flex !important; gap: 4px; align-items: center; padding: 1px 8px; border-radius: 999px; background: var(--superficie2); color: var(--texto) !important; font-size: 14px !important; font-weight: 700; }
+.fila-cambio { display: flex !important; justify-content: space-between; align-items: center; gap: 14px; padding: 10px 14px !important; }
+.fila-cambio .ver { color: var(--acento); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; flex: none; font-size: 17px; }
+.fila-cambio:disabled { cursor: default; }
+.zona-peligro { margin-top: 6px; padding-top: 12px; border-top: 1.5px solid var(--linea); display: flex; flex-direction: column; gap: 6px; }
+.par-filas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+

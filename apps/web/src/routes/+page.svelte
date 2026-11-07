@@ -14,6 +14,7 @@
   import ChooseTheme from '../lib/screens/ChooseTheme.svelte';
   import Correct from '../lib/screens/Correct.svelte';
   import Late from '../lib/screens/Late.svelte';
+  import ElectionEdit from '../lib/screens/ElectionEdit.svelte';
   import Results from '../lib/screens/Results.svelte';
   import District from '../lib/screens/District.svelte';
   import Districts from '../lib/screens/Districts.svelte';
@@ -45,7 +46,7 @@
   import Voted from '../lib/screens/Voted.svelte';
 
   const SCREENS: Record<string, any> = {
-    home: Home, addPerson: AddPerson, adminHome: AdminHome, correct: Correct, late: Late, results: Results, alert: Alert, audit: Audit, backups: Backups, chooseTheme: ChooseTheme, district: District, districts: Districts,
+    home: Home, addPerson: AddPerson, adminHome: AdminHome, correct: Correct, late: Late, electionEdit: ElectionEdit, results: Results, alert: Alert, audit: Audit, backups: Backups, chooseTheme: ChooseTheme, district: District, districts: Districts,
     election: Election, electionNew: ElectionNew, envelopes: Envelopes, fiscalPlan: FiscalPlan, fiscales: Fiscales, installIphone: InstallIphone, invite: Invite,
     lightCategories: LightCategories, lightHome: LightHome, more: More, numbers: Numbers, party: Party, permissions: Permissions, persons: Persons, photo: Photo, review: Review, roll: Roll,
     rollUpload: RollUpload, security: Security, settings: Settings, tableDetail: TableDetail, tables: Tables, tally: Tally, team: Team, voted: Voted,

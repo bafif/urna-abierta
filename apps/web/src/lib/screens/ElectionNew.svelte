@@ -1,12 +1,19 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Ic from '../components/Ic.svelte';
   import Options from '../components/Options.svelte';
   import Pantalla from '../components/Pantalla.svelte';
   import { i18n, t } from '../i18n.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
+  import type { ElectionSummary } from '../types.ts';
 
-  let step = $state<'kind' | 'days' | 'voted'>('kind');
+  /** With `edit`, the same steps change one part of an election that exists, starting from what it had. */
+  let { edit, part }: { edit?: string; part?: 'name' | 'days' | 'lists' } = $props();
+  const STEP_OF = { name: 'kind', days: 'days', lists: 'voted' } as const;
+  // svelte-ignore state_referenced_locally
+  let step = $state<'kind' | 'days' | 'voted'>(part ? STEP_OF[part] : 'kind');
+  let status = $state('');
   let kind = $state<string | null>('estudiantil');
   let name = $state('');
   let days = $state<string[]>([]);
@@ -15,6 +22,35 @@
 
   const now = new Date();
   let month = $state(new Date(now.getFullYear(), now.getMonth(), 1));
+  /** The blank, spoiled and contested votes are in every count: a person only sees and writes the real lists. */
+  const ALWAYS = ['blanco', 'nulo', 'recurrido'];
+
+  onMount(async () => {
+    if (!edit) return;
+    const election = (await session.api<{ elections: ElectionSummary[] }>('/elections')).elections.find((item) => item.id === edit);
+    if (!election) return;
+    name = election.name;
+    days = [...election.days];
+    status = election.status;
+    groups = election.categories.map((category) => ({ name: category.name, lists: category.lists.filter((list) => !ALWAYS.includes(list.id)).map((list) => list.name).join('\n') }));
+    if (groups.length === 0) groups = [{ name: '', lists: '' }];
+    const first = days[0];
+    if (first) month = new Date(Number(first.slice(0, 4)), Number(first.slice(5, 7)) - 1, 1);
+  });
+
+  /** Only the part that was asked for goes to the server. Moving a day already voted asks first. */
+  async function save() {
+    if (!edit) return;
+    if (part === 'days' && status === 'jornada' && !confirm(t('electionEdit.days.confirm'))) return;
+    failed = false;
+    try {
+      const body = part === 'name' ? { name: name.trim() } : part === 'days' ? { days } : { categories: categories() };
+      await session.api(`/elections/${edit}`, { method: 'PUT', body });
+      nav.back();
+    } catch {
+      failed = true;
+    }
+  }
 
   const kinds = $derived([
     { id: 'estudiantil', title: t('security.student.title') },
@@ -73,15 +109,20 @@
 </script>
 
 {#if step === 'kind'}
-  <Pantalla accion="eleccion" volver ojo={t('election.new')} titulo={t('election.kind.title')} desliza>
-    <Options items={kinds} bind:value={kind} />
+  <Pantalla accion="eleccion" volver ojo={edit ? t('electionEdit.eyebrow') : t('election.new')} titulo={edit ? t('election.name') : t('election.kind.title')} desliza>
+    {#if !edit}<Options items={kinds} bind:value={kind} />{/if}
     <label class="campo"><span>{t('election.name')}</span><input bind:value={name} placeholder={t('election.name.hint')} data-testid="election-name" /></label>
+    {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
     {#snippet pie()}
-      <button class="boton primario" disabled={!name.trim()} onclick={() => (step = 'days')}><Ic name="flecha" /><span>{t('next')}</span></button>
+      {#if edit}
+        <button class="boton primario" disabled={!name.trim()} onclick={save}><Ic name="tilde" /><span>{t('save')}</span></button>
+      {:else}
+        <button class="boton primario" disabled={!name.trim()} onclick={() => (step = 'days')}><Ic name="flecha" /><span>{t('next')}</span></button>
+      {/if}
     {/snippet}
   </Pantalla>
 {:else if step === 'days'}
-  <Pantalla accion="eleccion" volver onback={() => (step = 'kind')} titulo={t('election.days.title')} bajada={t('election.days.text')} desliza>
+  <Pantalla accion="eleccion" volver onback={edit ? undefined : () => (step = 'kind')} titulo={t('election.days.title')} bajada={t('election.days.text')} desliza>
     <div class="mes-nav">
       <button aria-label={t('election.days.previous')} onclick={() => move(-1)}>‹</button>
       <strong>{monthName}</strong>
@@ -97,12 +138,17 @@
     {#if days.length > 0}
       <p class="resultado bien"><Ic name="tilde" />{days.length === 1 ? t('election.days.one') : t('election.days.many', { count: days.length })}</p>
     {/if}
+    {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
     {#snippet pie()}
-      <button class="boton primario" disabled={days.length === 0} onclick={() => (step = 'voted')}><Ic name="flecha" /><span>{t('next')}</span></button>
+      {#if edit}
+        <button class="boton primario" disabled={days.length === 0} onclick={save}><Ic name="tilde" /><span>{t('save')}</span></button>
+      {:else}
+        <button class="boton primario" disabled={days.length === 0} onclick={() => (step = 'voted')}><Ic name="flecha" /><span>{t('next')}</span></button>
+      {/if}
     {/snippet}
   </Pantalla>
 {:else}
-  <Pantalla accion="eleccion" volver onback={() => (step = 'days')} titulo={t('election.voted.title')} bajada={t('election.voted.text')} desliza>
+  <Pantalla accion="eleccion" volver onback={edit ? undefined : () => (step = 'days')} titulo={t('election.voted.title')} bajada={t('election.voted.text')} desliza>
     {#each groups as group}
       <label class="campo"><span>{t('election.voted.category')}</span><input bind:value={group.name} placeholder={t('election.voted.categoryHint')} data-testid="category-name" /></label>
       <label class="campo"><span>{t('election.voted.lists')}</span><textarea bind:value={group.lists} placeholder={t('election.voted.listsHint')} data-testid="category-lists"></textarea></label>
@@ -110,7 +156,7 @@
     <button class="enlace" onclick={() => groups.push({ name: '', lists: '' })}>{t('election.voted.another')}</button>
     {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
     {#snippet pie()}
-      <button class="boton primario" disabled={!ready} onclick={create}><Ic name="tilde" /><span>{t('election.create')}</span></button>
+      <button class="boton primario" disabled={!ready} onclick={edit ? save : create}><Ic name="tilde" /><span>{edit ? t('save') : t('election.create')}</span></button>
     {/snippet}
   </Pantalla>
 {/if}
