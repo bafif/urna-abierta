@@ -422,9 +422,92 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   const readLight = requires(pool, 'semaphore.read');
   const writeLight = requires(pool, 'semaphore.write');
 
+  /** Whoever cannot see sensitive categories learns how many there are, so that nobody makes another one like it without knowing. */
   app.get('/api/semaphore/categories', { preHandler: readLight }, async (request) => {
     const rows = await pool.query('SELECT id, name, color, sensitive FROM semaphore_categories ORDER BY position, name');
-    return { categories: rows.rows.filter((row) => !row.sensitive || can(request.actor, 'semaphore.sensitive')) };
+    const seen = rows.rows.filter((row) => !row.sensitive || can(request.actor, 'semaphore.sensitive'));
+    return { categories: seen, hidden: rows.rows.length - seen.length };
+  });
+
+  /** Who has a category: the plain marks, and the sealed ones that name it once opened. */
+  async function marksOf(category: string): Promise<{ plain: number; sealed: { election_id: string; elector_id: string }[] }> {
+    const plain = (await pool.query('SELECT count(*)::int AS n FROM semaphore_marks WHERE category_id = $1', [category])).rows[0].n;
+    const sealed = (await pool.query('SELECT election_id, elector_id, sealed FROM semaphore_marks WHERE sealed IS NOT NULL')).rows.filter((row) => unseal(row.sealed) === category);
+    return { plain, sealed };
+  }
+
+  const manageLight = requires(pool, 'election.manage');
+  /** A sensitive category is only for whoever may see them: nobody else learns its name, nor touches it. */
+  async function categoryFor(actor: Actor, id: string): Promise<{ sensitive: boolean } | 'forbidden' | null> {
+    if (!OPERATION_ID.test(id)) return null;
+    const found = (await pool.query('SELECT sensitive FROM semaphore_categories WHERE id = $1', [id])).rows[0];
+    if (!found) return null;
+    return found.sensitive && !can(actor, 'semaphore.sensitive') ? 'forbidden' : found;
+  }
+
+  app.get<{ Params: { id: string } }>('/api/semaphore/categories/:id', { preHandler: manageLight }, async (request, reply) => {
+    const found = await categoryFor(request.actor, request.params.id);
+    if (found === null) return reply.code(404).send({ error: 'not_found' });
+    if (found === 'forbidden') return reply.code(403).send({ error: 'forbidden' });
+    const marks = await marksOf(request.params.id);
+    return { people: marks.plain + marks.sealed.length };
+  });
+
+  /**
+   * Its name, its colour, and whether it is sensitive, at any time. Marked sensitive, the marks it already has are
+   * sealed right then; only whoever may see sensitive categories takes that back, and both are logged.
+   */
+  app.put<{ Params: { id: string }; Body: { name?: unknown; color?: unknown; sensitive?: unknown } }>('/api/semaphore/categories/:id', { preHandler: manageLight }, async (request, reply) => {
+    const { name, color, sensitive } = request.body ?? {};
+    const found = await categoryFor(request.actor, request.params.id);
+    if (found === null) return reply.code(404).send({ error: 'not_found' });
+    if (found === 'forbidden') return reply.code(403).send({ error: 'forbidden' });
+    if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 60)) return reply.code(400).send({ error: 'invalid_name' });
+    if (color !== undefined && (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) return reply.code(400).send({ error: 'invalid_color' });
+    if (sensitive !== undefined && typeof sensitive !== 'boolean') return reply.code(400).send({ error: 'invalid_request' });
+    if (sensitive === false && found.sensitive && !can(request.actor, 'semaphore.sensitive')) return reply.code(403).send({ error: 'needs_sensitive_permission' });
+    const id = request.params.id;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE semaphore_categories SET name = COALESCE($2, name), color = COALESCE($3, color), sensitive = COALESCE($4, sensitive) WHERE id = $1', [id, typeof name === 'string' ? name.trim() : null, color ?? null, sensitive ?? null]);
+      if (sensitive === true && !found.sensitive) {
+        const plain = await client.query('SELECT election_id, elector_id FROM semaphore_marks WHERE category_id = $1', [id]);
+        for (const row of plain.rows) await client.query('UPDATE semaphore_marks SET category_id = NULL, sealed = $3 WHERE election_id = $1 AND elector_id = $2', [row.election_id, row.elector_id, seal(id)]);
+      }
+      if (sensitive === false && found.sensitive) {
+        for (const row of (await marksOf(id)).sealed) await client.query('UPDATE semaphore_marks SET category_id = $3, sealed = NULL WHERE election_id = $1 AND elector_id = $2', [row.election_id, row.elector_id, id]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    await audit(pool, request.actor, 'semaphore.category_changed', id, sensitive !== undefined && sensitive !== found.sensitive ? { sensitive } : {});
+    return { ok: true };
+  });
+
+  /** The order of the list, as the person leaves it. Categories they cannot see keep their place. */
+  app.put<{ Body: { ids?: unknown } }>('/api/semaphore/order', { preHandler: manageLight }, async (request, reply) => {
+    const { ids } = request.body ?? {};
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !OPERATION_ID.test(id))) return reply.code(400).send({ error: 'invalid_request' });
+    const positions = (await pool.query('SELECT id, position FROM semaphore_categories WHERE id = ANY($1) ORDER BY position', [ids])).rows.map((row) => row.position);
+    for (const [index, id] of ids.entries()) await pool.query('UPDATE semaphore_categories SET position = $2 WHERE id = $1', [id, positions[index] ?? index]);
+    return { ok: true };
+  });
+
+  /** Only once nobody has it: a mark must not disappear because its category did. */
+  app.delete<{ Params: { id: string } }>('/api/semaphore/categories/:id', { preHandler: manageLight }, async (request, reply) => {
+    const found = await categoryFor(request.actor, request.params.id);
+    if (found === null) return reply.code(404).send({ error: 'not_found' });
+    if (found === 'forbidden') return reply.code(403).send({ error: 'forbidden' });
+    const marks = await marksOf(request.params.id);
+    if (marks.plain + marks.sealed.length > 0) return reply.code(409).send({ error: 'in_use', people: marks.plain + marks.sealed.length });
+    await pool.query('DELETE FROM semaphore_categories WHERE id = $1', [request.params.id]);
+    await audit(pool, request.actor, 'semaphore.category_deleted', request.params.id);
+    return { ok: true };
   });
 
   /** It starts empty: each party defines its own categories. */

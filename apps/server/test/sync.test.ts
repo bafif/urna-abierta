@@ -761,6 +761,27 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('fiscal', 'GET', `/api/elections/${demo.election}/schedule`)).statusCode).toBe(403);
     });
 
+    it('a traffic light category turns sensitive sealing the marks it has, only the permission undoes it, and it goes only once empty', async () => {
+      const { id } = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Simpatiza', color: '#1E9E5A' })).json();
+      const elector = (await pool.query('SELECT id FROM electors WHERE election_id = $1 LIMIT 1', [demo.election])).rows[0].id;
+      await pool.query('INSERT INTO semaphore_marks (election_id, elector_id, category_id) VALUES ($1, $2, $3)', [demo.election, elector, id]);
+      const mark = async () => (await pool.query('SELECT category_id, sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [demo.election, elector])).rows[0];
+      expect((await call('coordinacion', 'GET', `/api/semaphore/categories/${id}`)).json().people).toBe(1);
+      expect((await call('coordinacion', 'PUT', `/api/semaphore/categories/${id}`, { name: 'Afiliada', sensitive: true })).statusCode).toBe(200);
+      expect(await mark()).toMatchObject({ category_id: null, sealed: expect.any(String) });
+      const light = (await call('semaforo', 'GET', '/api/semaphore/categories')).json();
+      expect(light.hidden).toBe(1);
+      expect(light.categories.map((category: { id: string }) => category.id)).not.toContain(id);
+      expect((await call('coordinacion', 'PUT', `/api/semaphore/categories/${id}`, { sensitive: false })).statusCode).toBe(403);
+      const { user } = (await call('coordinacion', 'GET', '/api/me')).json();
+      await call('coordinacion', 'POST', `/api/users/${user.id}/roles`, { role: 'semaforo_sensible' });
+      expect((await call('coordinacion', 'DELETE', `/api/semaphore/categories/${id}`)).json()).toMatchObject({ error: 'in_use', people: 1 });
+      expect((await call('coordinacion', 'PUT', `/api/semaphore/categories/${id}`, { sensitive: false })).statusCode).toBe(200);
+      expect(await mark()).toMatchObject({ category_id: id, sealed: null });
+      await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1', [demo.election]);
+      expect((await call('coordinacion', 'DELETE', `/api/semaphore/categories/${id}`)).statusCode).toBe(200);
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');

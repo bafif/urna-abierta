@@ -101,3 +101,5 @@ label.boton { text-align: center; }
 .zona-peligro { margin-top: 6px; padding-top: 12px; border-top: 1.5px solid var(--linea); display: flex; flex-direction: column; gap: 6px; }
 .par-filas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .distinto { background: color-mix(in srgb, var(--acento) 22%, transparent); border-radius: 4px; padding: 0 3px; }
+.item.sellado { border-style: dashed; }
+.enlace-fila { background: none; border: 0; padding: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; }
