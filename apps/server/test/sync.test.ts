@@ -633,6 +633,47 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await detail()).tallies[0]).toMatchObject({ disagree: false, chosen: fixed.id });
     });
 
+    it('results add up the chosen version of each table, blank and null included, and say what is left out', async () => {
+      const other = demo.tables[1]!.table;
+      const tally = (where: string, azul: number, seq: number) => ({ ...operation(where, seq), type: 'tally.submitted', payload: { category: 'cat-1', results: { l1: azul, l2: 10, blanco: 2, nulo: 1 } } });
+      const results = async (who: string) => (await call(who, 'GET', `/api/elections/${demo.election}/results`)).json();
+      await push('fiscal', table, [tally(table, 100, 1), { ...operation(table, 2), type: 'tally.photo', payload: { sha256: 'b'.repeat(64) } }]);
+      expect((await results('estadistico')).categories[0]).toMatchObject({
+        counted: 1, missing: 1, undecided: 0,
+        lists: [{ id: 'l1', votes: 100 }, { id: 'l2', votes: 10 }, { id: 'blanco', votes: 2 }, { id: 'nulo', votes: 1 }],
+      });
+      const district = (await call('jefe', 'GET', `/api/district/${demo.election}`)).json();
+      expect(district.tables.find((found: { id: string }) => found.id === table)).toMatchObject({ tallied: ['cat-1'], photo: true });
+      const [one, two] = [tally(other, 50, 1), tally(other, 51, 2)];
+      await push('otra', other, [one, two]);
+      expect((await results('coordinacion')).categories[0]).toMatchObject({ counted: 1, undecided: 1, missing: 0 });
+      await call('coordinacion', 'POST', `/api/tables/${other}/tally/decide`, { category: 'cat-1', operation: two.id });
+      expect((await results('coordinacion')).categories[0].lists[0].votes).toBe(151);
+      // The spreadsheet, table by table, is logged. A poll watcher sees none of it.
+      const sheet = (await call('coordinacion', 'GET', `/api/elections/${demo.election}/results?tables=1`)).json();
+      expect(sheet.perTable.map((row: { categories: Record<string, Record<string, number>> }) => row.categories['cat-1']!.l1)).toEqual([100, 51]);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM audit_log WHERE action = 'results.downloaded'`)).rows[0].n).toBe(1);
+      expect((await call('fiscal', 'GET', `/api/elections/${demo.election}/results`)).statusCode).toBe(403);
+    });
+
+    it('what arrives after the close waits for a person, who adds it or discards it, and the purge takes the rest', async () => {
+      for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
+      const tally = { ...operation(table, 1), type: 'tally.submitted', payload: { category: 'cat-1', results: { l1: 7, l2: 3, blanco: 0, nulo: 0 } } };
+      const photo = { ...operation(table, 2), type: 'tally.photo', payload: { sha256: 'a'.repeat(64) } };
+      expect((await push('fiscal', table, [tally, photo])).json().late).toBe(true);
+      const late = async () => (await call('jefe', 'GET', `/api/elections/${demo.election}/late`)).json();
+      expect((await late()).items.map((item: { type: string }) => item.type)).toEqual(['tally.submitted', 'tally.photo']);
+      expect((await call('coordinacion', 'GET', `/api/elections/${demo.election}/results`)).json().categories[0].counted).toBe(0);
+      expect((await call('fiscal', 'POST', `/api/late/${tally.id}`, { decision: 'sumado' })).statusCode).toBe(403);
+      expect((await call('jefe', 'POST', `/api/late/${tally.id}`, { decision: 'sumado' })).statusCode).toBe(200);
+      expect((await call('jefe', 'POST', `/api/late/${tally.id}`, { decision: 'descartado' })).statusCode).toBe(404);
+      expect((await call('coordinacion', 'GET', `/api/elections/${demo.election}/results`)).json().categories[0].lists[0].votes).toBe(7);
+      expect((await late()).items.map((item: { type: string }) => item.type)).toEqual(['tally.photo']);
+      expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/purge`)).statusCode).toBe(200);
+      expect((await pool.query('SELECT count(*)::int AS n FROM operations WHERE quarantined')).rows[0].n).toBe(0);
+      expect((await pool.query(`SELECT action FROM audit_log WHERE action LIKE 'late.%'`)).rows).toEqual([{ action: 'late.added' }]);
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');

@@ -28,7 +28,7 @@ const isVoter = (operation: Operation): operation is VoterOperation => operation
  * the election take the same lock, so who is named is decided here, after it: never with an id
  * that an erasure or a purge committed meanwhile took away.
  */
-async function storeBatch(pool: pg.Pool, table: string, received: Operation[], author: string): Promise<void> {
+async function storeBatch(pool: pg.Pool, table: string, received: Operation[], author: string): Promise<{ late: boolean }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -52,6 +52,7 @@ async function storeBatch(pool: pg.Pool, table: string, received: Operation[], a
     await client.query('UPDATE polling_tables SET last_seq = $2, last_contact = now() WHERE id = $1', [table, last + (inserted.rowCount ? kept.length : 0)]);
     heard.set(table, Date.now());
     await client.query('COMMIT');
+    return { late: quarantined };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -161,9 +162,9 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
       else if (parsed.table !== table) rejected.push({ id: parsed.id, reason: 'wrong_table' });
       else valid.push(parsed);
     }
-    if (valid.length > 0) await storeBatch(pool, table, valid, request.actor.userId);
-    else await heardFrom(pool, table);
-    return { acked: valid.map((o) => o.id), rejected, server_time: clock.now().toISOString() };
+    const stored = valid.length > 0 ? await storeBatch(pool, table, valid, request.actor.userId) : (await heardFrom(pool, table), { late: false });
+    // The phone must not say that everything arrived fine when it arrived after the close: someone still has to look at it.
+    return { acked: valid.map((o) => o.id), rejected, server_time: clock.now().toISOString(), ...(stored.late ? { late: true } : {}) };
   });
 
   app.get<{ Querystring: { table?: string; since?: string } }>('/api/sync/pull', { preHandler: signedIn }, async (request, reply) => {
