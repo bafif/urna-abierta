@@ -100,4 +100,4 @@ label.boton { text-align: center; }
 .fila-cambio:disabled { cursor: default; }
 .zona-peligro { margin-top: 6px; padding-top: 12px; border-top: 1.5px solid var(--linea); display: flex; flex-direction: column; gap: 6px; }
 .par-filas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
+.distinto { background: color-mix(in srgb, var(--acento) 22%, transparent); border-radius: 4px; padding: 0 3px; }

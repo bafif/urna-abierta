@@ -730,6 +730,18 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/tables/reset`)).statusCode).toBe(409);
     });
 
+    it('a doubtful row comes with the one that has its document, and a row leaves the roll only while it is prepared', async () => {
+      const two = (await pool.query('SELECT id FROM electors WHERE election_id = $1 ORDER BY id LIMIT 2', [demo.election])).rows.map((row) => row.id as string);
+      await pool.query('UPDATE electors SET document = $3, needs_review = true WHERE election_id = $1 AND id = ANY($2)', [demo.election, two, '30111222']);
+      const review = async () => (await call('coordinacion', 'GET', `/api/elections/${demo.election}/review`)).json();
+      expect(await review()).toMatchObject({ total: 2, status: 'jornada', rows: [{ twin: { document: '30111222' } }, { twin: { document: '30111222' } }] });
+      const remove = () => call('coordinacion', 'DELETE', `/api/elections/${demo.election}/electors/${encodeURIComponent(two[1]!)}`);
+      expect((await remove()).statusCode).toBe(409);
+      await pool.query(`UPDATE elections SET status = 'preparacion' WHERE id = $1`, [demo.election]);
+      expect((await remove()).statusCode).toBe(200);
+      expect(await review()).toMatchObject({ total: 1, rows: [{ id: two[0], twin: null }] });
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');

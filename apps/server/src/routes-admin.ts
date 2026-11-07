@@ -511,9 +511,32 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   app.get<{ Params: { id: string } }>('/api/elections/:id/review', { preHandler: manageElection }, async (request) => {
-    const rows = await pool.query('SELECT id, full_name, document, file_number, review FROM electors WHERE election_id = $1 AND needs_review ORDER BY full_name LIMIT 200', [request.params.id]);
+    // A row with the document of another one comes with it, to look at both side by side.
+    const rows = await pool.query(
+      `SELECT x.id, x.full_name, x.document, x.file_number, x.review, t.name AS table_name,
+              (SELECT json_build_object('id', y.id, 'full_name', y.full_name, 'document', y.document, 'file_number', y.file_number, 'table_name', ty.name)
+               FROM electors y LEFT JOIN polling_tables ty ON ty.id = y.table_id
+               WHERE y.election_id = x.election_id AND y.id <> x.id AND y.document IS NOT NULL AND y.document = x.document AND y.erased_at IS NULL LIMIT 1) AS twin
+       FROM electors x LEFT JOIN polling_tables t ON t.id = x.table_id
+       WHERE x.election_id = $1 AND x.needs_review ORDER BY x.full_name LIMIT 200`,
+      [request.params.id],
+    );
+    const total = (await pool.query('SELECT count(*)::int AS n FROM electors WHERE election_id = $1 AND needs_review', [request.params.id])).rows[0].n;
+    const status = (await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.id])).rows[0]?.status ?? null;
     await audit(pool, request.actor, 'roll.review_opened', request.params.id, { rows: rows.rowCount });
-    return { rows: rows.rows };
+    return { rows: rows.rows, total, status };
+  });
+
+  /** A repeated row, or one that is not a person, leaves the roll: only while the election is prepared, and it is logged. */
+  app.delete<{ Params: { id: string; elector: string } }>('/api/elections/:id/electors/:elector', { preHandler: manageElection }, async (request, reply) => {
+    const status = (await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.id])).rows[0]?.status;
+    if (status !== 'preparacion') return reply.code(409).send({ error: 'only_while_preparing' });
+    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [request.params.id, request.params.elector]);
+    const removed = await pool.query('DELETE FROM electors WHERE election_id = $1 AND id = $2 RETURNING ref, table_id', [request.params.id, request.params.elector]);
+    if (!removed.rowCount) return reply.code(404).send({ error: 'not_found' });
+    if (removed.rows[0].table_id) await renumber(pool, request.params.id, [removed.rows[0].table_id]);
+    await audit(pool, request.actor, 'elector.removed', removed.rows[0].ref);
+    return { ok: true };
   });
 
   app.put<{ Params: { id: string; elector: string }; Body: { full_name?: unknown; document?: unknown } }>('/api/elections/:id/electors/:elector', { preHandler: manageElection }, async (request, reply) => {
