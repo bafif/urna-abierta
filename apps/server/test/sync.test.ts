@@ -708,6 +708,28 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(after.roles).toEqual([]);
     });
 
+    it('while it is prepared, a table moves its cut with the next one, one person moves alone, and only an empty table goes', async () => {
+      await pool.query(`UPDATE elections SET status = 'preparacion' WHERE id = $1`, [demo.election]);
+      const [first, second] = demo.tables.map((found) => found.table) as [string, string];
+      const people = async (where: string) => (await call('coordinacion', 'GET', `/api/tables/${where}/people`)).json().people as { id: string; order: number }[];
+      const everyone = (await people(first)).length + (await people(second)).length;
+      const preview = (await call('coordinacion', 'POST', `/api/tables/${first}/cut?preview=1`, { last: 'm' })).json();
+      expect(preview.here + preview.next).toBe(everyone);
+      expect((await people(second)).length).toBeGreaterThan(0);
+      expect((await call('coordinacion', 'POST', `/api/tables/${first}/cut`, { last: 'zzzz' })).json()).toEqual({ here: everyone, next: 0 });
+      expect((await people(first)).map((person) => person.order)).toEqual(Array.from({ length: everyone }, (_, index) => index + 1));
+      const [one] = await people(first);
+      const move = (from: string, to: string) => call('coordinacion', 'PUT', `/api/tables/${from}/people/${encodeURIComponent(one!.id)}`, { to });
+      expect((await move(first, second)).statusCode).toBe(200);
+      expect((await people(second)).map((person) => person.id)).toEqual([one!.id]);
+      expect((await call('coordinacion', 'DELETE', `/api/tables/${second}`)).statusCode).toBe(409);
+      expect((await move(second, first)).statusCode).toBe(200);
+      expect((await call('coordinacion', 'DELETE', `/api/tables/${second}`)).statusCode).toBe(200);
+      await pool.query(`UPDATE elections SET status = 'jornada' WHERE id = $1`, [demo.election]);
+      expect((await call('coordinacion', 'POST', `/api/tables/${first}/cut`, { last: 'm' })).statusCode).toBe(409);
+      expect((await call('coordinacion', 'POST', `/api/elections/${demo.election}/tables/reset`)).statusCode).toBe(409);
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');

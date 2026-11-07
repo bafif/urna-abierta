@@ -115,6 +115,22 @@ export async function closedElection(pool: pg.Pool, election: string): Promise<b
   return found.rows[0] ? ['cerrada', 'purgada'].includes(found.rows[0].status) : null;
 }
 
+/** The election of a table, if it is still being prepared: tables are only corrected then. */
+async function preparingTable(pool: pg.Pool, table: string): Promise<{ election: string; position: number } | null> {
+  const found = await pool.query(`SELECT t.election_id, t.position FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1 AND e.status = 'preparacion'`, [table]);
+  return found.rows[0] ? { election: found.rows[0].election_id, position: found.rows[0].position } : null;
+}
+
+/** Numbers each table's people again, in the order of their surnames. */
+async function renumber(client: pg.Pool | pg.PoolClient, election: string, tables: string[]): Promise<void> {
+  await client.query(
+    `UPDATE electors x SET order_number = o.n FROM (
+       SELECT id, row_number() OVER (PARTITION BY table_id ORDER BY search, id) AS n FROM electors WHERE election_id = $1 AND table_id = ANY($2)
+     ) o WHERE x.election_id = $1 AND x.id = o.id`,
+    [election, tables],
+  );
+}
+
 export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   const manageElection = requires(pool, 'election.manage');
   const manageUsers = requires(pool, 'users.manage');
@@ -521,6 +537,82 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       [request.params.id],
     );
     return { tables: rows.rows.map(({ first, last, ...row }) => ({ ...row, from: first?.slice(0, 1).toUpperCase() ?? '', to: last?.slice(0, 1).toUpperCase() ?? '' })) };
+  });
+
+  /** Who is at a table, to move one of them alone. */
+  app.get<{ Params: { table: string } }>('/api/tables/:table/people', { preHandler: manageElection }, async (request) => {
+    const rows = await pool.query('SELECT id, full_name AS name, order_number AS "order" FROM electors WHERE table_id = $1 ORDER BY order_number, search', [request.params.table]);
+    await auditView(pool, request.actor, 'table.people.viewed', request.params.table);
+    return { people: rows.rows };
+  });
+
+  /**
+   * Where a table ends, by surname, against the next one: whoever is up to that surname stays here, the rest goes there.
+   * With ?preview=1 it only says how many would be in each.
+   */
+  app.post<{ Params: { table: string }; Querystring: { preview?: string }; Body: { last?: unknown } }>('/api/tables/:table/cut', { preHandler: manageElection }, async (request, reply) => {
+    const last = text(request.body?.last, 120);
+    if (!last) return reply.code(400).send({ error: 'invalid_surname' });
+    const here = await preparingTable(pool, request.params.table);
+    if (!here) return reply.code(409).send({ error: 'only_while_preparing' });
+    const next = (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1 AND position > $2 ORDER BY position LIMIT 1', [here.election, here.position])).rows[0]?.id;
+    if (!next) return reply.code(409).send({ error: 'no_next_table' });
+    const key = foldText(last);
+    const people = await pool.query<{ id: string; search: string }>('SELECT id, search FROM electors WHERE election_id = $1 AND table_id = ANY($2)', [here.election, [request.params.table, next]]);
+    const stays = people.rows.filter((person) => person.search < key || person.search.startsWith(key)).map((person) => person.id);
+    const counts = { here: stays.length, next: people.rows.length - stays.length };
+    if (request.query.preview === '1') return counts;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE electors SET table_id = CASE WHEN id = ANY($3) THEN $2 ELSE $4 END WHERE election_id = $1 AND table_id = ANY(ARRAY[$2, $4])', [here.election, request.params.table, stays, next]);
+      await renumber(client, here.election, [request.params.table, next]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    await audit(pool, request.actor, 'tables.cut', request.params.table, counts);
+    return counts;
+  });
+
+  /** One person alone to another table, for rolls that do not go by surname. */
+  app.put<{ Params: { table: string; elector: string }; Body: { to?: unknown } }>('/api/tables/:table/people/:elector', { preHandler: manageElection }, async (request, reply) => {
+    const { to } = request.body ?? {};
+    const here = await preparingTable(pool, request.params.table);
+    if (!here) return reply.code(409).send({ error: 'only_while_preparing' });
+    if (typeof to !== 'string' || !(await pool.query('SELECT 1 FROM polling_tables WHERE id = $1 AND election_id = $2', [to, here.election])).rowCount) return reply.code(400).send({ error: 'invalid_table' });
+    const moved = await pool.query(
+      'UPDATE electors SET table_id = $4, order_number = (SELECT COALESCE(max(order_number), 0) + 1 FROM electors WHERE table_id = $4) WHERE election_id = $1 AND id = $2 AND table_id = $3',
+      [here.election, request.params.elector, request.params.table, to],
+    );
+    if (!moved.rowCount) return reply.code(404).send({ error: 'not_found' });
+    await renumber(pool, here.election, [request.params.table]);
+    await audit(pool, request.actor, 'elector.moved', request.params.table, { to });
+    return { ok: true };
+  });
+
+  /** Only an empty table, while it is prepared. */
+  app.delete<{ Params: { table: string } }>('/api/tables/:table', { preHandler: manageElection }, async (request, reply) => {
+    const here = await preparingTable(pool, request.params.table);
+    if (!here) return reply.code(409).send({ error: 'only_while_preparing' });
+    const removed = await pool.query('DELETE FROM polling_tables t WHERE t.id = $1 AND NOT EXISTS (SELECT 1 FROM electors x WHERE x.table_id = t.id)', [request.params.table]);
+    if (!removed.rowCount) return reply.code(409).send({ error: 'not_empty' });
+    await audit(pool, request.actor, 'table.deleted', request.params.table);
+    return { ok: true };
+  });
+
+  /** Starts the tables over: they go, and so does who goes to each one. Only while it is prepared. */
+  app.post<{ Params: { id: string } }>('/api/elections/:id/tables/reset', { preHandler: manageElection }, async (request, reply) => {
+    const status = (await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.id])).rows[0]?.status;
+    if (status !== 'preparacion') return reply.code(409).send({ error: 'only_while_preparing' });
+    await pool.query('UPDATE electors SET table_id = NULL, order_number = NULL WHERE election_id = $1', [request.params.id]);
+    const removed = await pool.query('DELETE FROM polling_tables WHERE election_id = $1', [request.params.id]);
+    forgetActors();
+    await audit(pool, request.actor, 'tables.reset', request.params.id, { tables: removed.rowCount });
+    return { ok: true };
   });
 
   /** Proposes tables for whoever has none, by surname. The person only corrects if needed. */
