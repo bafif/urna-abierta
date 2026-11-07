@@ -20,6 +20,28 @@ function csvText(body: Buffer): string {
 const STATS_ROLE_DAYS = 90;
 const STATUSES = ['preparacion', 'jornada', 'escrutinio', 'cerrada', 'purgada'];
 const KINDS = ['estudiantil', 'local', 'nacional', 'otra'];
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** «08:00» to «18:00» by day, or null when it is not that. */
+function hoursOf(value: unknown): Record<string, { open: string; close: string }> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value as Record<string, unknown>);
+  const valid = entries.every(([day, times]) => DAY.test(day) && times && typeof times === 'object'
+    && TIME.test((times as { open?: string }).open ?? '') && TIME.test((times as { close?: string }).close ?? '') && (times as { open: string }).open < (times as { close: string }).close);
+  return valid ? Object.fromEntries(entries.map(([day, times]) => [day, { open: (times as { open: string }).open, close: (times as { close: string }).close }])) : null;
+}
+
+/** A poll watcher's own times; an empty one clears them. Null when something in it is not a time or a short text. */
+function scheduleOf(value: unknown): { from?: string; to?: string; arrive?: string; meet?: string } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const { from, to, arrive, meet } = value as Record<string, unknown>;
+  const time = (item: unknown) => item === undefined || item === '' || (typeof item === 'string' && TIME.test(item));
+  if (![from, to, arrive].every(time) || (meet !== undefined && (typeof meet !== 'string' || meet.length > 120))) return null;
+  if (typeof from === 'string' && typeof to === 'string' && from && to && from >= to) return null;
+  return Object.fromEntries(Object.entries({ from, to, arrive, meet: typeof meet === 'string' ? meet.trim() : meet }).filter(([, item]) => typeof item === 'string' && item !== ''));
+}
+
 const text = (value: unknown, max = 200) => (typeof value === 'string' && value.trim() && value.length <= max ? value.trim() : null);
 
 /** A name or document someone corrected, from the review or from a person's request. Uploading the roll again does not undo it. */
@@ -237,7 +259,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const users = await pool.query(
       `SELECT u.id, u.name, u.phone,
               COALESCE(json_agg(json_build_object('id', a.id, 'role', a.role, 'table', a.table_id, 'tableName', t.name, 'unit', a.unit_id, 'unitName', un.name,
-                'election', COALESCE(t.election_id, un.election_id, a.election_id), 'days', a.days) ORDER BY a.created_at) FILTER (WHERE a.id IS NOT NULL), '[]') AS roles,
+                'election', COALESCE(t.election_id, un.election_id, a.election_id), 'days', a.days, 'schedule', a.schedule) ORDER BY a.created_at) FILTER (WHERE a.id IS NOT NULL), '[]') AS roles,
               EXISTS (SELECT 1 FROM devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL) AS joined,
               (SELECT min(d.created_at) FROM devices d WHERE d.user_id = u.id) AS joined_at
        FROM users u LEFT JOIN role_assignments a ON a.user_id = u.id LEFT JOIN polling_tables t ON t.id = a.table_id LEFT JOIN units un ON un.id = a.unit_id
@@ -290,8 +312,17 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** Another table or district for one of their tasks. A phone that had the old table prepares the new one by itself. */
-  app.put<{ Params: { id: string; assignment: string }; Body: { table?: unknown; unit?: unknown } }>('/api/users/:id/roles/:assignment', { preHandler: manageUsers }, async (request, reply) => {
+  app.put<{ Params: { id: string; assignment: string }; Body: { table?: unknown; unit?: unknown; schedule?: unknown } }>('/api/users/:id/roles/:assignment', { preHandler: manageUsers }, async (request, reply) => {
     const { table, unit } = request.body ?? {};
+    if (request.body?.schedule !== undefined) {
+      const schedule = scheduleOf(request.body.schedule);
+      if (!schedule) return reply.code(400).send({ error: 'invalid_schedule' });
+      const set = await pool.query('UPDATE role_assignments SET schedule = $3 WHERE id::text = $2 AND user_id::text = $1', [request.params.id, request.params.assignment, Object.keys(schedule).length ? JSON.stringify(schedule) : null]);
+      if (!set.rowCount) return reply.code(404).send({ error: 'not_found' });
+      forgetActors();
+      await audit(pool, request.actor, 'role.scheduled', request.params.id);
+      if (typeof table !== 'string' && typeof unit !== 'string') return { ok: true };
+    }
     if (typeof table !== 'string' && typeof unit !== 'string') return reply.code(400).send({ error: 'invalid_request' });
     const changed = await pool.query(
       `UPDATE role_assignments SET table_id = COALESCE($3, table_id), unit_id = COALESCE($4, unit_id) WHERE id::text = $2 AND user_id::text = $1`,
@@ -335,7 +366,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   // ---------- Elections ----------
   app.get('/api/elections', { preHandler: manageElection }, async () => {
     const rows = await pool.query(
-      `SELECT e.id, e.name, e.kind, e.days, e.status, e.categories,
+      `SELECT e.id, e.name, e.kind, e.days, e.status, e.categories, e.hours,
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id) AS people,
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id AND x.needs_review) AS to_review,
               (SELECT count(*)::int FROM electors x WHERE x.election_id = e.id AND x.table_id IS NULL) AS without_table,
@@ -377,15 +408,21 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
    * The lists change only while it is prepared: after that, counts name them. The days, until it closes: a day that
    * gets suspended moves, and the screen asks first. The name, always.
    */
-  app.put<{ Params: { id: string }; Body: { categories?: unknown; days?: unknown; name?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request, reply) => {
-    const { categories, days, name } = request.body ?? {};
+  app.put<{ Params: { id: string }; Body: { categories?: unknown; days?: unknown; name?: unknown; hours?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request, reply) => {
+    const { categories, days, name, hours } = request.body ?? {};
     const status = (await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.id])).rows[0]?.status;
     if (!status) return reply.code(404).send({ error: 'not_found' });
     if (categories !== undefined && status !== 'preparacion') return reply.code(409).send({ error: 'lists_locked' });
     if (days !== undefined && ['cerrada', 'purgada'].includes(status)) return reply.code(409).send({ error: 'days_locked' });
     if (Array.isArray(days) && (days.length === 0 || days.some((day) => typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)))) return reply.code(400).send({ error: 'invalid_days' });
+    if (hours !== undefined) {
+      const valid = hoursOf(hours);
+      if (!valid) return reply.code(400).send({ error: 'invalid_hours' });
+      if (['cerrada', 'purgada'].includes(status)) return reply.code(409).send({ error: 'days_locked' });
+      await pool.query('UPDATE elections SET hours = $2 WHERE id = $1', [request.params.id, JSON.stringify(valid)]);
+    }
     await pool.query('UPDATE elections SET categories = COALESCE($2, categories), days = COALESCE($3::date[], days), name = COALESCE($4, name) WHERE id = $1', [request.params.id, Array.isArray(categories) ? JSON.stringify(categories) : null, Array.isArray(days) ? days : null, text(name)]);
-    await audit(pool, request.actor, 'election.changed', request.params.id, { name: name !== undefined, days: days !== undefined, lists: categories !== undefined });
+    await audit(pool, request.actor, 'election.changed', request.params.id, { name: name !== undefined, days: days !== undefined, lists: categories !== undefined, hours: hours !== undefined });
     forgetStatuses();
     return { ok: true };
   });

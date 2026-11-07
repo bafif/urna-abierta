@@ -7,6 +7,7 @@
   import { localDay } from '../app.svelte.ts';
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
+  import { timeIn } from '../schedule.ts';
 
   interface ElectionRef {
     id: string;
@@ -14,6 +15,8 @@
     status: string;
     days: string[];
     categories: { id: string; name: string }[];
+    hours?: Record<string, { open: string; close: string }>;
+    time_zone?: string;
   }
   interface Table {
     id: string;
@@ -99,9 +102,15 @@
     alertWatch.leave(turn);
   });
 
-  /** Only while it is being voted: at night, or once its day was closed, silence says nothing. */
+  /** Only while it is being voted, inside its hours when the election says them: at night, or once its day was closed, silence says nothing. */
+  const open = () => {
+    const hours = election?.hours?.[localDay()];
+    if (!hours) return true;
+    const now = timeIn(election?.time_zone);
+    return now >= hours.open && now < hours.close;
+  };
   const silent = (table: Table) =>
-    election?.status === 'jornada' && election.days.includes(localDay()) && !table.countedDays.includes(localDay()) && (!table.lastSync || Date.now() - Date.parse(table.lastSync) > SILENT_MS);
+    election?.status === 'jornada' && election.days.includes(localDay()) && open() && !table.countedDays.includes(localDay()) && (!table.lastSync || Date.now() - Date.parse(table.lastSync) > SILENT_MS);
   const lastDay = $derived(election?.days.at(-1) ?? '');
   /** Past the close of the last day the panel is about the count: which tables still owe it, and how many loaded everything. */
   const counting = $derived(
@@ -186,6 +195,7 @@
   {#snippet pie()}
     <div class="pila">
       {#if counting && election}<button class="boton secundario" data-testid="see-totals" onclick={() => nav.go('results', { election: election!.id })}>{t('district.totals')}</button>{/if}
+      {#if election}<button class="enlace" data-testid="schedule-link" onclick={() => nav.go('schedule', { election: election!.id })}>{t('schedule.open')}</button>{/if}
       {#if !given}<button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>{/if}
     </div>
   {/snippet}

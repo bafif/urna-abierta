@@ -7,8 +7,10 @@
   import { nav } from '../nav.svelte.ts';
   import { session } from '../session.svelte.ts';
   import type { ElectionSummary } from '../types.ts';
+  import { scheduleText, type Schedule } from '../schedule.ts';
 
   interface Task {
+    schedule: Schedule | null;
     id: string;
     role: string;
     table: string | null;
@@ -51,6 +53,21 @@
   let newRole = $state<string | null>(null);
   let picking = $state.raw<Picking | null>(null);
   let failed = $state(false);
+  /** A poll watcher's own times, being written. */
+  let timing = $state<{ task: Task; from: string; to: string; arrive: string; meet: string } | null>(null);
+
+  async function saveTimes() {
+    if (!timing) return;
+    failed = false;
+    try {
+      const { task, ...schedule } = timing;
+      await session.api(`/users/${id}/roles/${task.id}`, { method: 'PUT', body: { schedule } });
+      timing = null;
+      await load();
+    } catch {
+      failed = true;
+    }
+  }
 
   async function load() {
     person = (await session.api<{ users: Person[] }>('/users')).users.find((item) => item.id === id) ?? null;
@@ -64,7 +81,10 @@
   /** What they do, as the proposal says it: «Cuidar la Mesa 12», with the role and the days below. */
   const taskTitle = (task: Task) =>
     task.role === 'fiscal' && task.tableName ? t('person.task.table', { table: task.tableName }) : task.role === 'jefe' && task.unitName ? t('person.task.unit', { unit: task.unitName }) : roleName(task.role);
-  const taskDetail = (task: Task) => [roleName(task.role), task.days?.length ? formatDayChoice(task.days) : PLACED.includes(task.role) ? t('person.task.allDays') : ''].filter(Boolean).join(' · ');
+  const taskDetail = (task: Task) =>
+    [roleName(task.role), task.days?.length ? formatDayChoice(task.days) : PLACED.includes(task.role) ? t('person.task.allDays') : '', scheduleText(task.schedule, { from: t('schedule.from'), arrive: t('schedule.arrive'), meet: t('schedule.meet') })]
+      .filter(Boolean)
+      .join(' · ');
 
   /** The election a new task goes to: the one under way, or else the newest that is not closed. */
   async function currentElection(): Promise<string | null> {
@@ -155,7 +175,20 @@
   const joinedOn = $derived(person?.joined_at ? new Date(person.joined_at).toLocaleDateString(i18n.language, { day: 'numeric', month: 'long' }) : '');
 </script>
 
-{#if person && picking}
+{#if person && timing}
+  <Pantalla accion="equipo" volver onback={() => (timing = null)} ojo={person.name} titulo={t('schedule.form.title')} bajada={t('schedule.form.text')} desliza>
+    <div class="dos-campos">
+      <label class="campo"><span>{t('schedule.form.from')}</span><input type="time" bind:value={timing.from} data-testid="times-from" /></label>
+      <label class="campo"><span>{t('schedule.form.to')}</span><input type="time" bind:value={timing.to} data-testid="times-to" /></label>
+    </div>
+    <label class="campo"><span>{t('schedule.form.arrive')}</span><input type="time" bind:value={timing.arrive} data-testid="times-arrive" /></label>
+    <label class="campo"><span>{t('schedule.form.meet')}</span><input bind:value={timing.meet} maxlength="120" data-testid="times-meet" /></label>
+    {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
+    {#snippet pie()}
+      <button class="boton primario" disabled={Boolean(timing!.from && timing!.to && timing!.from >= timing!.to)} data-testid="times-save" onclick={saveTimes}><Ic name="tilde" /><span>{t('save')}</span></button>
+    {/snippet}
+  </Pantalla>
+{:else if person && picking}
   <Pantalla accion="equipo" volver onback={() => (picking = null)} ojo={person.name} titulo={picking.role === 'fiscal' ? t('person.whichTable') : t('person.whichUnit')} desliza>
     <div class="items">
       {#each picking.places as place (place.id)}
@@ -189,6 +222,7 @@
           <span class="tarea-texto"><strong>{taskTitle(task)}</strong><span>{taskDetail(task)}</span></span>
           <span class="renglon-botones">
             {#if PLACED.includes(task.role)}<button class="enlace" onclick={() => choosePlace(task.role, task)}>{t('person.change')}</button>{/if}
+            {#if task.role === 'fiscal'}<button class="enlace" data-testid="task-times" onclick={() => (timing = { task, from: task.schedule?.from ?? '', to: task.schedule?.to ?? '', arrive: task.schedule?.arrive ?? '', meet: task.schedule?.meet ?? '' })}>{t('schedule.form.link')}</button>{/if}
             <button class="enlace" onclick={() => removeTask(task)}>{t('person.remove')}</button>
           </span>
         </div>

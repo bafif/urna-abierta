@@ -19,6 +19,13 @@
 
   const preparing = $derived(election?.status === 'preparacion');
   const daysOpen = $derived(Boolean(election) && !['cerrada', 'purgada'].includes(election!.status));
+  /** «De 08:00 a 18:00», or that the hours change by day, or that nobody said them yet. */
+  const hoursText = $derived.by(() => {
+    const set = Object.values(election?.hours ?? {});
+    if (set.length === 0) return t('hours.none');
+    const distinct = new Set(set.map((times) => `${times.open}-${times.close}`));
+    return distinct.size === 1 ? t('hours.range', { open: set[0]!.open, close: set[0]!.close }) : t('hours.byDay');
+  });
   const lists = $derived((election?.categories ?? []).reduce((sum, category) => sum + category.lists.filter((list) => !['blanco', 'nulo', 'recurrido'].includes(list.id)).length, 0));
 
   async function remove() {
@@ -48,6 +55,10 @@
       </button>
       <button class="tarjeta fila-cambio" disabled={!daysOpen} onclick={() => nav.go('electionNew', { edit: id, part: 'days' })}>
         <span class="item-texto"><strong>{t('electionEdit.days')}</strong><span>{formatRange(election.days)}. {daysOpen ? t('electionEdit.days.until') : t('electionEdit.closed')}</span></span>
+        {#if daysOpen}<span class="ver">{t('electionEdit.change')}</span>{/if}
+      </button>
+      <button class="tarjeta fila-cambio" disabled={!daysOpen} data-testid="edit-hours" onclick={() => nav.go('electionHours', { id })}>
+        <span class="item-texto"><strong>{t('hours.title')}</strong><span>{hoursText}</span></span>
         {#if daysOpen}<span class="ver">{t('electionEdit.change')}</span>{/if}
       </button>
       <button class="tarjeta fila-cambio" disabled={!preparing} data-testid="edit-lists" onclick={() => nav.go('electionNew', { edit: id, part: 'lists' })}>

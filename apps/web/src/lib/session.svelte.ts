@@ -35,6 +35,10 @@ export interface TableInfo {
   timeZone?: string;
   /** Changes when the roll of the table changes on the server. */
   rollRevision?: string;
+  /** At what time each day is voted, by day, when the election says it. */
+  hours?: Record<string, { open: string; close: string }>;
+  /** This person's own times at the table: shift, arrival and meeting point. */
+  schedule?: { from?: string; to?: string; arrive?: string; meet?: string } | null;
 }
 
 export interface Me {

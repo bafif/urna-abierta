@@ -742,6 +742,25 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(await review()).toMatchObject({ total: 1, rows: [{ id: two[0], twin: null }] });
     });
 
+    it('the schedule: voting hours by day, each poll watcher\'s own times in their plan, and a chief sees their district', async () => {
+      const day = (await pool.query('SELECT days FROM elections WHERE id = $1', [demo.election])).rows[0].days[0].toISOString().slice(0, 10);
+      const hours = (open: string, close: string) => call('coordinacion', 'PUT', `/api/elections/${demo.election}`, { hours: { [day]: { open, close } } });
+      expect((await hours('18:00', '08:00')).statusCode).toBe(400);
+      expect((await hours('08:00', '18:00')).statusCode).toBe(200);
+      const { user } = (await call('fiscal', 'GET', '/api/me')).json();
+      const task = (await call('coordinacion', 'GET', '/api/users')).json().users.find((found: { id: string }) => found.id === user.id).roles[0];
+      const times = (schedule: object) => call('coordinacion', 'PUT', `/api/users/${user.id}/roles/${task.id}`, { schedule });
+      expect((await times({ from: '13:00', to: '08:00' })).statusCode).toBe(400);
+      expect((await times({ from: '08:00', to: '13:00', arrive: '07:30', meet: 'Puerta principal' })).statusCode).toBe(200);
+      expect((await call('fiscal', 'GET', '/api/me')).json().table).toMatchObject({
+        hours: { [day]: { open: '08:00', close: '18:00' } }, schedule: { from: '08:00', to: '13:00', arrive: '07:30', meet: 'Puerta principal' },
+      });
+      const schedule = (await call('jefe', 'GET', `/api/elections/${demo.election}/schedule`)).json();
+      const row = schedule.tables.find((found: { id: string }) => found.id === table);
+      expect(row.fiscales.find((fiscal: { name: string }) => fiscal.name === user.name).schedule).toMatchObject({ arrive: '07:30' });
+      expect((await call('fiscal', 'GET', `/api/elections/${demo.election}/schedule`)).statusCode).toBe(403);
+    });
+
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
       const bytes = Buffer.from('foto de prueba');
       const sha = createHash('sha256').update(bytes).digest('hex');

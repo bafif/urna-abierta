@@ -191,7 +191,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { profile, chosen, minimum } = await securityProfile(pool);
     const tableIds = actor.assignments.filter((a) => a.role === 'fiscal' && a.table_id).map((a) => a.table_id);
     const tables = await pool.query(
-      `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories, e.time_zone,
+      `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories, e.time_zone, e.hours,
               (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total
        FROM polling_tables t JOIN elections e ON e.id = t.election_id
        WHERE t.id = ANY($1) AND e.status NOT IN ('cerrada', 'purgada')
@@ -260,6 +260,8 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
         categories: table.categories,
         total: table.total,
         timeZone: table.time_zone,
+        hours: table.hours,
+        schedule: actor.assignments.find((a) => a.role === 'fiscal' && a.table_id === table.id)?.schedule ?? null,
         rollRevision: rollRevision(await tableRoll(pool, table.id)),
       },
       contact,

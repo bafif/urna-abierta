@@ -111,7 +111,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   const cache = new Map<string, { at: number; value: unknown }>();
 
   app.get('/api/district/elections', { preHandler: watch }, async () => {
-    const rows = await pool.query(`SELECT id, name, status, days, categories FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
+    const rows = await pool.query(`SELECT id, name, status, days, categories, hours, time_zone FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
     // The categories say when a table has tallied everything.
     return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((day: Date) => day.toISOString().slice(0, 10)), categories: row.categories.map((category: { id: string; name: string }) => ({ id: category.id, name: category.name })) })) };
   });
@@ -253,6 +253,28 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     await pool.query('INSERT INTO tally_decisions (table_id, category, operation_id, decided_by) VALUES ($1, $2, $3, $4) ON CONFLICT (table_id, category) DO UPDATE SET operation_id = $3, decided_by = $4, decided_at = now()', [table, category, operation, request.actor.userId]);
     await audit(pool, request.actor, 'tally.decided', table, { category, operation });
     return { ok: true };
+  });
+
+  // ---------- The schedule ----------
+
+  /** Each table with its poll watchers, their times and its chief: the whole party for coordination, a district for its chief. */
+  app.get<{ Params: { id: string } }>('/api/elections/:id/schedule', { preHandler: watch }, async (request, reply) => {
+    const election = (await pool.query('SELECT name, days, hours, time_zone FROM elections WHERE id = $1', [request.params.id])).rows[0];
+    if (!election) return reply.code(404).send({ error: 'not_found' });
+    const scope = await tablesInScope(pool, request.actor, request.params.id);
+    const tables = await pool.query(
+      `SELECT t.id, t.name, t.place, n.name AS unit,
+              (SELECT u.name FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.role = 'jefe' AND u.removed_at IS NULL AND (a.unit_id = t.unit_id OR (a.unit_id IS NULL AND a.election_id = t.election_id)) ORDER BY a.unit_id NULLS LAST LIMIT 1) AS chief,
+              COALESCE((SELECT json_agg(json_build_object('name', u.name, 'phone', u.phone, 'days', a.days, 'schedule', a.schedule) ORDER BY a.created_at)
+                FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' AND u.removed_at IS NULL), '[]') AS fiscales
+       FROM polling_tables t LEFT JOIN units n ON n.id = t.unit_id WHERE t.id = ANY($1) ORDER BY t.position`,
+      [scope],
+    );
+    await auditView(pool, request.actor, 'schedule.viewed', request.params.id);
+    return {
+      name: election.name, days: election.days.map((day: Date) => day.toISOString().slice(0, 10)), hours: election.hours, timeZone: election.time_zone,
+      tables: tables.rows.map((table) => ({ ...table, fiscales: table.fiscales.map((fiscal: { days: string[] | null }) => ({ ...fiscal, days: fiscal.days?.map((day) => String(day).slice(0, 10)) ?? null })) })),
+    };
   });
 
   // ---------- Results ----------

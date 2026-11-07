@@ -9,6 +9,8 @@ export interface Assignment {
   unit_id: string | null;
   table_id: string | null;
   days: Date[] | null;
+  /** A poll watcher's own times, if someone set them: shift, arrival and meeting point. */
+  schedule?: { from?: string; to?: string; arrive?: string; meet?: string } | null;
 }
 
 export interface Actor {
@@ -56,7 +58,7 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
   const row = found.rows[0];
   if (!row) return null;
   const roles = await pool.query(
-    `SELECT role, election_id, unit_id, table_id, days FROM role_assignments
+    `SELECT role, election_id, unit_id, table_id, days, schedule FROM role_assignments
      WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())`,
     [row.user_id],
   );
