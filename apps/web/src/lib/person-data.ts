@@ -6,7 +6,7 @@ export interface PersonData {
   election: { name: string; days: string[] };
   person: { name: string; document: string | null; fileNumber: string | null; address: string | null; order: number | null; extra: Record<string, unknown>; toReview: boolean };
   table: { name: string; place: string } | null;
-  consent: { date: string; means: string } | null;
+  consent: { date: string; means: string; withdrawn?: { date: string; means: string } } | null;
   semaphore: { category: string | null; sensitive: boolean; hidden: boolean; notedAt: string; under?: string } | null;
   markedVoted: string[];
   /** Other elections whose roll has the same document: this page is only about one. */
@@ -64,7 +64,9 @@ export function personDataPage(data: PersonData, say: Say, language: string, now
         : paragraph(say('data.light.category', { category: semaphore.category ?? '', when: when(semaphore.notedAt) }))) +
     (semaphore?.under ? paragraph(say('data.light.under', { category: semaphore.under })) : '');
 
-  const agreed = consent ? paragraph(say('data.consent.yes', { date: day(consent.date), means: consent.means })) : paragraph(say('data.consent.no'));
+  const agreed = consent
+    ? paragraph(say('data.consent.yes', { date: day(consent.date), means: consent.means })) + (consent.withdrawn ? paragraph(say('data.consent.withdrawn', { date: day(consent.withdrawn.date), means: consent.withdrawn.means })) : '')
+    : paragraph(say('data.consent.no'));
 
   const title = say('data.title', { name: person.name });
   return [

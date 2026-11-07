@@ -537,6 +537,7 @@ test('someone asks for their data and to be erased', async ({ page, request }) =
   expect(page14).toContain('Tus derechos');
   expect(page14).toContain('99000001');
   expect(page14).not.toMatch(/election_id|needs_review/);
+  await page.getByTestId('person-correct').click();
   await page.getByTestId('person-fix-name').fill('Nombre Corregido');
   await page.getByTestId('person-fix').click();
   await expect(page.getByText('Datos corregidos.')).toBeVisible();

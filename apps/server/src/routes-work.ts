@@ -687,6 +687,29 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { ok: true };
   });
 
+  /** Art. 6 and 27: they took their consent back. When and how is kept, and their mark in the traffic light goes now. */
+  app.post<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent/withdraw', { preHandler: managePersons }, async (request, reply) => {
+    const { date, means } = request.body ?? {};
+    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof means !== 'string' || !means.trim() || means.length > 200) return reply.code(400).send({ error: 'invalid_request' });
+    const saved = await pool.query(
+      `UPDATE electors SET consent = consent || jsonb_build_object('withdrawn', jsonb_build_object('date', $3::text, 'means', $4::text))
+       WHERE election_id = $1 AND id = $2 AND erased_at IS NULL AND consent IS NOT NULL RETURNING ref`,
+      [request.params.election, request.params.id, date, means.trim()],
+    );
+    if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [request.params.election, request.params.id]);
+    await audit(pool, request.actor, 'person.consent_withdrawn', saved.rows[0].ref);
+    return { ok: true };
+  });
+
+  /** A consent loaded by mistake goes, and the log says who removed it. */
+  app.delete<{ Params: { election: string; id: string } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {
+    const saved = await pool.query('UPDATE electors SET consent = NULL WHERE election_id = $1 AND id = $2 AND erased_at IS NULL AND consent IS NOT NULL RETURNING ref', [request.params.election, request.params.id]);
+    if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await audit(pool, request.actor, 'person.consent_removed', saved.rows[0].ref);
+    return { ok: true };
+  });
+
   /**
    * The name, the contact and the roll id go; the row stays anonymous, so that a table's totals still add up.
    * Who voted keeps counting, under the new id.

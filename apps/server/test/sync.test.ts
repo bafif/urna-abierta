@@ -761,6 +761,22 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('fiscal', 'GET', `/api/elections/${demo.election}/schedule`)).statusCode).toBe(403);
     });
 
+    it('consent is taken back with when and how, and the mark goes; one loaded by mistake is removed; all of it logged', async () => {
+      const elector = (await pool.query('SELECT id FROM electors WHERE election_id = $1 LIMIT 1', [demo.election])).rows[0].id;
+      const base = `/api/persons/${demo.election}/${encodeURIComponent(elector)}`;
+      await pool.query('INSERT INTO semaphore_marks (election_id, elector_id) VALUES ($1, $2)', [demo.election, elector]);
+      const withdraw = () => call('coordinacion', 'POST', `${base}/consent/withdraw`, { date: '2027-04-26', means: 'por mail' });
+      expect((await withdraw()).statusCode).toBe(404);
+      expect((await call('coordinacion', 'PUT', `${base}/consent`, { date: '2027-03-02', means: 'por escrito' })).statusCode).toBe(200);
+      expect((await withdraw()).statusCode).toBe(200);
+      const consent = (await pool.query('SELECT consent FROM electors WHERE election_id = $1 AND id = $2', [demo.election, elector])).rows[0].consent;
+      expect(consent).toMatchObject({ date: '2027-03-02', withdrawn: { date: '2027-04-26', means: 'por mail' } });
+      expect((await pool.query('SELECT count(*)::int AS n FROM semaphore_marks WHERE elector_id = $1', [elector])).rows[0].n).toBe(0);
+      expect((await call('coordinacion', 'DELETE', `${base}/consent`)).statusCode).toBe(200);
+      const logged = (await pool.query(`SELECT action FROM audit_log WHERE action LIKE 'person.consent%' ORDER BY id`)).rows.map((row) => row.action);
+      expect(logged).toEqual(['person.consent', 'person.consent_withdrawn', 'person.consent_removed']);
+    });
+
     it('the party chooses until when the names are kept, and the purge says when they went', async () => {
       const categories = [{ id: 'c', name: 'Consejo', lists: [{ id: 'l', name: 'Lista' }] }];
       const create = (purgeBy: string) => call('coordinacion', 'POST', '/api/elections', { name: 'Con plazo', kind: 'estudiantil', days: ['2027-05-01'], categories, purgeBy });
