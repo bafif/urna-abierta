@@ -63,7 +63,7 @@
       const next = days.find((day) => day > app.today);
       return next ? t('plan.rest.next', { day: formatDay(next) }) : '';
     }
-    if (step === 'done') return pending > 0 ? t('plan.finished.pending') : t('plan.finished.sent');
+    if (step === 'done') return pending > 0 ? t('plan.finished.pending') : app.arrivedLate ? t('plan.finished.late') : t('plan.finished.sent');
     return '';
   });
 

@@ -205,7 +205,9 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   // Whoever coordinates sees it, and what needs someone comes first.
   await button(page, 'Ver cómo va').click();
   await expect(page.getByRole('heading')).toHaveText('2 mesas te necesitan');
-  await expect(page.getByText('La otra anda bien.')).toBeVisible();
+  // The table that counted its envelopes turned the panel to the count: it already loaded everything.
+  await expect(page.getByText('La otra ya cargó todo.')).toBeVisible();
+  await expect(page.getByTestId('count-progress')).toContainText('1 de 3');
   await button(page, 'Ver esas mesas').click();
   await page.locator('.fila-mesa').first().click();
   await expect(page.getByTestId('voted')).toHaveText('3');
@@ -239,6 +241,14 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
 
   // The end: only totals remain.
   await button(page, 'Pasar al escrutinio').click();
+  // The results add up what was chosen: the corrected count waits for someone to choose between its two versions.
+  await button(page, 'Resultados').click();
+  await expect(page.getByTestId('results-counted')).toHaveText('0');
+  await expect(page.getByTestId('results-left-out')).toHaveText('Faltan 3 mesas: 2 todavía no cargaron, y en 1 hay que elegir entre dos escrutinios.');
+  const sheet = page.waitForEvent('download');
+  await button(page, 'Bajar en planilla').click();
+  expect((await sheet).suggestedFilename()).toBe('resultados.csv');
+  await page.getByRole('button', { name: 'Volver' }).click();
   await button(page, 'Cerrar la elección').click();
   await button(page, 'Números').click();
   await expect(page.getByTestId('share')).toHaveText('12 %');

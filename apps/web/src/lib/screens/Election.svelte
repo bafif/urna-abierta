@@ -11,9 +11,12 @@
   let { id }: { id: string } = $props();
   let election = $state.raw<ElectionSummary | null>(null);
   let failed = $state(false);
+  /** What arrived after the close and nobody looked at yet. */
+  let late = $state(0);
 
   const load = async () => {
     election = (await session.api<{ elections: ElectionSummary[] }>('/elections')).elections.find((item) => item.id === id) ?? null;
+    late = election?.status === 'cerrada' ? (await session.api<{ items: unknown[] }>(`/elections/${id}/late`)).items.length : 0;
   };
   onMount(load);
 
@@ -76,6 +79,9 @@
     {#if election.to_review > 0}
       <button class="enlace" onclick={() => nav.go('review', { election: id })}>{t('election.toReview', { count: election.to_review })}</button>
     {/if}
+    {#if late > 0}
+      <button class="enlace" data-testid="late-link" onclick={() => nav.go('late', { election: id })}>{t('late.link', { count: late })}</button>
+    {/if}
     {#if failed}<p class="problema" role="alert">{t('error.tryAgain')}</p>{/if}
     <!-- What comes next stays at the bottom. The rest is here, for whoever goes looking for it. -->
     <div class="renglon-botones separado">
@@ -83,6 +89,7 @@
       {#if election.tables}<button class="enlace" onclick={() => nav.go('districts', { election: id })}>{t('election.districts')}</button>{/if}
       {#if election.people && !['cerrada', 'purgada'].includes(election.status)}<button class="enlace" onclick={() => nav.go('rollUpload', { election: id })}>{t('election.reupload')}</button>{/if}
       {#if ['jornada', 'escrutinio', 'cerrada'].includes(election.status)}<button class="enlace" onclick={() => nav.go('numbers', { election: id })}>{t('election.numbers')}</button>{/if}
+      {#if ['jornada', 'escrutinio', 'cerrada'].includes(election.status)}<button class="enlace" data-testid="results-link" onclick={() => nav.go('results', { election: id })}>{t('results.open')}</button>{/if}
     </div>
     {#snippet pie()}
       <div class="pila">

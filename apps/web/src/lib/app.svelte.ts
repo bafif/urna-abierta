@@ -15,6 +15,8 @@ const SHRINK_LIMIT_MS = 15_000;
 const SHRINK_AGAIN_LIMIT_MS = 10_000;
 /** An urgent alert goes out by itself: if it does not get through in this time, the plan B shows. */
 const ALERT_LIMIT_MS = 8_000;
+/** Survives the wipe of the roll until the next table: something reached the server after the close. */
+const LATE_KEY = 'urna-llego-tarde';
 /** Who this is and their table are asked again this often while there is signal: they say if the roll changed. */
 const ME_EVERY_MS = 5 * 60_000;
 /** A smaller difference is not worth writing down again. */
@@ -141,7 +143,16 @@ class AppState {
   private marks = new MarkState();
   /** Everything applied to the marks, to rebuild them if a write fails. */
   private applied: Operation[] = [];
-  private readonly store: SyncStore = { ...storeFor(this.db, (operations) => this.applyRemote(operations)), serverTime: (offset) => this.noteClock(offset) };
+  private readonly store: SyncStore = {
+    ...storeFor(this.db, (operations) => this.applyRemote(operations)),
+    serverTime: (offset) => this.noteClock(offset),
+    arrivedLate: () => {
+      this.arrivedLate = true;
+      localStorage.setItem(LATE_KEY, '1');
+    },
+  };
+  /** Something reached the server after the close: the phone says coordination will look at it, not that all went fine. */
+  arrivedLate = $state(typeof localStorage !== 'undefined' && localStorage.getItem(LATE_KEY) === '1');
   private deviceId = '';
   private lastMeAt = Date.now();
   /** The phone's clock and the time that passed, the last time they were looked at. */
@@ -394,6 +405,8 @@ class AppState {
       await this.db.operations.clear();
       await this.db.photos.clear();
       await this.db.meta.bulkDelete(['cursor', 'tableId', 'lastDay', 'timeZone']);
+      localStorage.removeItem(LATE_KEY);
+      this.arrivedLate = false;
     });
     localStorage.removeItem(PREPARED_KEY);
     this.electors = [];
