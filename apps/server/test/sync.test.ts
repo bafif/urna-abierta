@@ -1445,8 +1445,10 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(exported).toMatchObject({ party: 'Agrupación Ejemplo', consent: { date: '2027-01-01', means: 'firma' }, person: { name: found.full_name, document: found.document }, table: { name: found.table_name } });
       expect(exported.election.name).toContain('Elección de prueba');
       // Nothing internal: no ids, flags or raw columns.
-      expect(Object.keys(exported).sort()).toEqual(['consent', 'election', 'markedVoted', 'others', 'party', 'person', 'semaphore', 'table']);
-      expect(JSON.stringify(exported)).not.toMatch(/election_id|needs_review|search|"review"|"ref"/);
+      expect(Object.keys(exported).sort()).toEqual(['consent', 'election', 'log', 'markedVoted', 'others', 'party', 'person', 'semaphore', 'table']);
+      // The log names actions, which the page puts in words: each entry says only when, what and who.
+      expect(JSON.stringify({ ...exported, log: undefined })).not.toMatch(/election_id|needs_review|search|"review"|"ref"/);
+      expect(exported.log.every((entry: object) => Object.keys(entry).sort().join() === 'action,at,who')).toBe(true);
       expect((await call('coordinacion', 'DELETE', base)).statusCode).toBe(200);
       expect((await call('coordinacion', 'GET', '/api/persons?q=borrado')).json().people).toEqual([]);
       expect((await pool.query('SELECT 1 FROM electors WHERE id = $1', [found.id])).rowCount).toBe(0);
