@@ -678,6 +678,12 @@
       return render();
     }
     faces.forEach((face) => document.fonts.add(face));
+    // Its logo too, for the same reason as the letters at the start.
+    if (theme.logo) {
+      const logo = new Image();
+      logo.src = theme.logo;
+      await logo.decode().catch(() => undefined);
+    }
     window.TEMAS.splice(0, window.TEMAS.length, ...window.TEMAS.filter((item) => BUILT_IN.includes(item.id)), theme);
     state.custom = theme;
     state.theme = theme.id;
@@ -741,5 +747,9 @@
     }
   });
 
-  render();
+  // The letters of every theme are here, and they are opened before drawing anything: a screen or a preview is never
+  // painted while its letters are on their way. Some browsers kept what they had painted without them, with the steps
+  // missing or a preview out of place, until something else changed.
+  const letters = Promise.allSettled([...document.fonts].map((face) => face.load()));
+  Promise.race([letters, new Promise((resolve) => setTimeout(resolve, 3_000))]).then(render);
 })();
