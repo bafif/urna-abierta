@@ -139,6 +139,7 @@
       'why.no_engine': 'Hace falta Podman o Docker abierto en esta computadora.',
       'why.no_tunnel': 'No se pudo abrir la dirección para los teléfonos. Revisá la conexión a internet y probá de nuevo, o elegí «Solo desde esta computadora».',
       'why.pull': 'No se pudieron bajar las imágenes de Urna Abierta. Fijate la conexión a internet y volvé a probar.',
+      'why.port': 'Otros programas ya usan los puertos del 8090 al 8099 de esta computadora. Cerrá alguno y volvé a probar.',
       'why.unknown': 'No sabemos bien qué pasó. El detalle sirve para pedir ayuda.',
       'paste.title': 'Pegá este bloque al crear el servidor',
       'paste.text': 'Elegí Ubuntu 24.04, reservá una dirección fija y abrí los puertos 80 y 443. Pegá esto en «user data» o «cloud-init». Trae claves: no lo compartas.',
@@ -297,6 +298,7 @@
       'why.no_engine': 'Podman or Docker has to be open on this computer.',
       'why.no_tunnel': 'The address for phones could not be opened. Check the internet connection and try again, or choose «Only from this computer».',
       'why.pull': 'The Urna Abierta images could not be downloaded. Check the internet connection and try again.',
+      'why.port': 'Other programs already use ports 8090 to 8099 on this computer. Close one of them and try again.',
       'why.unknown': 'We do not know exactly what happened. The detail helps when asking for help.',
       'paste.title': 'Paste this block when creating the server',
       'paste.text': 'Choose Ubuntu 24.04, reserve a fixed address and open ports 80 and 443. Paste this in “user data” or “cloud-init”. It has keys: do not share it.',
@@ -347,6 +349,7 @@
     [/^no_engine/, 'no_engine'],
     [/^no_tunnel/, 'no_tunnel'],
     [/^Command failed: \S+ pull /, 'pull'],
+    [/address already in use|port is already allocated/, 'port'],
     [/authentication methods failed|ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH|ENOTFOUND|handshake|privateKey|Cannot parse/i, 'ssh'],
   ];
   const why = (problem) => WHY.find(([pattern]) => pattern.test(problem ?? ''))?.[1] ?? 'unknown';

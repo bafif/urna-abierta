@@ -8,7 +8,9 @@ import { sleep } from './clouds/common.ts';
 import { images, newSecrets, type Secrets } from './settings.ts';
 
 const exec = promisify(execFile);
-const PORT = process.env.URNA_LOCAL_PORT ?? '8090';
+const PORT = Number(process.env.URNA_LOCAL_PORT ?? 8090);
+/** When another program already uses the port, the next ones are tried. */
+const PORTS_TO_TRY = 10;
 const NAME = process.env.URNA_LOCAL_NAME ?? 'urna-local';
 const TUNNEL_IMAGE = process.env.URNA_IMAGE_TUNNEL ?? 'docker.io/cloudflare/cloudflared:latest';
 const S3_SETTINGS =['URNA_S3_ENDPOINT', 'URNA_S3_BUCKET', 'URNA_S3_REGION', 'URNA_S3_PREFIX', 'URNA_S3_ACCESS_KEY_ID', 'URNA_S3_SECRET_ACCESS_KEY'];
@@ -75,9 +77,30 @@ export async function startLocal(theme: string, log: (line: string) => void, pho
     '-e', `URNA_SETUP_CODE=${secrets.setupCode}`, '-e', `URNA_FIELD_KEY=${secrets.fieldKey}`, '-e', `URNA_TEMA=${theme}`,
     '-e', `DATABASE_URL=postgres://urna:${secrets.postgresPassword}@${NAME}-db:5432/urna`, '-e', 'URNA_PHOTOS_DIR=/fotos', '-v', photos, ...bucket, chosen.server,
   );
-  await run('run', '-d', '--name', `${NAME}-web`, '--network', NAME, '--restart=unless-stopped', '-p', `127.0.0.1:${PORT}:80`, '-e', 'URNA_SITE=:80', '-e', `URNA_API=${NAME}-server:3000`, chosen.web);
-  const url = `http://localhost:${PORT}`;
+  const port = await publishWeb(run, remove, chosen.web);
+  const url = `http://localhost:${port}`;
   return { secrets, url, ...(phones ? { phonesUrl: await openTunnel(run, log) } : {}) };
+}
+
+type Run = (...args: string[]) => Promise<{ stdout: string; stderr: string }>;
+
+/**
+ * The app answers on 8090 of this computer. If another program already has it, like another test of Urna Abierta,
+ * it takes the next free one: the address at the end says which.
+ */
+async function publishWeb(run: Run, remove: (...names: string[]) => Promise<unknown>, image: string): Promise<number> {
+  for (let port = PORT; ; port++) {
+    try {
+      await run('run', '-d', '--name', `${NAME}-web`, '--network', NAME, '--restart=unless-stopped', '-p', `127.0.0.1:${port}:80`, '-e', 'URNA_SITE=:80', '-e', `URNA_API=${NAME}-server:3000`, image);
+      return port;
+    } catch (error) {
+      // Podman says the first, and Docker the second when the port is one of its own containers'.
+      const taken = /address already in use|port is already allocated/i.test((error as Error).message);
+      if (!taken || port >= PORT + PORTS_TO_TRY - 1) throw error;
+      // The container was created even though it could not start.
+      await remove(`${NAME}-web`);
+    }
+  }
 }
 
 /**
@@ -85,7 +108,7 @@ export async function startLocal(theme: string, log: (line: string) => void, pho
  * without an account, for as long as this computer is on: everything that goes through it, the roll included, crosses
  * Cloudflare. It does not restart on its own, because every start gets another address.
  */
-async function openTunnel(run: (...args: string[]) => Promise<{ stdout: string; stderr: string }>, log: (line: string) => void): Promise<string> {
+async function openTunnel(run: Run, log: (line: string) => void): Promise<string> {
   log('tunnel');
   await run('image', 'exists', TUNNEL_IMAGE).catch(() => run('pull', TUNNEL_IMAGE));
   await run('run', '-d', '--name', `${NAME}-tunel`, '--network', NAME, TUNNEL_IMAGE, 'tunnel', '--no-autoupdate', '--url', `http://${NAME}-web:80`);

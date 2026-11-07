@@ -75,7 +75,8 @@ un padrón de verdad, tené en cuenta que pasa entero por Cloudflare.
 **Con cable.** Elegí «Solo desde esta computadora». Activá la depuración USB en el teléfono, conectalo y corré `adb reverse tcp:8090
 tcp:8090` (`adb` viene en el paquete `android-tools`). En el teléfono, abrí `http://localhost:8090` en Chrome: para el teléfono es su
 propia dirección, y ahí no hace falta `https`. Las invitaciones que crees desde `http://localhost:8090` en la computadora también andan
-en ese teléfono.
+en ese teléfono. Si otro programa ya usaba el 8090, el instalador toma el siguiente libre y te lo muestra al terminar: en ese caso, usá
+ese número en lugar de 8090.
 
 ## Cargar el padrón
 

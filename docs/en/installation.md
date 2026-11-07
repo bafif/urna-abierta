@@ -75,6 +75,8 @@ all of it goes through Cloudflare.
 **With a cable.** Choose «Only from this computer». Turn on USB debugging on the phone, plug it in and run `adb reverse tcp:8090
 tcp:8090` (`adb` comes in the Android platform tools). On the phone, open `http://localhost:8090` in Chrome: for the phone it is its own
 address, and there `https` is not needed. Invitations you create from `http://localhost:8090` on the computer work on that phone too.
+If another program was already using 8090, the installer takes the next free port and shows it at the end: then use that number instead
+of 8090.
 
 ## Loading the roll
 
