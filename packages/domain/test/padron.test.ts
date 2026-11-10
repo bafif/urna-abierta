@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { zipSync, strToU8 } from 'fflate';
-import { fileNumberOf, groupProblems, mainRole, MAX_UNZIPPED_BYTES, readCsvRoll, readPadron, ROLES, rolesCan, writePadron } from '../src/index.ts';
+import { fileNumberOf, groupProblems, mainRole, MAX_ELECTORS, MAX_UNZIPPED_BYTES, readCsvRoll, readPadron, ROLES, rolesCan, writePadron } from '../src/index.ts';
 import { declareSize } from './zip.ts';
 
 const person = (id: string, extra = {}) => ({ id, full_name: `Prueba, Persona ${id}`, ...extra });
@@ -130,6 +130,24 @@ describe('.padron files', () => {
   it('ignores fields from a newer minor version', () => {
     const file = writePadron({ electors: [person('a', { futuro: 1 })] });
     expect(readPadron(file).problems).toEqual([]);
+  });
+
+  it('keeps what else a file says of a person bounded, and a NUL never reaches a name', () => {
+    const extra = { ...Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`campo${i}`, 'x'.repeat(500)])), anidado: { a: 1 } };
+    const file = writePadron({ electors: [person('a', { full_name: 'Pérez,\u0000 Ana', extra, review: { status: 'ok', notas: 'y'.repeat(10_000) } })] });
+    const elector = readPadron(file).padron!.electors[0]!;
+    expect(elector.full_name).toBe('Pérez, Ana');
+    expect(Object.keys(elector.extra!)).toHaveLength(30);
+    expect(Object.values(elector.extra!).every((value) => String(value).length <= 200)).toBe(true);
+    expect(elector.review).toEqual({ status: 'ok', notas: 'y'.repeat(200) });
+    const many = writePadron({ electors: [person('b', { identifiers: Array.from({ length: 11 }, (_, i) => ({ type: 'DNI', value: String(i) })) })] });
+    expect(readPadron(many).problems[0]?.problem).toBe('too_long:identifiers');
+  });
+
+  it('refuses a file with more people than any roll this app works with, before reading them', () => {
+    expect(readCsvRoll(`Apellido y nombre\n${'a\n'.repeat(MAX_ELECTORS + 20)}`).problems[0]?.problem).toBe('too_big');
+    const manifest = { format: 'padron-abierto', format_version: '0.1.0', files: { electors: { path: 'e.jsonl', count: MAX_ELECTORS + 1 } } };
+    expect(readPadron(zipSync({ 'manifest.json': strToU8(JSON.stringify(manifest)), 'e.jsonl': strToU8('') })).problems[0]?.problem).toBe('too_big');
   });
 });
 

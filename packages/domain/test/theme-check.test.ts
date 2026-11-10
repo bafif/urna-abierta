@@ -39,3 +39,12 @@ describe('the fonts of a theme', () => {
     expect(themeProblems(withMine([{ familia: 'Mi Letra', datos: big }]))[0]).toMatch(/pesan demasiado/);
   });
 });
+
+describe('what a theme carries besides its fonts', () => {
+  it('has an idea that is a short text, and a weight that every phone can take each time it opens', () => {
+    expect(themeProblems(theme({ idea: 'Azul y dorado, con letra grande.' }))).toEqual([]);
+    expect(themeProblems(theme({ idea: 'x'.repeat(601) }))[0]).toMatch(/idea/);
+    expect(themeProblems(theme({ idea: { html: '<b>' } }))[0]).toMatch(/idea/);
+    expect(themeProblems(theme({ logo: `data:image/png;base64,${'A'.repeat(300_000)}` }))[0]).toMatch(/pesa demasiado/);
+  });
+});
