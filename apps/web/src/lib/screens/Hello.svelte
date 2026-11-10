@@ -1,7 +1,7 @@
 <script lang="ts">
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
-  import { i18n, t } from '../i18n.svelte.ts';
+  import { t, toggleLanguage } from '../i18n.svelte.ts';
   import { session } from '../session.svelte.ts';
 
   let { onstart }: { onstart: () => void } = $props();
@@ -21,7 +21,7 @@
   {#snippet pie()}
     <div class="pila">
       <button class="boton primario" onclick={onstart}><Ic name="flecha" /><span>{t('hello.start')}</span></button>
-      <button class="enlace" onclick={() => (i18n.language = i18n.language === 'es' ? 'en' : 'es')}>{t('hello.otherLanguage')}</button>
+      <button class="enlace" onclick={toggleLanguage}>{t('hello.otherLanguage')}</button>
     </div>
   {/snippet}
 </Pantalla>

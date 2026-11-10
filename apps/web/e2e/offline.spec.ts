@@ -336,7 +336,8 @@ test('if saved data cannot be opened it says what to do, instead of hanging', as
   await expect(page.getByTestId('sync-status')).toHaveCount(0);
 });
 
-test('Spanish is the default language and the choice is remembered', async ({ context, request }) => {
+// The phones of these tests prefer Spanish (playwright.config.ts), so the app starts in Spanish.
+test('a phone in Spanish gets the app in Spanish, and the choice of another language is remembered', async ({ context, request }) => {
   const demo = await seed(request);
   const page = await context.newPage();
   await enter(page, demo.tables[0]!.invitations[0]!);
@@ -349,6 +350,23 @@ test('Spanish is the default language and the choice is remembered', async ({ co
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByRole('button', { name: 'Español' }).click();
   await expect(page.getByRole('heading')).toHaveText('Ajustes');
+});
+
+test.describe('on a phone in English', () => {
+  test.use({ locale: 'en-US' });
+
+  test('the app starts in English, Spanish is one tap away from the first screen, and that choice stays', async ({ context, request }) => {
+    const demo = await seed(request);
+    const page = await context.newPage();
+    await page.goto(`/#invitacion=${demo.tables[0]!.invitations[0]}`);
+    await expect(page.getByRole('button', { name: 'Start' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await page.getByRole('button', { name: 'Leer en castellano' }).click();
+    await expect(page.getByRole('button', { name: 'Empezar' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Empezar' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es');
+  });
 });
 
 test('finds a person with no accents in the search, and can undo right after marking', async ({ context, request }) => {

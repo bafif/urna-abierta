@@ -1,7 +1,7 @@
 <script lang="ts">
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
-  import { t } from '../i18n.svelte.ts';
+  import { t, toggleLanguage } from '../i18n.svelte.ts';
   import { ApiError, session } from '../session.svelte.ts';
   import Legal from './Legal.svelte';
 
@@ -44,7 +44,10 @@
   <button class="enlace" data-testid="setup-legal" onclick={() => (reading = true)}>{t('setup.readLegal')}</button>
   {#if problem}<p class="problema" role="alert">{problem}</p>{/if}
   {#snippet pie()}
-    <button class="boton primario" disabled={working || !name.trim() || !code || !accepted} onclick={create}><Ic name="flecha" /><span>{t('hello.start')}</span></button>
+    <div class="pila">
+      <button class="boton primario" disabled={working || !name.trim() || !code || !accepted} onclick={create}><Ic name="flecha" /><span>{t('hello.start')}</span></button>
+      <button class="enlace" onclick={toggleLanguage}>{t('hello.otherLanguage')}</button>
+    </div>
   {/snippet}
 </Pantalla>
 {/if}

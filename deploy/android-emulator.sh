@@ -49,8 +49,9 @@ if [ "${1:-}" = --headless ]; then
   window=(-no-window)
 fi
 log=$sdk/emulator.log
+# In Spanish, as the phone of the test expects: the app takes its language from the phone's.
 nohup "$sdk/emulator/emulator" -avd "$avd" "${window[@]}" -no-snapshot -no-audio -no-boot-anim \
-  -gpu swiftshader_indirect >"$log" 2>&1 &
+  -gpu swiftshader_indirect -change-locale es-AR >"$log" 2>&1 &
 
 "$adb" wait-for-device
 until [ "$("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do

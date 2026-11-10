@@ -2090,15 +2090,28 @@ export const LANGUAGES = { es: 'Español', en: 'English' } as const;
 export type Language = keyof typeof LANGUAGES;
 
 const STORAGE_KEY = 'urna-abierta-language';
-const dictionaries: Record<Language, Record<MessageKey, string>> = { es, en };
+export const MESSAGES: Record<Language, Record<MessageKey, string>> = { es, en };
 
-function initial(): Language {
-  const saved = typeof localStorage === 'undefined' ? null : localStorage.getItem(STORAGE_KEY);
-  // Spanish is the main language: English is chosen, never guessed.
-  return saved === 'en' ? 'en' : 'es';
+/** Spanish when any of the languages the device prefers is Spanish (es, es-AR, es-419…), English otherwise. */
+export function detectLanguage(preferred: readonly string[]): Language {
+  return preferred.some((tag) => tag.toLowerCase().split(/[-_]/)[0] === 'es') ? 'es' : 'en';
 }
 
-let current = $state<Language>(initial());
+/** What the person chose on this device wins. Until they choose, the device decides. */
+function initial(): Language {
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    // Without storage, as in some private windows, there is no choice to remember.
+  }
+  if (saved === 'es' || saved === 'en') return saved;
+  return typeof navigator === 'undefined' ? 'es' : detectLanguage(navigator.languages?.length ? navigator.languages : [navigator.language ?? '']);
+}
+
+const first = initial();
+let current = $state<Language>(first);
+if (typeof document !== 'undefined') document.documentElement.lang = first;
 
 export const i18n = {
   get language(): Language {
@@ -2106,14 +2119,23 @@ export const i18n = {
   },
   set language(value: Language) {
     current = value;
-    localStorage.setItem(STORAGE_KEY, value);
+    try {
+      localStorage.setItem(STORAGE_KEY, value);
+    } catch {
+      // The choice still holds until the app is closed.
+    }
     document.documentElement.lang = value;
   },
 };
 
+/** The other language, to offer it in one tap where someone arrives. */
+export function toggleLanguage(): void {
+  i18n.language = current === 'es' ? 'en' : 'es';
+}
+
 /** With a count of one it uses the «.one» version of the message, when there is one. */
 export function t(key: MessageKey, values: Record<string, string | number> = {}): string {
-  const dictionary = dictionaries[current];
+  const dictionary = MESSAGES[current];
   const singular = values.count === 1 ? dictionary[`${key}.one` as MessageKey] : undefined;
   return (singular ?? dictionary[key]).replace(/\{(\w+)\}/g, (_, name: string) => String(values[name] ?? ''));
 }

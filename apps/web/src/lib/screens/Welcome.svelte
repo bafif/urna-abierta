@@ -1,7 +1,7 @@
 <script lang="ts">
   import Ic from '../components/Ic.svelte';
   import Pantalla from '../components/Pantalla.svelte';
-  import { t } from '../i18n.svelte.ts';
+  import { t, toggleLanguage } from '../i18n.svelte.ts';
   import { ApiError, session } from '../session.svelte.ts';
 
   let code = $state('');
@@ -43,6 +43,9 @@
   </label>
   {#if problem}<p class="problema" role="alert">{problem}</p>{/if}
   {#snippet pie()}
-    <button class="boton primario" disabled={trying || code.replace(/\D/g, '').length < 8} onclick={enter}><Ic name="flecha" /><span>{t('welcome.enter')}</span></button>
+    <div class="pila">
+      <button class="boton primario" disabled={trying || code.replace(/\D/g, '').length < 8} onclick={enter}><Ic name="flecha" /><span>{t('welcome.enter')}</span></button>
+      <button class="enlace" onclick={toggleLanguage}>{t('hello.otherLanguage')}</button>
+    </div>
   {/snippet}
 </Pantalla>
