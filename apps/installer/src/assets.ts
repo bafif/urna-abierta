@@ -15,6 +15,7 @@ function sources(): Record<string, URL> {
   return {
     'index.html': here('../ui/index.html'),
     'app.js': here('../ui/app.js'),
+    'texts.js': here('../ui/texts.js'),
     'instalador.css': here('../ui/instalador.css'),
     'tema.css': here('../../web/src/lib/tema.css'),
     'temas.js': here('../../web/src/lib/temas.js'),

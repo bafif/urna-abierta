@@ -8,9 +8,28 @@ async function toWhere(page: Page) {
   await expect(page.getByRole('heading')).toHaveText('¿Dónde va a vivir tu Urna Abierta?');
 }
 
+// Before any other test chooses a language: the installer keeps the choice for the next time, and every test here
+// shares its folder.
+test.describe('on a computer in English', () => {
+  test.use({ locale: 'en-US' });
+
+  test('it opens in English, offers Spanish on every screen, and remembers the choice', async ({ page }) => {
+    await page.goto('');
+    await expect(page.getByRole('heading')).toHaveText('Let’s install Urna Abierta');
+    await expect(page).toHaveTitle('Install Urna Abierta');
+    await button(page, 'Start').click();
+    await expect(page.getByRole('heading')).toHaveText('Where will your Urna Abierta live?');
+    await button(page, 'Leer en castellano').click();
+    await expect(page.getByRole('heading')).toHaveText('¿Dónde va a vivir tu Urna Abierta?');
+    await page.reload();
+    await expect(page.getByRole('heading')).toHaveText('Vamos a instalar Urna Abierta');
+  });
+});
+
 test('it says what is going to happen, in both languages', async ({ page }) => {
   await page.goto('');
   await expect(page.getByRole('heading')).toHaveText('Vamos a instalar Urna Abierta');
+  await expect(page).toHaveTitle('Instalar Urna Abierta');
   await button(page, 'Read this in English').click();
   await expect(page.getByRole('heading')).toHaveText('Let’s install Urna Abierta');
   await button(page, 'Leer en castellano').click();

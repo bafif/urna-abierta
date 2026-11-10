@@ -6,6 +6,8 @@ html, body { margin: 0; height: 100%; }
 /* The content keeps a width that reads well, and what a theme paints on the footer still reaches the edges. */
 .ventana-derecha { --lado: max(40px, calc((100vw - 290px - 740px) / 2)); display: flex; flex-direction: column; min-width: 0; padding: 36px var(--lado) 28px; gap: 14px; position: relative; }
 .ventana-derecha .t1 { font-size: calc(30px * var(--escala-titulo)); }
+/* The other language, on every screen, where it does not take the place of anything. */
+.ventana-derecha > .idioma { position: absolute; top: 10px; right: var(--lado); font-size: 16px; }
 .ventana-derecha .ojo { margin: 0; color: var(--suave); }
 .ventana-derecha .bajada { margin: 0; }
 .cuerpo-v { flex: 1; display: flex; flex-direction: column; gap: 10px; }
@@ -60,7 +62,7 @@ html, body { margin: 0; height: 100%; }
 @media (max-width: 760px) {
   .ventana { grid-template-columns: 1fr; }
   .riel { display: none; }
-  .ventana-derecha { --lado: 20px; padding: 24px var(--lado); }
+  .ventana-derecha { --lado: 20px; padding: 44px var(--lado) 24px; }
   .pie-v .boton { width: 100%; }
   .vistas-previas { display: none; }
   .vista-doble { grid-template-columns: 1fr; }

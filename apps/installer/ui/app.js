@@ -1,365 +1,6 @@
 // The screens of the installer: one question per screen, and everything happens at the end.
 (() => {
-  const STRINGS = {
-    es: {
-      'hello.title': 'Vamos a instalar Urna Abierta',
-      'hello.text': 'Tarda unos 15 minutos.',
-      'hello.card.title': 'Vamos a preguntarte tres cosas',
-      'hello.card.text': 'Dónde va a vivir tu Urna Abierta, cómo leer los padrones y cómo querés que se vea. Lo demás lo hacemos solos.',
-      'hello.start': 'Empezar',
-      'hello.language': 'Read this in English',
-      'hello.legal': 'Al instalarla, tu partido pasa a ser el responsable de los datos que cargue y de cumplir la ley de datos personales. El proyecto no ve tu servidor ni tus padrones.',
-      'hello.legal.link': 'Leer el texto completo',
-      'next': 'Seguir',
-      'back': 'Volver',
-      'rail.where': 'Dónde va a vivir',
-      'rail.where.when': 'Tu servidor',
-      'rail.vision': 'Cómo leer los padrones',
-      'rail.vision.when': 'Con qué se leen',
-      'rail.theme': 'Cómo se ve',
-      'rail.theme.when': 'Su apariencia',
-      'rail.install': 'Instalar',
-      'rail.install.when': 'Lo hacemos solos',
-      'rail.here': 'Estás acá',
-      'rail.done': 'Hecho',
-      'step1': 'Paso 1 de 3',
-      'step2': 'Paso 2 de 3',
-      'step3': 'Paso 3 de 3',
-      'where.title': '¿Dónde va a vivir tu Urna Abierta?',
-      'where.cloud': 'Crear un servidor nuevo',
-      'where.cloud.text': 'En Oracle, AWS o Google. Te guiamos con la cuenta y hacemos el resto.',
-      'where.ssh': 'Ya tengo un servidor',
-      'where.ssh.text': 'Pegás su dirección y una llave SSH.',
-      'where.text': 'Prefiero pegar un texto',
-      'where.text.text': 'Te damos un bloque para pegar al crear el servidor. No nos das ninguna clave.',
-      'where.local': 'Probar en esta computadora',
-      'where.local.text': 'Para mirarla o hacer un simulacro antes de decidir. No sirve para una elección.',
-      'cloud.title': '¿En qué nube?',
-      'cloud.oracle': 'Oracle Cloud',
-      'cloud.oracle.text': 'Gratis y sin plazo. Recomendado.',
-      'cloud.aws': 'AWS',
-      'cloud.aws.text': 'Gratis por 6 meses: alcanza para una elección.',
-      'cloud.google': 'Google Cloud',
-      'cloud.google.text': 'Unos USD 3,65 por mes, por la dirección IP.',
-      'cloud.note': 'Se usa una sola vez, directamente con esa nube, para crear el servidor. No se guarda.',
-      'cloud.guide': 'Cómo sacar estos datos',
-      'cloud.region': 'Región',
-      'cloud.aws.key': 'Clave de acceso (Access key ID)',
-      'cloud.aws.secret': 'Clave secreta (Secret access key)',
-      'cloud.oracle.tenancy': 'OCID del tenancy',
-      'cloud.oracle.user': 'OCID del usuario',
-      'cloud.oracle.fingerprint': 'Huella (fingerprint)',
-      'cloud.oracle.key': 'Clave privada de la API',
-      'cloud.google.json': 'Contenido del archivo JSON de la cuenta de servicio',
-      'cloud.invalid': 'Faltan datos, o el archivo no es el correcto.',
-      'ssh.title': '¿Cuál es tu servidor?',
-      'ssh.text': 'Tiene que ser Ubuntu o Debian. La dirección tiene que ser fija.',
-      'ssh.address': 'Dirección (IP o dominio)',
-      'ssh.user': 'Usuario',
-      'ssh.key': 'Llave privada SSH',
-      'ssh.bad_address': 'Esa dirección no parece válida.',
-      'ssh.no_sudo': 'Entramos, pero ese usuario no puede actuar como administrador sin contraseña (sudo).',
-      'ssh.cannot_connect': 'No pudimos entrar. Fijate la dirección, el usuario y la llave o la contraseña.',
-      'ssh.checking': 'Comprobando…',
-      'ssh.port': 'Puerto',
-      'ssh.password': 'Contraseña, si no tenés llave',
-      'ssh.password.text': 'La contraseña sirve solo para entrar esta vez: dejamos una llave en el servidor, que queda en el archivo de acceso, y el servidor deja de aceptar contraseñas.',
-      'ssh.host_changed': 'La huella de ese servidor cambió desde la última vez. Puede ser un servidor nuevo en la misma dirección, o alguien en el medio: no le mandamos nada.',
-      'log.fingerprint': 'Huella del servidor: {fingerprint}',
-      'why.host_changed': 'La huella del servidor cambió desde la última vez, así que no le mandamos nada. Si lo reinstalaste, borrá esa dirección de huellas.json, en la carpeta .urna-abierta de tu usuario.',
-      'done.local.text': 'Ya podés abrirla y crear tu cuenta.',
-      'done.local': 'En este modo no hay copias de seguridad, así que no hay llave para guardar.',
-      'done.copy': 'Copiar la llave',
-      'done.copied': 'Llave copiada',
-      'done.access': 'Guardar el archivo de acceso',
-      'done.access.text': 'El archivo de acceso trae la llave y cómo entrar al servidor para actualizarlo o restaurar una copia. Guardalo en un pendrive o en un gestor de contraseñas, y no lo mandes por chat.',
-      'notYet.title': 'Tu servidor todavía no contesta',
-      'notYet.text': 'Lo creamos y arrancó, pero su dirección todavía no responde. Casi siempre es el certificado, que a veces tarda más.',
-      'notYet.what': 'Esperá unos minutos y probá de nuevo. Si sigue igual, fijate que los puertos 80 y 443 estén abiertos en tu nube.',
-      'notYet.key': 'Tu llave de recuperación ya está creada. Guardá el archivo de acceso ahora, por si cerrás esta ventana.',
-      'notYet.retry': 'Comprobar de nuevo',
-      'notYet.still': 'Todavía no contesta.',
-      'text.title': 'Vas a pegar un texto',
-      'text.text': 'Al final te damos un bloque. Lo pegás en el campo de inicio (user data o cloud-init) al crear un servidor con Ubuntu en la nube que quieras.',
-      'local.title': 'Probar en esta computadora',
-      'local.text': 'Se levanta acá mismo. Sirve para mirarla y para un simulacro, no para una elección.',
-      'local.only': 'Solo desde esta computadora',
-      'local.only.text': 'Para mirarla. No sale nada de acá.',
-      'local.phones': 'También desde los teléfonos',
-      'local.phones.text': 'Abre un túnel de Cloudflare: una dirección https que anda en cualquier teléfono, con wifi o con datos, mientras esta computadora esté prendida. Todo lo que pasa por ahí, padrón incluido, atraviesa Cloudflare, y la dirección cambia cada vez que lo volvés a abrir.',
-      'local.ok': 'Vamos a usar {engine}, que ya tenés instalado.',
-      'local.none': 'Para esto hace falta Podman o Docker abierto. Instalá uno de los dos y volvé a esta pantalla.',
-      'local.retry': 'Fijarme de nuevo',
-      'vision.title': '¿Cómo leemos los padrones escaneados?',
-      'vision.local': 'En esta computadora',
-      'vision.local.text': 'El lector de padrones corre en tu computadora: es privado y gratis, y se baja aparte. Es lo recomendado, porque un padrón trae datos de personas.',
-      'vision.later': 'Después',
-      'vision.later.text': 'Una planilla de Excel o CSV se carga directo en la app. Un PDF escaneado lo leés con el lector de padrones cuando haga falta.',
-      'vision.ai': 'Con mi propia IA',
-      'vision.ai.text': 'Todavía no está disponible.',
-      'theme.title': '¿Cómo querés que se vea?',
-      'theme.text': 'Es lo que van a ver todos al entrar. Cada persona lo puede cambiar en su teléfono.',
-      'theme.sample.title': 'Ya votaron',
-      'theme.sample.count': '69 personas',
-      'theme.install': 'Instalar',
-      'theme.custom': 'Usar un tema propio',
-      'theme.custom.text': 'Arrastrá el archivo acá, o tocá para elegirlo.',
-      'theme.custom.notTheme': 'Ese archivo no es un tema.',
-      'theme.custom.taken': 'Ya hay un tema con ese id. Cambialo en tu archivo.',
-      'theme.custom.refused': 'Ese tema no se puede usar:',
-      'theme.custom.badFont': 'Una de las letras del archivo no se puede abrir: {name}',
-      'progress.title': 'Instalando',
-      'progress.text': 'Podés dejar esta ventana abierta y hacer otra cosa.',
-      'log.address': 'Reservando una dirección fija',
-      'log.network': 'Preparando la red',
-      'log.image': 'Buscando el sistema',
-      'log.server': 'Creando el servidor',
-      'log.connecting': 'Entrando al servidor',
-      'log.waiting': 'Esperando que arranque. Puede tardar varios minutos',
-      'log.slow': 'Está tardando más de lo normal',
-      'log.start': 'Arrancando',
-      'log.tunnel': 'Abriendo la dirección para los teléfonos',
-      'log.theme': 'Cargando tu tema',
-      'log.cleanup': 'Borrando lo que se alcanzó a crear en la nube',
-      'server.waiting_system': 'Esperando que el servidor termine de prepararse',
-      'server.packages': 'Instalando lo necesario en el servidor',
-      'server.swap': 'Agregando memoria de intercambio',
-      'server.swap_failed': 'No se pudo agregar memoria de intercambio. Sigue sin ella',
-      'server.firewall': 'Abriendo los puertos 80 y 443',
-      'server.images_load': 'Cargando las imágenes',
-      'server.images_pull': 'Bajando las imágenes',
-      'server.starting': 'Arrancando',
-      'server.ready': 'Listo en {detail}',
-      'server.still_waiting': 'Arrancó en {detail}, pero todavía no responde. Casi siempre falta abrir los puertos 80 y 443 en el firewall de la nube: cuando estén abiertos, sigue solo. Si ya pasaron horas, reiniciá el servidor desde la nube y lo pide de nuevo',
-      'failed.title': 'Algo no salió',
-      'failed.text': 'No se llegó a terminar.',
-      'failed.detail': 'Detalle:',
-      'failed.cleaned': 'Lo que se había creado en la nube ya se borró: no queda nada cobrando.',
-      'failed.left': 'No pudimos borrar esto en la nube: {list}. Borralo desde su consola, porque puede cobrar.',
-      'failed.retry': 'Volver a intentar',
-      'why.oracle_capacity': 'Oracle no tiene máquinas gratuitas libres en esa región ahora. Pasa seguido: probá de nuevo en unas horas.',
-      'why.oracle_auth': 'Oracle no aceptó la clave de API. Revisá los OCID del usuario y del tenancy, la huella y la clave privada.',
-      'why.oracle_region': 'Oracle no dejó crear el servidor. Fijate que la región sea la principal de tu cuenta (home region) y que el usuario sea administrador.',
-      'why.oracle_limit': 'Tu cuenta de Oracle llegó a un límite de redes, direcciones o máquinas. Borrá en la consola lo que no uses y volvé a probar.',
-      'why.aws_auth': 'AWS no aceptó la clave de acceso. Revisá las dos partes.',
-      'why.aws_permission': 'Esa clave de AWS no puede crear servidores. Dale el permiso AmazonEC2FullAccess al usuario.',
-      'why.aws_network': 'Tu cuenta de AWS no tiene en esa región la red que viene por defecto. Probá con sa-east-1, o creala en la consola: VPC, «Crear VPC predeterminada».',
-      'why.aws_limit': 'AWS no deja crear más direcciones o máquinas en esa región. Liberá las que no uses, o probá otra región.',
-      'why.aws_account': 'Tu cuenta de AWS todavía no está lista. Terminá de verificarla y volvé a probar.',
-      'why.google_auth': 'Google no aceptó el archivo de la cuenta de servicio. Pegá el JSON completo, y fijate que esa clave no esté borrada.',
-      'why.google_billing': 'El proyecto de Google no tiene la facturación activada.',
-      'why.google_api': 'Falta activar la Compute Engine API en ese proyecto. Después de activarla, puede tardar unos minutos.',
-      'why.google_permission': 'La cuenta de servicio no puede crear servidores. Dale el rol Administrador de Compute.',
-      'why.google_capacity': 'Google no tiene esa máquina disponible ahora. Probá de nuevo en un rato.',
-      'why.slow_cloud': 'La nube tardó demasiado en crear el servidor. Probá de nuevo en un rato.',
-      'why.ssh': 'No pudimos entrar al servidor por SSH. Fijate la dirección, el usuario y la llave, y que el puerto 22 esté abierto.',
-      'why.needs_debian': 'El servidor no tiene Ubuntu ni Debian. Por ahora hace falta uno de esos dos.',
-      'why.apt': 'El servidor no pudo instalar lo que necesita. Suele pasar mientras se actualiza: esperá unos minutos y volvé a probar.',
-      'why.script': 'La instalación se cortó en el servidor. En el detalle están sus últimas líneas.',
-      'why.no_engine': 'Hace falta Podman o Docker abierto en esta computadora.',
-      'why.no_tunnel': 'No se pudo abrir la dirección para los teléfonos. Revisá la conexión a internet y probá de nuevo, o elegí «Solo desde esta computadora».',
-      'why.pull': 'No se pudieron bajar las imágenes de Urna Abierta. Fijate la conexión a internet y volvé a probar.',
-      'why.port': 'Otros programas ya usan los puertos del 8090 al 8099 de esta computadora. Cerrá alguno y volvé a probar.',
-      'why.unknown': 'No sabemos bien qué pasó. El detalle sirve para pedir ayuda.',
-      'paste.title': 'Pegá este bloque al crear el servidor',
-      'paste.text': 'Elegí Ubuntu 24.04, reservá una dirección fija y abrí los puertos 80 y 443. Pegá esto en «user data» o «cloud-init». Trae claves: no lo compartas.',
-      'paste.copy': 'Copiar',
-      'paste.copied': 'Copiado',
-      'paste.address': 'Cuando el servidor esté creado, escribí su dirección',
-      'paste.check': 'Comprobar',
-      'paste.checking': 'Comprobando… puede tardar varios minutos.',
-      'paste.not_yet': 'Todavía no responde. Puede tardar unos minutos: probá de nuevo en un rato.',
-      'paste.bad_address': 'Esa dirección no parece válida.',
-      'done.title': 'Tu Urna Abierta ya está andando',
-      'done.text': 'Guardá esta llave en un lugar seguro: sin ella no se pueden abrir tus copias de seguridad.',
-      'done.address': 'Dirección',
-      'done.key': 'Llave de recuperación',
-      'done.open': 'Abrir Urna Abierta',
-      'done.saved': 'Ya guardé la llave',
-      'done.themeFailed': 'No se pudo cargar tu tema propio. Cargalo desde la app, en Ajustes.',
-      'done.reader': 'Si tus padrones son PDF escaneados:',
-      'done.reader.link': 'bajá el lector de padrones',
-    },
-    en: {
-      'hello.title': 'Let’s install Urna Abierta',
-      'hello.text': 'It takes about 15 minutes.',
-      'hello.card.title': 'We will ask you three things',
-      'hello.card.text': 'Where your Urna Abierta will live, how to read the rolls, and how you want it to look. We do the rest.',
-      'hello.start': 'Start',
-      'hello.language': 'Leer en castellano',
-      'hello.legal': 'Once installed, your party is responsible for the data it loads and for complying with the personal data law. The project does not see your server or your rolls.',
-      'hello.legal.link': 'Read the full text',
-      'next': 'Continue',
-      'back': 'Back',
-      'rail.where': 'Where it will live',
-      'rail.where.when': 'Your server',
-      'rail.vision': 'How to read the rolls',
-      'rail.vision.when': 'What reads them',
-      'rail.theme': 'How it looks',
-      'rail.theme.when': 'Its appearance',
-      'rail.install': 'Install',
-      'rail.install.when': 'We do it for you',
-      'rail.here': 'You are here',
-      'rail.done': 'Done',
-      'step1': 'Step 1 of 3',
-      'step2': 'Step 2 of 3',
-      'step3': 'Step 3 of 3',
-      'where.title': 'Where will your Urna Abierta live?',
-      'where.cloud': 'Create a new server',
-      'where.cloud.text': 'On Oracle, AWS or Google. We guide you through the account and do the rest.',
-      'where.ssh': 'I already have a server',
-      'where.ssh.text': 'You paste its address and an SSH key.',
-      'where.text': 'I prefer to paste a text',
-      'where.text.text': 'We give you a block to paste when creating the server. You give us no keys.',
-      'where.local': 'Try it on this computer',
-      'where.local.text': 'To look at it or run a drill before deciding. Not for an election.',
-      'cloud.title': 'Which cloud?',
-      'cloud.oracle': 'Oracle Cloud',
-      'cloud.oracle.text': 'Free with no time limit. Recommended.',
-      'cloud.aws': 'AWS',
-      'cloud.aws.text': 'Free for 6 months: enough for one election.',
-      'cloud.google': 'Google Cloud',
-      'cloud.google.text': 'About USD 3.65 a month, for the IP address.',
-      'cloud.note': 'It is used only once, directly with that cloud, to create the server. It is not stored.',
-      'cloud.guide': 'How to get this data',
-      'cloud.region': 'Region',
-      'cloud.aws.key': 'Access key ID',
-      'cloud.aws.secret': 'Secret access key',
-      'cloud.oracle.tenancy': 'Tenancy OCID',
-      'cloud.oracle.user': 'User OCID',
-      'cloud.oracle.fingerprint': 'Fingerprint',
-      'cloud.oracle.key': 'API private key',
-      'cloud.google.json': 'Contents of the service account JSON file',
-      'cloud.invalid': 'Some data is missing, or the file is not the right one.',
-      'ssh.title': 'What is your server?',
-      'ssh.text': 'It has to be Ubuntu or Debian, and its address has to be fixed.',
-      'ssh.address': 'Address (IP or domain)',
-      'ssh.user': 'User',
-      'ssh.key': 'SSH private key',
-      'ssh.bad_address': 'That address does not look valid.',
-      'ssh.no_sudo': 'We got in, but that user cannot act as administrator without a password (sudo).',
-      'ssh.cannot_connect': 'We could not get in. Check the address, the user and the key or the password.',
-      'ssh.checking': 'Checking…',
-      'ssh.port': 'Port',
-      'ssh.password': 'Password, if you have no key',
-      'ssh.password.text': 'The password is only to get in this time: we leave a key on the server, which goes in the access file, and the server stops taking passwords.',
-      'ssh.host_changed': 'The fingerprint of that server changed since last time. It may be a new server at the same address, or someone in between: we sent it nothing.',
-      'log.fingerprint': 'Server fingerprint: {fingerprint}',
-      'why.host_changed': 'The fingerprint of the server changed since last time, so we sent it nothing. If you reinstalled it, remove that address from huellas.json, in the .urna-abierta folder of your user.',
-      'done.local.text': 'You can open it and create your account now.',
-      'done.local': 'In this mode there are no backups, so there is no key to keep.',
-      'done.copy': 'Copy the key',
-      'done.copied': 'Key copied',
-      'done.access': 'Save the access file',
-      'done.access.text': 'The access file has the key and how to get into the server to update it or restore a copy. Keep it on a USB stick or in a password manager, and do not send it over chat.',
-      'notYet.title': 'Your server does not answer yet',
-      'notYet.text': 'It was created and started, but its address does not answer yet. It is almost always the certificate, which sometimes takes longer.',
-      'notYet.what': 'Wait a few minutes and try again. If nothing changes, check that ports 80 and 443 are open in your cloud.',
-      'notYet.key': 'Your recovery key already exists. Save the access file now, in case you close this window.',
-      'notYet.retry': 'Check again',
-      'notYet.still': 'It still does not answer.',
-      'text.title': 'You will paste a text',
-      'text.text': 'At the end we give you a block. Paste it in the startup field (user data or cloud-init) when creating an Ubuntu server on any cloud.',
-      'local.title': 'Try it on this computer',
-      'local.text': 'It runs right here. It is for looking at it and for a drill, not for an election.',
-      'local.only': 'Only from this computer',
-      'local.only.text': 'To look at it. Nothing leaves this computer.',
-      'local.phones': 'From phones too',
-      'local.phones.text': 'Opens a Cloudflare tunnel: an https address that works on any phone, on wifi or mobile data, while this computer is on. Everything that goes through it, the roll included, crosses Cloudflare, and the address changes every time you open it again.',
-      'local.ok': 'We will use {engine}, which you already have.',
-      'local.none': 'This needs Podman or Docker running. Install one of them and come back to this screen.',
-      'local.retry': 'Check again',
-      'vision.title': 'How do we read scanned rolls?',
-      'vision.local': 'On this computer',
-      'vision.local.text': 'The roll reader runs on your computer: private and free, and a separate download. A roll has people’s data: this is the recommended way.',
-      'vision.later': 'Later',
-      'vision.later.text': 'An Excel or CSV spreadsheet loads straight into the app. Read a scanned PDF with the roll reader whenever you need it.',
-      'vision.ai': 'With my own AI',
-      'vision.ai.text': 'Not available yet.',
-      'theme.title': 'How do you want it to look?',
-      'theme.text': 'It is what everyone sees when they get in. Each person can change it on their phone.',
-      'theme.sample.title': 'Already voted',
-      'theme.sample.count': '69 people',
-      'theme.install': 'Install',
-      'theme.custom': 'Use your own theme',
-      'theme.custom.text': 'Drag the file here, or tap to choose it.',
-      'theme.custom.notTheme': 'That file is not a theme.',
-      'theme.custom.taken': 'There is already a theme with that id. Change it in your file.',
-      'theme.custom.refused': 'That theme cannot be used:',
-      'theme.custom.badFont': 'One of the fonts in the file cannot be opened: {name}',
-      'progress.title': 'Installing',
-      'progress.text': 'You can leave this window open and do something else.',
-      'log.address': 'Reserving a fixed address',
-      'log.network': 'Preparing the network',
-      'log.image': 'Finding the system',
-      'log.server': 'Creating the server',
-      'log.connecting': 'Getting into the server',
-      'log.waiting': 'Waiting for it to start. It can take several minutes',
-      'log.slow': 'It is taking longer than usual',
-      'log.start': 'Starting',
-      'log.tunnel': 'Opening the address for phones',
-      'log.theme': 'Loading your theme',
-      'log.cleanup': 'Deleting what had been created in the cloud',
-      'server.waiting_system': 'Waiting for the server to finish setting itself up',
-      'server.packages': 'Installing what the server needs',
-      'server.swap': 'Adding swap memory',
-      'server.swap_failed': 'Swap memory could not be added. It goes on without it',
-      'server.firewall': 'Opening ports 80 and 443',
-      'server.images_load': 'Loading the images',
-      'server.images_pull': 'Downloading the images',
-      'server.starting': 'Starting',
-      'server.ready': 'Ready at {detail}',
-      'server.still_waiting': 'It started at {detail}, but it does not answer yet. Ports 80 and 443 almost always still have to be opened in the cloud firewall: once they are, it goes on by itself. If hours have gone by, restart the server from the cloud and it asks again',
-      'failed.title': 'Something went wrong',
-      'failed.text': 'It did not finish.',
-      'failed.detail': 'Detail:',
-      'failed.cleaned': 'What had been created in the cloud is already deleted: nothing is left charging.',
-      'failed.left': 'We could not delete this in the cloud: {list}. Delete it from its console, because it may charge.',
-      'failed.retry': 'Try again',
-      'why.oracle_capacity': 'Oracle has no free machines available in that region right now. It happens often: try again in a few hours.',
-      'why.oracle_auth': 'Oracle did not accept the API key. Check the user and tenancy OCIDs, the fingerprint and the private key.',
-      'why.oracle_region': 'Oracle did not let the server be created. Check that the region is your account’s home region, and that the user is an administrator.',
-      'why.oracle_limit': 'Your Oracle account reached a limit of networks, addresses or machines. Delete what you do not use in the console and try again.',
-      'why.aws_auth': 'AWS did not accept the access key. Check both parts.',
-      'why.aws_permission': 'That AWS key cannot create servers. Give the user the AmazonEC2FullAccess permission.',
-      'why.aws_network': 'Your AWS account has no default network in that region. Try sa-east-1, or create it in the console: VPC, “Create default VPC”.',
-      'why.aws_limit': 'AWS does not allow more addresses or machines in that region. Release the ones you do not use, or try another region.',
-      'why.aws_account': 'Your AWS account is not ready yet. Finish verifying it and try again.',
-      'why.google_auth': 'Google did not accept the service account file. Paste the whole JSON, and check that the key was not deleted.',
-      'why.google_billing': 'The Google project does not have billing turned on.',
-      'why.google_api': 'The Compute Engine API is not turned on in that project. After turning it on, it can take a few minutes.',
-      'why.google_permission': 'The service account cannot create servers. Give it the Compute Admin role.',
-      'why.google_capacity': 'Google does not have that machine available right now. Try again in a while.',
-      'why.slow_cloud': 'The cloud took too long to create the server. Try again in a while.',
-      'why.ssh': 'We could not get into the server over SSH. Check the address, the user and the key, and that port 22 is open.',
-      'why.needs_debian': 'The server does not run Ubuntu or Debian. For now it needs one of those two.',
-      'why.apt': 'The server could not install what it needs. It usually happens while it is updating itself: wait a few minutes and try again.',
-      'why.script': 'The installation stopped on the server. Its last lines are in the detail.',
-      'why.no_engine': 'Podman or Docker has to be open on this computer.',
-      'why.no_tunnel': 'The address for phones could not be opened. Check the internet connection and try again, or choose «Only from this computer».',
-      'why.pull': 'The Urna Abierta images could not be downloaded. Check the internet connection and try again.',
-      'why.port': 'Other programs already use ports 8090 to 8099 on this computer. Close one of them and try again.',
-      'why.unknown': 'We do not know exactly what happened. The detail helps when asking for help.',
-      'paste.title': 'Paste this block when creating the server',
-      'paste.text': 'Choose Ubuntu 24.04, reserve a fixed address and open ports 80 and 443. Paste this in “user data” or “cloud-init”. It has keys: do not share it.',
-      'paste.copy': 'Copy',
-      'paste.copied': 'Copied',
-      'paste.address': 'Once the server is created, type its address',
-      'paste.check': 'Check',
-      'paste.checking': 'Checking… it can take several minutes.',
-      'paste.not_yet': 'It does not answer yet. It can take a few minutes: try again in a while.',
-      'paste.bad_address': 'That address does not look valid.',
-      'done.title': 'Your Urna Abierta is running',
-      'done.text': 'Keep this key somewhere safe: without it, your backups cannot be opened.',
-      'done.address': 'Address',
-      'done.key': 'Recovery key',
-      'done.open': 'Open Urna Abierta',
-      'done.saved': 'I saved the key',
-      'done.themeFailed': 'Your own theme could not be loaded. Load it from the app, in Settings.',
-      'done.reader': 'If your rolls are scanned PDFs:',
-      'done.reader.link': 'download the roll reader',
-    },
-  };
+  const STRINGS = window.INSTALLER_TEXTS;
 
   const GUIDE = {
     es: 'https://github.com/bafif/urna-abierta/blob/main/docs/es/servidores.md',
@@ -409,7 +50,8 @@
   const icon = (name) => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 
   const state = {
-    language: 'es',
+    // The computer's languages until the person chooses, and then their choice: the installer remembers it.
+    language: window.languageOf(navigator.languages?.length ? navigator.languages : [navigator.language ?? '']),
     screen: 'hello',
     where: 'cloud',
     provider: 'oracle',
@@ -436,6 +78,10 @@
     const [key, ...rest] = String(detail ?? '').split(' ');
     return STRINGS[state.language][`server.${key}`] ? t(`server.${key}`, { detail: rest.join(' ') }) : detail;
   };
+  /** A problem is kept as its key, so that it follows the language if the person changes it. */
+  const problemText = () => (state.problem?.key ? t(state.problem.key) : state.problem);
+  /** What is wrong with a theme file: a text of this installer, or one the check gave in both languages. */
+  const customProblemText = (problem) => (problem.key ? t(problem.key, problem.values) : problem[state.language]);
   const escape = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const post = async (path, body) => (await fetch(`api/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json();
   const tema = () => window.TEMAS.find((item) => item.id === state.theme) ?? window.TEMAS[0];
@@ -476,8 +122,7 @@
     hello: () => ({
       title: t('hello.title'), text: t('hello.text'),
       body: `<div class="tarjeta"><strong>${t('hello.card.title')}</strong><span>${t('hello.card.text')}</span></div>
-        <p class="aclara" data-testid="hello-legal">${t('hello.legal')} <a class="enlace ayuda-enlace" href="${LEGAL[state.language]}" target="_blank" rel="noreferrer">${t('hello.legal.link')}</a></p>
-        <button class="enlace" data-action="language">${t('hello.language')}</button>`,
+        <p class="aclara" data-testid="hello-legal">${t('hello.legal')} <a class="enlace ayuda-enlace" href="${LEGAL[state.language]}" target="_blank" rel="noreferrer">${t('hello.legal.link')}</a></p>`,
       next: ['hello.start', 'where'], noBack: true,
     }),
     where: () => ({
@@ -525,7 +170,7 @@
             <input class="oculto" type="file" accept=".json,application/json" data-testid="theme-file">
             <strong>${t('theme.custom')}</strong>${t('theme.custom.text')}
           </label>
-          ${state.customProblems.length ? `<p class="problema" role="alert" data-testid="theme-problem">${state.customProblems.map(escape).join('<br>')}</p>` : ''}
+          ${state.customProblems.length ? `<p class="problema" role="alert" data-testid="theme-problem">${state.customProblems.map((problem) => escape(customProblemText(problem))).join('<br>')}</p>` : ''}
         </div>
         <div class="vistas-previas" data-testid="previews">${preview('claro')}${preview('oscuro')}</div></div>`,
       next: ['theme.install', 'install'], back: 'vision',
@@ -551,7 +196,7 @@
       body: `<textarea class="bloque" readonly data-testid="paste-block">${escape(state.result?.text)}</textarea>
         <button class="boton secundario" data-action="copy">${state.copied ? t('paste.copied') : t('paste.copy')}</button>
         ${field('pasteAddress', t('paste.address'))}
-        ${state.problem ? `<p class="problema" role="alert">${escape(state.problem)}</p>` : ''}`,
+        ${state.problem ? `<p class="problema" role="alert">${escape(problemText())}</p>` : ''}`,
       next: [state.busy ? 'paste.checking' : 'paste.check', 'checkAddress'],
     }),
     done: () => {
@@ -562,7 +207,7 @@
           body: `<div class="tarjeta llave"><span>${t('done.address')}</span><strong data-testid="address">${escape(result.address)}</strong></div>
             <p class="aclara">${t('notYet.what')}</p>
             ${result.access ? `<p class="aclara">${t('notYet.key')}</p>${accessLink()}` : ''}
-            ${state.problem ? `<p class="problema" role="alert">${escape(state.problem)}</p>` : ''}`,
+            ${state.problem ? `<p class="problema" role="alert">${escape(problemText())}</p>` : ''}`,
           next: [state.busy ? 'ssh.checking' : 'notYet.retry', 'checkAgain'],
         };
       }
@@ -590,15 +235,17 @@
     const theme = tema();
     const recipes = Object.entries(window.URNA_TEMA.recetas(theme)).map(([k, v]) => `${k}="${v}"`).join(' ');
     document.documentElement.lang = state.language;
+    document.title = t('title');
     const focused = document.activeElement?.dataset?.field;
     document.getElementById('app').innerHTML = `
       <div class="ventana" ${recipes} style="${window.URNA_TEMA.variables(theme, state.mode, 'plan').replaceAll('"', '&quot;')}">
         ${rail()}
         <section class="ventana-derecha">
+          <button class="enlace idioma" data-action="language" lang="${state.language === 'es' ? 'en' : 'es'}">${t('language.other')}</button>
           ${screen.eyebrow ? `<p class="ojo">${screen.eyebrow}</p>` : ''}
           <h1 class="t1">${screen.title}</h1>
           ${screen.text ? `<p class="bajada">${screen.text}</p>` : ''}
-          <div class="cuerpo-v">${screen.body}${state.problem && state.screen !== 'paste' && state.screen !== 'failed' ? `<p class="problema" role="alert">${escape(state.problem)}</p>` : ''}</div>
+          <div class="cuerpo-v">${screen.body}${state.problem && state.screen !== 'paste' && state.screen !== 'failed' ? `<p class="problema" role="alert">${escape(problemText())}</p>` : ''}</div>
           ${screen.next || screen.back ? `<div class="pie-v">
             ${screen.back ? `<button class="enlace" data-go="${screen.back}">${t('back')}</button>` : ''}
             ${screen.next ? `<button class="boton primario" data-go="${screen.next[1]}" ${screen.disabled || state.busy ? 'disabled' : ''}>${icon('flecha')}<span>${t(screen.next[0])}</span></button>` : ''}
@@ -682,7 +329,7 @@
     whereBack: () => go(state.where),
     cloudNext: () => {
       if (!cloudCredentials()) {
-        state.problem = t('cloud.invalid');
+        state.problem = { key: 'cloud.invalid' };
         render();
         return;
       }
@@ -698,7 +345,7 @@
         go('vision');
         return;
       }
-      state.problem = t(`ssh.${result}`);
+      state.problem = { key: `ssh.${result}` };
       render();
     },
     install: async () => {
@@ -719,7 +366,7 @@
         go('done');
         return;
       }
-      state.problem = t(`paste.${result}`);
+      state.problem = { key: `paste.${result}` };
       render();
     },
     openApp: () => post('open', { url: state.result.setupLink }),
@@ -730,7 +377,7 @@
       const { answered } = await post('check-again');
       state.busy = false;
       if (answered) state.result.answered = true;
-      else state.problem = t('notYet.still');
+      else state.problem = { key: 'notYet.still' };
       render();
     },
   };
@@ -743,16 +390,16 @@
       if (file.size > 24 * 1024 * 1024) throw new Error('too large');
       theme = JSON.parse(await file.text());
     } catch {
-      state.customProblems = [t('theme.custom.notTheme')];
+      state.customProblems = [{ key: 'theme.custom.notTheme' }];
       return render();
     }
     if (BUILT_IN.includes(theme?.id)) {
-      state.customProblems = [t('theme.custom.taken')];
+      state.customProblems = [{ key: 'theme.custom.taken' }];
       return render();
     }
     const { problems } = await post('check-theme', { theme });
     if (problems.length > 0) {
-      state.customProblems = [t('theme.custom.refused'), ...problems.slice(0, 3)];
+      state.customProblems = [{ key: 'theme.custom.refused' }, ...problems.slice(0, 3)];
       return render();
     }
     // Its fonts have to open here too: this is the preview of what everyone is going to see.
@@ -760,7 +407,7 @@
     const opened = await Promise.allSettled(faces.map((face) => face.load()));
     const broken = opened.findIndex((result) => result.status === 'rejected');
     if (broken !== -1) {
-      state.customProblems = [t('theme.custom.badFont', { name: theme.archivosFuentes[broken].familia })];
+      state.customProblems = [{ key: 'theme.custom.badFont', values: { name: theme.archivosFuentes[broken].familia } }];
       return render();
     }
     faces.forEach((face) => document.fonts.add(face));
@@ -822,6 +469,8 @@
     if (where || provider || vision || theme || phones) return render();
     if (action === 'language') {
       state.language = state.language === 'es' ? 'en' : 'es';
+      // Remembered on this computer: the next time the installer opens, it opens in this one.
+      post('language', { language: state.language }).catch(() => undefined);
       return render();
     }
     if (action === 'findEngine') {
@@ -848,5 +497,12 @@
   // painted while its letters are on their way. Some browsers kept what they had painted without them, with the steps
   // missing or a preview out of place, until something else changed.
   const letters = Promise.allSettled([...document.fonts].map((face) => face.load()));
-  Promise.race([letters, new Promise((resolve) => setTimeout(resolve, 3_000))]).then(render);
+  // The language chosen the last time, if there was one, before drawing anything too.
+  const chosen = fetch('api/language')
+    .then((response) => response.json())
+    .then(({ language }) => {
+      if (language === 'es' || language === 'en') state.language = language;
+    })
+    .catch(() => undefined);
+  Promise.race([Promise.all([letters, chosen]), new Promise((resolve) => setTimeout(resolve, 3_000))]).then(render);
 })();

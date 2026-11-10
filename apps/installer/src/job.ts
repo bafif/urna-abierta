@@ -1,12 +1,10 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { awsCloud } from './clouds/aws.ts';
 import { sleep, type Cloud } from './clouds/common.ts';
 import { googleCloud } from './clouds/google.ts';
 import { oracleCloud } from './clouds/oracle.ts';
 import type { Access } from './access.ts';
 import { startLocal } from './local.ts';
+import { remember } from './preferences.ts';
 import { newSecrets, renderScript, siteFor, type Secrets } from './settings.ts';
 import { runScript, type SshTarget } from './ssh.ts';
 
@@ -104,16 +102,6 @@ export async function createInCloud(cloud: Cloud, secrets: Secrets, theme: strin
   }
 }
 
-function rememberPreferences(request: InstallRequest): void {
-  try {
-    const folder = process.env.URNA_CONFIG_DIR ?? join(homedir(), '.urna-abierta');
-    mkdirSync(folder, { recursive: true, mode: 0o700 });
-    writeFileSync(join(folder, 'preferencias.json'), JSON.stringify({ vision: request.vision }), { mode: 0o600 });
-  } catch {
-    // Only a preference: it is asked again when reading the first roll.
-  }
-}
-
 async function sendCustomTheme(request: InstallRequest, url: string, code: string, alive: boolean, log: (line: string) => void): Promise<{ themeFailed?: boolean }> {
   if (!request.customTheme) return {};
   log('theme');
@@ -121,7 +109,8 @@ async function sendCustomTheme(request: InstallRequest, url: string, code: strin
 }
 
 export async function install(request: InstallRequest, log: (line: string) => void): Promise<InstallResult> {
-  rememberPreferences(request);
+  // Only a preference: if it cannot be kept, it is asked again when reading the first roll.
+  remember({ vision: request.vision });
   const { where, theme } = request;
 
   if (where.kind === 'local') {

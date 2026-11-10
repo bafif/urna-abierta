@@ -7,6 +7,7 @@ import { googleCloud, signGoogleAssertion } from '../src/clouds/google.ts';
 import { oracleCloud, signOracle } from '../src/clouds/oracle.ts';
 import { CloudFailure, createInCloud, uploadTheme, waitForHealth } from '../src/job.ts';
 import { newSecrets, renderScript, siteFor, withoutComments } from '../src/settings.ts';
+import { installerTexts } from './texts.ts';
 
 const noWait = async () => undefined;
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
@@ -349,7 +350,8 @@ describe('what the failure screen says', () => {
   const ui = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const patterns = new Function(`return ${/const WHY = (\[[\s\S]*?\n {2}\]);/.exec(ui)![1]}`)() as [RegExp, string][];
   const why = (problem: string) => patterns.find(([pattern]) => pattern.test(problem))?.[1] ?? 'unknown';
-  const keys = (language: 'es' | 'en') => new Set([...ui.slice(ui.indexOf(`    ${language}: {`)).matchAll(/^ {6}'([\w.]+)':/gm)].map((match) => match[1]));
+  const texts = installerTexts();
+  const keys = (language: 'es' | 'en') => new Set(Object.keys(texts[language]));
 
   it('explains the usual failures from what the clouds, SSH and the server say', () => {
     expect(why('oracle_no_capacity: oracle_POST_instances: InternalError Out of host capacity.')).toBe('oracle_capacity');

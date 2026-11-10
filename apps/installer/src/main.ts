@@ -8,6 +8,7 @@ import { findEngine } from './local.ts';
 import { siteFor, VERSION } from './settings.ts';
 import { checkSsh } from './ssh.ts';
 import { accessFile } from './access.ts';
+import { remember, savedLanguage, systemLanguage } from './preferences.ts';
 
 /**
  * The installer is a small server that only this computer can reach, and its screens open in the
@@ -61,6 +62,7 @@ function openBrowser(url: string): void {
 
 async function api(path: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (path === 'state') return send(response, 200, { version: VERSION, engine: await findEngine() });
+  if (path === 'language' && request.method === 'GET') return send(response, 200, { language: savedLanguage() });
   if (path === 'job') {
     if (!job) return send(response, 200, { lines: [], result: null, problem: null, left: null, finished: false });
     const access = job.result?.access;
@@ -87,7 +89,13 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
   if (request.method !== 'POST') return send(response, 405, { error: 'post_only' });
   const body = await bodyOf(request);
 
-  if (path === 'check-theme') return send(response, 200, { problems: themeProblems(body.theme).map((problem) => themeProblemText(problem, 'es')) });
+  // In both languages: the person may change it while the problem is on the screen.
+  if (path === 'check-theme') return send(response, 200, { problems: themeProblems(body.theme).map((problem) => ({ es: themeProblemText(problem, 'es'), en: themeProblemText(problem, 'en') })) });
+  if (path === 'language') {
+    if (body.language !== 'es' && body.language !== 'en') return send(response, 400, { error: 'bad_language' });
+    remember({ language: body.language });
+    return send(response, 200, { ok: true });
+  }
 
   if (path === 'check-ssh') {
     try {
@@ -178,6 +186,7 @@ const server = createServer((request, response) => {
 server.listen(Number(process.env.URNA_INSTALLER_PORT ?? 0), '127.0.0.1', () => {
   const { port } = server.address() as { port: number };
   const url = `http://127.0.0.1:${port}/${token}/`;
-  console.log(`Urna Abierta: abrí esta dirección en tu navegador, si no se abrió sola:\n${url}`);
+  const said = { es: 'Urna Abierta: abrí esta dirección en tu navegador, si no se abrió sola:', en: 'Urna Abierta: open this address in your browser, if it did not open by itself:' };
+  console.log(`${said[savedLanguage() ?? systemLanguage()]}\n${url}`);
   openBrowser(url);
 });
