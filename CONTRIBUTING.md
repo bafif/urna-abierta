@@ -28,7 +28,8 @@ corepack pnpm install
 corepack pnpm test                                   # las pruebas unitarias de todo el repo
 corepack pnpm check                                  # los tipos de cada paquete, con sus pruebas
 node design/verificar-contraste.mjs                  # que todos los temas se puedan leer
-sh deploy/server/prueba-estado.sh                    # lo que dice «urna estado», con podman y curl de mentira
+sh deploy/server/prueba-estado.sh                    # lo que dice «urna estado», en los dos idiomas, con podman y curl de mentira
+node deploy/verificar-documentos.mjs                 # que cada documento tenga su par en el otro idioma y sus enlaces lleguen
 ```
 
 Las pruebas del servidor contra una base de verdad corren solo si les das una Postgres vacía. Sin `TEST_DATABASE_URL`, se saltean:
@@ -61,7 +62,7 @@ necesita el otro repo y no corre en GitHub.
   idiomas, y el chequeo de tipos falla si falta uno. Los del instalador están en `apps/installer/ui/texts.js`. Una prueba falla si a
   un texto le falta un idioma o si una pantalla escribe castellano por su cuenta.
 - **La documentación va en `docs/es` y `docs/en`,** con la misma estructura. Los archivos de la raíz llevan su versión en inglés al lado,
-  como `README.en.md`.
+  como `README.en.md`. Cada documento enlaza a su par arriba de todo, y `node deploy/verificar-documentos.mjs` falla si a uno le falta.
 - **El castellano es rioplatense, con voseo,** llano y corto. Cada promesa va con lo que la hace cierta, y los límites se dicen como son.
 - **Cada app arranca en el idioma del equipo:** castellano si alguno de los idiomas que prefiere el teléfono o la computadora es
   castellano, inglés si no. Siempre hay un selector a la vista, y lo que elige la persona manda.

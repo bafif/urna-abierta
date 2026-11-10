@@ -28,7 +28,8 @@ corepack pnpm install
 corepack pnpm test                                   # the unit tests of the whole repository
 corepack pnpm check                                  # the types of every package, its tests included
 node design/verificar-contraste.mjs                  # that every theme can be read
-sh deploy/server/prueba-estado.sh                    # what «urna estado» says, with fake podman and curl
+sh deploy/server/prueba-estado.sh                    # what «urna estado» says, in both languages, with fake podman and curl
+node deploy/verificar-documentos.mjs                 # that every document has its pair in the other language, and its links lead somewhere
 ```
 
 The server tests against a real database run only if you give them an empty Postgres. Without `TEST_DATABASE_URL`, they are skipped:
@@ -61,7 +62,7 @@ reader's needs the other repository and does not run on GitHub.
   and the type check fails if one is missing. The installer's are in `apps/installer/ui/texts.js`. A test fails if a text is missing a
   language or if a screen writes Spanish of its own.
 - **Documentation goes in `docs/es` and `docs/en`,** with the same structure. Files at the root have their English version next to them,
-  like `README.en.md`.
+  like `README.en.md`. Each document links to its pair at the very top, and `node deploy/verificar-documentos.mjs` fails if one is missing.
 - **The Spanish is from the River Plate, with voseo,** plain and short. Every promise comes with what makes it true, and limits are said
   as they are.
 - **Each app starts in the language of the device:** Spanish if any of the languages the phone or computer prefers is Spanish,
