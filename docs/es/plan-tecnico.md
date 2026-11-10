@@ -218,7 +218,8 @@ nunca se adivina. El código va en inglés.
 - Especificación del formato: `CC0-1.0`.
 - Contribuciones: DCO, sin CLA.
 - `LEGAL.md`, con un aviso de responsabilidad en castellano además del texto oficial en inglés. Un abogado lo revisa antes
-  de publicar.
+  de que la app se use en una elección real. Esa revisión no frena el desarrollo, las pruebas ni la publicación de versiones:
+  hasta entonces, `LEGAL.md` dice que es un borrador.
 
 ## Etapas
 

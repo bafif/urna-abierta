@@ -221,7 +221,8 @@ chosen, never guessed. The code is in English.
 - Format specification: `CC0-1.0`.
 - Contributions: DCO, no CLA.
 - `LEGAL.md`, with a liability notice in Spanish in addition to the official English text. A lawyer reviews it before
-  publishing.
+  the app is used in a real election. That review does not hold back development, testing or publishing releases: until then,
+  `LEGAL.md` says it is a draft.
 
 ## Stages
 
