@@ -212,8 +212,9 @@ specification is published in the scanner repository, under CC0.
 
 ## Languages
 
-Everything goes in Spanish and English, with Spanish as the main language. The interface has a selector, and English is
-chosen, never guessed. The code is in English.
+Everything goes in Spanish and English, in a single release. Each app starts in the language of the device: Spanish if any
+of the languages it prefers is Spanish, English otherwise. There is always a selector in sight, and what the person chooses
+wins. The code is in English.
 
 ## License
 

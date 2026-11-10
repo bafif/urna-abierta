@@ -58,11 +58,13 @@ necesita el otro repo y no corre en GitHub.
 
 - **El código va en inglés:** nombres, comentarios, pruebas y mensajes de commit.
 - **Lo que lee una persona va en castellano y en inglés.** Cada texto de la app está en `apps/web/src/lib/i18n.svelte.ts`, en los dos
-  idiomas, y el chequeo de tipos falla si falta uno. Los del instalador están en `apps/installer/ui/app.js`.
+  idiomas, y el chequeo de tipos falla si falta uno. Los del instalador están en `apps/installer/ui/texts.js`. Una prueba falla si a
+  un texto le falta un idioma o si una pantalla escribe castellano por su cuenta.
 - **La documentación va en `docs/es` y `docs/en`,** con la misma estructura. Los archivos de la raíz llevan su versión en inglés al lado,
   como `README.en.md`.
 - **El castellano es rioplatense, con voseo,** llano y corto. Cada promesa va con lo que la hace cierta, y los límites se dicen como son.
-- **El castellano es el idioma principal.** El inglés se elige; la app nunca lo adivina.
+- **Cada app arranca en el idioma del equipo:** castellano si alguno de los idiomas que prefiere el teléfono o la computadora es
+  castellano, inglés si no. Siempre hay un selector a la vista, y lo que elige la persona manda.
 
 ## Cómo se trabaja
 

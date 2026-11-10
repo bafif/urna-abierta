@@ -209,8 +209,8 @@ La especificación se publica en el repo del escáner, con licencia CC0.
 
 ## Idiomas
 
-Todo va en español y en inglés, con el español como idioma principal. La interfaz tiene un selector, y el inglés se elige:
-nunca se adivina. El código va en inglés.
+Todo va en español y en inglés, en un solo release. Cada app arranca en el idioma del equipo: español si alguno de los idiomas
+que prefiere es español, inglés si no. Siempre hay un selector a la vista, y lo que elige la persona manda. El código va en inglés.
 
 ## Licencia
 

@@ -58,12 +58,14 @@ reader's needs the other repository and does not run on GitHub.
 
 - **Code is in English:** names, comments, tests and commit messages.
 - **What a person reads is in Spanish and English.** Every text of the app is in `apps/web/src/lib/i18n.svelte.ts`, in both languages,
-  and the type check fails if one is missing. The installer's are in `apps/installer/ui/app.js`.
+  and the type check fails if one is missing. The installer's are in `apps/installer/ui/texts.js`. A test fails if a text is missing a
+  language or if a screen writes Spanish of its own.
 - **Documentation goes in `docs/es` and `docs/en`,** with the same structure. Files at the root have their English version next to them,
   like `README.en.md`.
 - **The Spanish is from the River Plate, with voseo,** plain and short. Every promise comes with what makes it true, and limits are said
   as they are.
-- **Spanish is the main language.** English is chosen; the app never guesses it.
+- **Each app starts in the language of the device:** Spanish if any of the languages the phone or computer prefers is Spanish,
+  English otherwise. There is always a selector in sight, and what the person chooses wins.
 
 ## How work is done
 
