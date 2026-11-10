@@ -47,4 +47,4 @@ The container images the server downloads also carry their attestation, publishe
 ## System warnings
 
 Verifying the download does not remove the Windows or macOS warnings about an unsigned installer.
-[System warnings](installation.md#system-warnings) explains what to tap on each one.
+[Downloading and opening it](installation.md#downloading-and-opening-it) explains what to tap on each one.

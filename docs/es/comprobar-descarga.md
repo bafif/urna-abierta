@@ -47,4 +47,4 @@ Las imágenes de los contenedores que baja el servidor también llevan su atesta
 ## Los avisos del sistema
 
 Comprobar la descarga no saca los avisos de Windows o macOS por un instalador sin firmar.
-[Los avisos del sistema](instalacion.md#los-avisos-del-sistema) explica qué tocar en cada uno.
+[Bajarlo y abrirlo](instalacion.md#bajarlo-y-abrirlo) explica qué tocar en cada uno.
