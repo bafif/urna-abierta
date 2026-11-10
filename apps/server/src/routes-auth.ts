@@ -1,5 +1,5 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { dayIn, mainRole, SECURITY_PROFILES, storedPhone, themeProblems } from '@urna-abierta/domain';
 import { attemptLimiter, audit, authenticated, can, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpMatches, unseal, type Actor } from './actor.ts';
@@ -11,6 +11,8 @@ const defaultParty = () => ({ name: '', theme: process.env.URNA_TEMA ?? 'aula' }
 const INVITATION_DAYS = 14;
 const GUESSES_ALLOWED = 10;
 const GUESS_WINDOW_MS = 15 * 60_000;
+/** Wrong 8-digit codes from anywhere in that window: guessing one of a hundred million takes far more than this. */
+const CODE_GUESSES_ALLOWED = 200;
 
 /**
  * `by` is who asks for it, or null for the demo of whoever runs the server. A device that comes from the link of
@@ -70,6 +72,9 @@ export const MAX_THEME_BYTES = 24 * 1024 * 1024;
 
 export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   const guesses = attemptLimiter(GUESSES_ALLOWED, GUESS_WINDOW_MS);
+  // A code of 8 digits is guessable from many addresses: past this many wrong ones in a window, from anywhere, codes
+  // wait. Invitation links, which cannot be guessed, keep working.
+  const codeGuesses = attemptLimiter(CODE_GUESSES_ALLOWED, GUESS_WINDOW_MS);
   const beforeSecondFactor = authenticated(pool, { beforeSecondFactor: true });
 
   /** What anyone can know before logging in: nothing more than how the app should look. */
@@ -101,7 +106,12 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** The theme chosen in the installer, which arrives right after the server starts and before anyone gets in. */
-  app.put<{ Body: { code?: unknown; theme?: unknown } }>('/api/setup/theme', { bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
+  // Once someone got in, a theme this big is not even read.
+  const stillOpen = async (_request: FastifyRequest, reply: FastifyReply) => {
+    const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
+    if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
+  };
+  app.put<{ Body: { code?: unknown; theme?: unknown } }>('/api/setup/theme', { onRequest: stillOpen, bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
     const { code, theme } = request.body ?? {};
     const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
     if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
@@ -127,6 +137,8 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { token } = request.body ?? {};
     if (typeof token !== 'string') return reply.code(400).send({ error: 'invalid_request' });
     if (guesses.blocked(request.ip)) return reply.code(429).send({ error: 'too_many_attempts' });
+    const short = /^\d{8}$/.test(token);
+    if (short && codeGuesses.blocked('codes')) return reply.code(429).send({ error: 'too_many_attempts' });
     const used = await pool.query(
       `UPDATE invitations SET used_at = now() WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING user_id, may_enroll`,
       [hashToken(token)],
@@ -134,6 +146,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const userId = used.rows[0]?.user_id;
     if (!userId) {
       guesses.failed(request.ip);
+      if (short) codeGuesses.failed('codes');
       return reply.code(410).send({ error: 'invitation_not_valid' });
     }
     await audit(pool, { userId } as never, 'device.joined', userId);

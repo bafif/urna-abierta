@@ -192,7 +192,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
 
   /** The photo of the tally sheet, identified by its own hash, so that repeating the upload changes nothing. */
   app.addContentTypeParser(/^image\//, { parseAs: 'buffer', bodyLimit: MAX_PHOTO_BYTES }, (_request, body, done) => done(null, body));
-  app.put<{ Params: { table: string; sha: string }; Body: Buffer }>('/api/tables/:table/photos/:sha', { preHandler: signedIn, bodyLimit: MAX_PHOTO_BYTES }, async (request, reply) => {
+  app.put<{ Params: { table: string; sha: string }; Body: Buffer }>('/api/tables/:table/photos/:sha', { onRequest: signedIn, bodyLimit: MAX_PHOTO_BYTES }, async (request, reply) => {
     const { table, sha } = request.params;
     if (!TABLE_ID.test(table) || !/^[0-9a-f]{64}$/.test(sha)) return reply.code(400).send({ error: 'invalid_request' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });

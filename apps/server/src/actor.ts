@@ -40,15 +40,19 @@ export const hashToken = (token: string) => createHash('sha256').update(token).d
 const ACTOR_MEMORY_MS = 30_000;
 const actors = new Map<string, { until: number; actor: Actor }>();
 let edited: RoleOverrides | null = null;
+/** Goes up with each change: an actor read while something changed is used once, and not kept. */
+let generation = 0;
 export const forgetActors = () => {
   actors.clear();
   edited = null;
+  generation += 1;
 };
 
 export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | null> {
   const key = hashToken(token);
   const known = actors.get(key);
   if (known && known.until > Date.now()) return known.actor;
+  const reading = generation;
   const found = await pool.query(
     `SELECT d.id AS device_id, d.second_factor_at, d.may_enroll, u.id AS user_id, u.name
      FROM devices d JOIN users u ON u.id = d.user_id
@@ -58,19 +62,21 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
   const row = found.rows[0];
   if (!row) return null;
   const roles = await pool.query(
-    `SELECT role, election_id, unit_id, table_id, days, schedule FROM role_assignments
+    `SELECT role, election_id, unit_id, table_id, days, schedule, expires_at FROM role_assignments
      WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())`,
     [row.user_id],
   );
   // A device that came from a chief's link, for instance, stays the poll watcher the chief could invite: whatever the
   // person gets later, and whatever the party adds to poll watchers, would otherwise reach whoever made the link.
-  const assignments = (roles.rows.filter((r) => isRole(r.role)) as Assignment[]).filter((a) => row.may_enroll || (a.role === 'fiscal' && a.table_id !== null));
+  const assignments = (roles.rows.filter((r) => isRole(r.role)).map(({ expires_at: _expires, ...r }) => r) as Assignment[]).filter((a) => row.may_enroll || (a.role === 'fiscal' && a.table_id !== null));
   const unique = [...new Set(assignments.map((a) => a.role))];
   edited ??= await getSetting<RoleOverrides>(pool, 'role_permissions', {});
   const permissions = row.may_enroll ? permissionsOf(unique, edited) : permissionsOf(unique, edited).filter((permission) => permissionsOf(['fiscal'], {}).includes(permission));
   const actor: Actor = { userId: row.user_id, deviceId: row.device_id, name: row.name, verified: row.second_factor_at !== null, mayEnroll: row.may_enroll, assignments, roles: unique, permissions };
   if (actors.size > 5_000) actors.clear();
-  actors.set(key, { until: Date.now() + ACTOR_MEMORY_MS, actor });
+  // Kept only until the first of its tasks expires, and not at all if something changed while it was read.
+  const expiring = roles.rows.map((r) => (r.expires_at ? new Date(r.expires_at).getTime() : Infinity));
+  if (reading === generation) actors.set(key, { until: Math.min(Date.now() + ACTOR_MEMORY_MS, ...expiring), actor });
   return actor;
 }
 

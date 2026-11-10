@@ -44,6 +44,71 @@ function scheduleOf(value: unknown): { from?: string; to?: string; arrive?: stri
 
 const text = (value: unknown, max = 200) => (typeof value === 'string' && value.trim() && value.length <= max ? value.trim() : null);
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The categories of an election and their lists, as counts and results read them. Null when something in it is not that. */
+function categoriesOf(value: unknown): { id: string; name: string; lists: { id: string; name: string }[] }[] | null {
+  const named = (item: unknown): item is { id: string; name: string } => {
+    const { id, name } = (item ?? {}) as Record<string, unknown>;
+    return typeof id === 'string' && /^[\w-]{1,64}$/.test(id) && typeof name === 'string' && name.trim().length > 0 && name.length <= 120;
+  };
+  const unique = (items: { id: string }[]) => new Set(items.map((item) => item.id)).size === items.length;
+  if (!Array.isArray(value) || value.length > 30 || !value.every(named) || !unique(value)) return null;
+  const valid = value.every((category) => {
+    const { lists } = category as { lists?: unknown };
+    return Array.isArray(lists) && lists.length <= 100 && lists.every(named) && unique(lists);
+  });
+  if (!valid) return null;
+  return value.map((category) => ({
+    id: category.id,
+    name: category.name.trim(),
+    lists: (category as unknown as { lists: { id: string; name: string }[] }).lists.map((list) => ({ id: list.id, name: list.name.trim() })),
+  }));
+}
+
+/** A day that exists: «2027-02-31» has the shape of one, and would stop the whole request in Postgres. */
+const realDay = (day: unknown): day is string => typeof day === 'string' && DAY.test(day) && new Date(`${day}T00:00:00Z`).toISOString().startsWith(day);
+
+/** The days of a shift: none means all of them. Null when something in it is not a day. */
+function shiftOf(value: unknown): string[] | undefined | null {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.length > 60 || !value.every(realDay)) return null;
+  return [...new Set(value)].sort();
+}
+
+/** All of it or nothing. */
+async function inTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Where a task goes, as asked: a table or a district that exists, of an election not closed yet. Checked before
+ * anything is written, so that a wrong id is a wrong request, and not someone left half created.
+ */
+async function placeOf(pool: pg.Pool, table: unknown, unit: unknown): Promise<{ table: string | null; unit: string | null } | 'invalid' | 'closed'> {
+  const given = (value: unknown) => value !== undefined && value !== null;
+  if ((given(table) && typeof table !== 'string') || (given(unit) && typeof unit !== 'string') || (given(table) && given(unit))) return 'invalid';
+  const found = typeof table === 'string'
+    ? await pool.query('SELECT e.status FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = $1', [table])
+    : typeof unit === 'string'
+      ? await pool.query('SELECT e.status FROM units n JOIN elections e ON e.id = n.election_id WHERE n.id = $1', [unit])
+      : null;
+  if (found && !found.rows[0]) return 'invalid';
+  if (found && ['cerrada', 'purgada'].includes(found.rows[0].status)) return 'closed';
+  return { table: typeof table === 'string' ? table : null, unit: typeof unit === 'string' ? unit : null };
+}
+
 /** A name or document someone corrected, from the review or from a person's request. Uploading the roll again does not undo it. */
 export async function correctElector(pool: pg.Pool, actor: Actor, election: string, elector: string, body: { full_name?: unknown; document?: unknown } | undefined): Promise<'invalid_name' | 'not_found' | 'ok'> {
   const name = text(body?.full_name);
@@ -168,7 +233,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** Themes a party adds. Each has to pass the same reading check as the ones that come with the app. */
-  app.put<{ Body: { theme?: unknown } }>('/api/themes', { preHandler: manageElection, bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
+  app.put<{ Body: { theme?: unknown } }>('/api/themes', { onRequest: manageElection, bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
     const { theme } = request.body ?? {};
     const problems = themeProblems(theme);
     if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
@@ -302,6 +367,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   /** Their name or their phone, as the team knows them. */
   app.put<{ Params: { id: string }; Body: { name?: unknown; phone?: unknown } }>('/api/users/:id', { preHandler: manageUsers }, async (request, reply) => {
+    if (!UUID.test(request.params.id)) return reply.code(404).send({ error: 'not_found' });
     const name = text(request.body?.name, 120);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     const changed = await pool.query('UPDATE users SET name = $2, phone = $3 WHERE id = $1 AND removed_at IS NULL', [request.params.id, name, storedPhone(request.body?.phone)]);
@@ -324,9 +390,12 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       if (typeof table !== 'string' && typeof unit !== 'string') return { ok: true };
     }
     if (typeof table !== 'string' && typeof unit !== 'string') return reply.code(400).send({ error: 'invalid_request' });
+    const place = await placeOf(pool, table, unit);
+    if (place === 'invalid') return reply.code(400).send({ error: 'invalid_place' });
+    if (place === 'closed') return reply.code(409).send({ error: 'election_closed' });
     const changed = await pool.query(
       `UPDATE role_assignments SET table_id = COALESCE($3, table_id), unit_id = COALESCE($4, unit_id) WHERE id::text = $2 AND user_id::text = $1`,
-      [request.params.id, request.params.assignment, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null],
+      [request.params.id, request.params.assignment, place.table, place.unit],
     );
     if (!changed.rowCount) return reply.code(404).send({ error: 'not_found' });
     forgetActors();
@@ -347,6 +416,8 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const found = await pool.query('SELECT 1 FROM users WHERE id::text = $1 AND removed_at IS NULL', [request.params.id]);
     if (!found.rowCount) return reply.code(404).send({ error: 'not_found' });
     await pool.query('UPDATE devices SET revoked_at = now() WHERE user_id::text = $1 AND revoked_at IS NULL', [request.params.id]);
+    // A link or code not used yet would get whoever has the phone in again.
+    await pool.query('UPDATE invitations SET used_at = now() WHERE user_id::text = $1 AND used_at IS NULL', [request.params.id]);
     forgetActors();
     await audit(pool, request.actor, 'user.phone_lost', request.params.id);
     const invite = can(request.actor, 'team.invite') && (await mayInvite(pool, request.actor, request.params.id));
@@ -354,8 +425,10 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** Takes someone out: their phones stop working the next time they connect. */
-  app.delete<{ Params: { id: string } }>('/api/users/:id', { preHandler: manageUsers }, async (request) => {
+  app.delete<{ Params: { id: string } }>('/api/users/:id', { preHandler: manageUsers }, async (request, reply) => {
+    if (!UUID.test(request.params.id)) return reply.code(404).send({ error: 'not_found' });
     await pool.query('UPDATE users SET removed_at = now() WHERE id = $1', [request.params.id]);
+    await pool.query('UPDATE invitations SET used_at = now() WHERE user_id = $1 AND used_at IS NULL', [request.params.id]);
     await pool.query('UPDATE devices SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [request.params.id]);
     await pool.query('DELETE FROM role_assignments WHERE user_id = $1', [request.params.id]);
     forgetActors();
@@ -393,14 +466,17 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const name = text(request.body?.name);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     if (typeof kind !== 'string' || !KINDS.includes(kind)) return reply.code(400).send({ error: 'invalid_kind' });
-    const dates = Array.isArray(days) ? days.filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) : [];
-    if (dates.length === 0) return reply.code(400).send({ error: 'no_days' });
+    if (!Array.isArray(days) || days.length === 0) return reply.code(400).send({ error: 'no_days' });
+    if (days.length > 60 || !days.every(realDay)) return reply.code(400).send({ error: 'invalid_days' });
+    const dates = [...new Set(days)].sort();
+    const lists = categoriesOf(categories ?? []);
+    if (!lists) return reply.code(400).send({ error: 'invalid_categories' });
     // Postgres has to know it too: the panel works out the day there, and a zone it lacks would break it for the whole election.
     const zoneKnown = async (zone: string) => (await pool.query('SELECT 1 FROM pg_timezone_names WHERE name = $1', [zone])).rowCount !== 0;
     if (timeZone !== undefined && !(isTimeZone(timeZone) && (await zoneKnown(timeZone)))) return reply.code(400).send({ error: 'invalid_time_zone' });
-    if (purgeBy !== undefined && (typeof purgeBy !== 'string' || !DAY.test(purgeBy) || purgeBy < [...dates].sort().at(-1)!)) return reply.code(400).send({ error: 'invalid_purge_by' });
+    if (purgeBy !== undefined && (!realDay(purgeBy) || purgeBy < dates.at(-1)!)) return reply.code(400).send({ error: 'invalid_purge_by' });
     const id = randomUUID();
-    await pool.query('INSERT INTO elections (id, name, kind, days, categories, time_zone) VALUES ($1, $2, $3, $4::date[], $5, $6)', [id, name, kind, dates, JSON.stringify(Array.isArray(categories) ? categories : []), timeZone ?? DEFAULT_TIME_ZONE]);
+    await pool.query('INSERT INTO elections (id, name, kind, days, categories, time_zone) VALUES ($1, $2, $3, $4::date[], $5, $6)', [id, name, kind, dates, JSON.stringify(lists), timeZone ?? DEFAULT_TIME_ZONE]);
     if (typeof purgeBy === 'string') await pool.query('UPDATE elections SET purge_by = $2 WHERE id = $1', [id, purgeBy]);
     await audit(pool, request.actor, 'election.created', id);
     return { id };
@@ -414,21 +490,23 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { categories, days, name, hours, purgeBy } = request.body ?? {};
     const status = (await pool.query('SELECT status FROM elections WHERE id = $1', [request.params.id])).rows[0]?.status;
     if (!status) return reply.code(404).send({ error: 'not_found' });
+    const closed = ['cerrada', 'purgada'].includes(status);
     if (categories !== undefined && status !== 'preparacion') return reply.code(409).send({ error: 'lists_locked' });
-    if (days !== undefined && ['cerrada', 'purgada'].includes(status)) return reply.code(409).send({ error: 'days_locked' });
-    if (Array.isArray(days) && (days.length === 0 || days.some((day) => typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)))) return reply.code(400).send({ error: 'invalid_days' });
-    if (purgeBy !== undefined) {
-      if (typeof purgeBy !== 'string' || !DAY.test(purgeBy)) return reply.code(400).send({ error: 'invalid_purge_by' });
-      if (status === 'purgada') return reply.code(409).send({ error: 'already_purged' });
-      await pool.query('UPDATE elections SET purge_by = $2 WHERE id = $1', [request.params.id, purgeBy]);
-    }
-    if (hours !== undefined) {
-      const valid = hoursOf(hours);
-      if (!valid) return reply.code(400).send({ error: 'invalid_hours' });
-      if (['cerrada', 'purgada'].includes(status)) return reply.code(409).send({ error: 'days_locked' });
-      await pool.query('UPDATE elections SET hours = $2 WHERE id = $1', [request.params.id, JSON.stringify(valid)]);
-    }
-    await pool.query('UPDATE elections SET categories = COALESCE($2, categories), days = COALESCE($3::date[], days), name = COALESCE($4, name) WHERE id = $1', [request.params.id, Array.isArray(categories) ? JSON.stringify(categories) : null, Array.isArray(days) ? days : null, text(name)]);
+    const lists = categories === undefined ? null : categoriesOf(categories);
+    if (categories !== undefined && !lists) return reply.code(400).send({ error: 'invalid_categories' });
+    if (days !== undefined && closed) return reply.code(409).send({ error: 'days_locked' });
+    if (days !== undefined && (!Array.isArray(days) || days.length === 0 || days.length > 60 || !days.every(realDay))) return reply.code(400).send({ error: 'invalid_days' });
+    if (purgeBy !== undefined && !realDay(purgeBy)) return reply.code(400).send({ error: 'invalid_purge_by' });
+    if (purgeBy !== undefined && status === 'purgada') return reply.code(409).send({ error: 'already_purged' });
+    const valid = hours === undefined ? null : hoursOf(hours);
+    if (hours !== undefined && !valid) return reply.code(400).send({ error: 'invalid_hours' });
+    if (hours !== undefined && closed) return reply.code(409).send({ error: 'days_locked' });
+    if (name !== undefined && !text(name)) return reply.code(400).send({ error: 'invalid_name' });
+    await pool.query(
+      `UPDATE elections SET categories = COALESCE($2, categories), days = COALESCE($3::date[], days), name = COALESCE($4, name),
+         purge_by = COALESCE($5::date, purge_by), hours = COALESCE($6, hours) WHERE id = $1`,
+      [request.params.id, lists ? JSON.stringify(lists) : null, Array.isArray(days) ? [...new Set(days)].sort() : null, text(name), purgeBy ?? null, valid ? JSON.stringify(valid) : null],
+    );
     await audit(pool, request.actor, 'election.changed', request.params.id, { name: name !== undefined, days: days !== undefined, lists: categories !== undefined, hours: hours !== undefined, purgeBy: purgeBy !== undefined });
     forgetStatuses();
     return { ok: true };
@@ -465,7 +543,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   }
 
   /** ?preview=1 says what would change, without touching anything. Crossed-out names and the traffic light stay. */
-  app.post<{ Params: { id: string }; Querystring: { preview?: string }; Body: Buffer }>('/api/elections/:id/roll', { preHandler: manageElection, bodyLimit: MAX_ROLL_BYTES }, async (request, reply) => {
+  app.post<{ Params: { id: string }; Querystring: { preview?: string }; Body: Buffer }>('/api/elections/:id/roll', { onRequest: manageElection, bodyLimit: MAX_ROLL_BYTES }, async (request, reply) => {
     const election = request.params.id;
     const closed = await closedElection(pool, election);
     if (closed === null) return reply.code(404).send({ error: 'not_found' });

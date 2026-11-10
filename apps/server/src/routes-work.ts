@@ -786,19 +786,28 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { who, kind, q } = request.query;
     if (typeof who === 'string' && OPERATION_ID.test(who)) where.push(`l.user_id = ${param(who)}`);
     if (kind === 'seen' || kind === 'changed') where.push(`${kind === 'seen' ? '' : 'NOT '}(l.action LIKE '%.viewed' OR l.action = ANY($1))`);
+    // A chief sees what was about their own tables, and finds only the people of those.
+    let scope: string[] | null = null;
+    if (!all) {
+      const units = request.actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);
+      scope = (await pool.query('SELECT id FROM polling_tables WHERE $1 OR unit_id = ANY($2)', [units.includes(null), units])).rows.map((row) => row.id);
+    }
     let people: string[] = [];
-    if (typeof q === 'string' && q.trim().length >= 3) {
-      const found = await pool.query('SELECT ref::text AS ref, full_name FROM electors WHERE search LIKE $1 AND erased_at IS NULL ORDER BY search LIMIT 50', [`%${foldText(q)}%`]);
+    if (typeof q === 'string' && q.trim().length >= 3 && q.length <= 120) {
+      const typed = foldText(q).replace(/[\\%_]/g, (character) => `\\${character}`);
+      const found = await pool.query(
+        `SELECT ref::text AS ref, full_name FROM electors WHERE search LIKE '%' || $1 || '%' ESCAPE '\\' AND erased_at IS NULL AND ($2::text[] IS NULL OR table_id = ANY($2))
+         ORDER BY search LIMIT 50`,
+        [typed, scope],
+      );
       if (found.rows.length === 0) return { entries: [], counts: { seen: 0, changed: 0 }, people: [] };
       people = found.rows.map((row) => row.full_name);
       const refs = param(found.rows.map((row) => row.ref));
       where.push(`(l.target = ANY(${refs}) OR l.detail->'people' ?| ${refs})`);
     }
-    if (!all) {
-      const units = request.actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);
-      const tables = (await pool.query('SELECT id FROM polling_tables WHERE $1 OR unit_id = ANY($2)', [units.includes(null), units])).rows.map((row) => row.id);
-      const scope = param(tables);
-      where.push(`(l.target = ANY(${scope}) OR x.table_id = ANY(${scope}))`);
+    if (scope) {
+      const tables = param(scope);
+      where.push(`(l.target = ANY(${tables}) OR x.table_id = ANY(${tables}))`);
     }
     const from = `FROM audit_log l
        LEFT JOIN users u ON u.id = l.user_id
