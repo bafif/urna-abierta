@@ -815,14 +815,16 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
        LEFT JOIN polling_tables t ON t.id = l.target
        LEFT JOIN electors x ON x.ref::text = l.target
        LEFT JOIN polling_tables xt ON xt.id = x.table_id
-       LEFT JOIN users tu ON tu.id::text = l.target`;
+       LEFT JOIN users tu ON tu.id::text = l.target
+       LEFT JOIN units un ON un.id = l.target`;
     const filter = where.length ? `AND ${where.join(' AND ')}` : '';
     const counts = people.length
       ? (await pool.query(`SELECT count(*) FILTER (WHERE l.action LIKE '%.viewed' OR l.action = ANY($1))::int AS seen, count(*) FILTER (WHERE NOT (l.action LIKE '%.viewed' OR l.action = ANY($1)))::int AS changed ${from} WHERE true ${filter}`, params)).rows[0]
       : undefined;
-    const before = param(Number(request.query.before) || Number.MAX_SAFE_INTEGER);
+    const page = Number(request.query.before);
+    const before = param(Number.isSafeInteger(page) && page > 0 ? page : Number.MAX_SAFE_INTEGER);
     const rows = await pool.query(
-      `SELECT l.id, l.at, l.action, u.name AS who, COALESCE(e.name, t.name, NULLIF(x.full_name, ''), tu.name) AS about, xt.name AS about_table,
+      `SELECT l.id, l.at, l.action, u.name AS who, COALESCE(e.name, t.name, NULLIF(x.full_name, ''), tu.name, un.name, CASE WHEN l.action IN ('election.deleted', 'unit.deleted') THEN l.detail->>'name' END) AS about, xt.name AS about_table,
               CASE WHEN jsonb_typeof(l.detail->'people') = 'array' THEN jsonb_array_length(l.detail->'people') END AS people,
               (l.action LIKE '%.viewed' OR l.action = ANY($1)) AS seen
        ${from} WHERE l.id < ${before} ${filter} ORDER BY l.id DESC LIMIT 100`,

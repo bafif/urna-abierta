@@ -98,12 +98,17 @@ If the roll already had tables, this step is done. If not, the app says “We pr
 needed and tap “That works”. Then tap each table to change its “Name” or fill in “Where it is”, and “Done”.
 
 **Districts.** With few tables you do not need them. Otherwise, in the election tap “Districts”, type the “District name” and tap “Add
-district”. Tap the district to choose its tables, and “Add its chief” to invite them. Each chief sees only the tables of their district.
+district”. Tap the district to choose its tables (a table it already has, tapped again, leaves the district) and to change its name.
+“Add its chief”, or “Change the chief” if it has one, shows your team first; “Add someone new” invites them. A district has one chief: the
+previous one stays in your team, without that task. While you prepare the election, “Delete the district” takes it out, and its tables are
+left with no district. Each chief sees only the tables of their district.
 
 ## 6. Poll watchers
 
-Tap “See the poll watchers”. The app says how many tables are missing one. Tap a table without a poll watcher, type who goes and tap
-“Invite”. If the election lasts several days, you choose which days they go: each day can be a different person.
+Tap “See the poll watchers”. The app says how many tables are missing one. Tap a table without a poll watcher: your team comes first,
+starting with the poll watchers who have no table yet. Choose someone and tap “Assign…”. If the person is not in the team yet, tap “Add
+someone new”, type who goes and tap “Invite”. If the election lasts several days, you choose which days they go: each day can be a
+different person. A table that already has a poll watcher can be tapped too, to take them off (“Take off this table”) or to add another.
 
 When everyone is in, “Invite the poll watchers” makes a new invitation for each poll watcher who has not joined yet: send them one by one
 with “Send by WhatsApp”, or all together with “Copy them all”.

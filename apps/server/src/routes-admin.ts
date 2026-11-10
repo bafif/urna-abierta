@@ -338,22 +338,50 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const name = text(request.body?.name, 120);
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
     if (!isRole(role)) return reply.code(400).send({ error: 'invalid_role' });
-    const userId = randomUUID();
-    await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name, storedPhone(phone)]);
-    const shift = Array.isArray(days) ? days.filter((day) => typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day)) : null;
+    const place = await placeOf(pool, table, unit);
+    if (place === 'invalid') return reply.code(400).send({ error: 'invalid_place' });
+    if (place === 'closed') return reply.code(409).send({ error: 'election_closed' });
+    const shift = shiftOf(days);
+    if (shift === null) return reply.code(400).send({ error: 'invalid_days' });
+    if (expiresAt !== undefined && (typeof expiresAt !== 'string' || Number.isNaN(Date.parse(expiresAt)))) return reply.code(400).send({ error: 'invalid_expiry' });
     // Whoever only looks at the numbers does not keep access for good.
-    const expires = typeof expiresAt === 'string' ? expiresAt : role === 'estadistico' ? new Date(Date.now() + STATS_ROLE_DAYS * 86_400_000).toISOString() : null;
-    await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id, expires_at, days) VALUES ($1, $2, $3, $4, $5, $6, $7::date[])', [randomUUID(), userId, role, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null, expires, shift]);
+    const expires = typeof expiresAt === 'string' ? new Date(expiresAt).toISOString() : role === 'estadistico' ? new Date(Date.now() + STATS_ROLE_DAYS * 86_400_000).toISOString() : null;
+    const userId = randomUUID();
+    await inTransaction(pool, async (client) => {
+      await client.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name, storedPhone(phone)]);
+      // A district has one chief: someone new takes the place of the one it had, who stays in the team.
+      if (role === 'jefe' && place.unit) await client.query(`DELETE FROM role_assignments WHERE unit_id = $1 AND role = 'jefe'`, [place.unit]);
+      await client.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id, expires_at, days) VALUES ($1, $2, $3, $4, $5, $6, $7::date[])', [randomUUID(), userId, role, place.table, place.unit, expires, shift ?? null]);
+    });
+    if (role === 'jefe' && place.unit) forgetActors();
     await audit(pool, request.actor, 'user.created', userId, { role });
     return { id: userId, invitation: await createInvitation(pool, userId, request.actor) };
   });
 
-  app.post<{ Params: { id: string }; Body: { role?: unknown; table?: unknown; unit?: unknown } }>('/api/users/:id/roles', { preHandler: manageUsers }, async (request, reply) => {
-    const { role, table, unit } = request.body ?? {};
+  /**
+   * Another task for someone already in the team, with the days of their shift if not all. A poll watcher still
+   * without a table who gets one has it written on that task, instead of a second one.
+   */
+  app.post<{ Params: { id: string }; Body: { role?: unknown; table?: unknown; unit?: unknown; days?: unknown } }>('/api/users/:id/roles', { preHandler: manageUsers }, async (request, reply) => {
+    const { role, table, unit, days } = request.body ?? {};
     if (!isRole(role)) return reply.code(400).send({ error: 'invalid_role' });
-    await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id) VALUES ($1, $2, $3, $4, $5)', [randomUUID(), request.params.id, role, typeof table === 'string' ? table : null, typeof unit === 'string' ? unit : null]);
+    const id = request.params.id;
+    if (!UUID.test(id) || !(await pool.query('SELECT 1 FROM users WHERE id = $1 AND removed_at IS NULL', [id])).rowCount) return reply.code(404).send({ error: 'not_found' });
+    const place = await placeOf(pool, table, unit);
+    if (place === 'invalid') return reply.code(400).send({ error: 'invalid_place' });
+    if (place === 'closed') return reply.code(409).send({ error: 'election_closed' });
+    const shift = shiftOf(days);
+    if (shift === null) return reply.code(400).send({ error: 'invalid_days' });
+    const filled = role === 'fiscal' && place.table
+      ? await pool.query(
+        `UPDATE role_assignments SET table_id = $2, days = $3::date[]
+         WHERE id = (SELECT id FROM role_assignments WHERE user_id = $1 AND role = 'fiscal' AND table_id IS NULL ORDER BY created_at LIMIT 1)`,
+        [id, place.table, shift ?? null],
+      )
+      : null;
+    if (!filled?.rowCount) await pool.query('INSERT INTO role_assignments (id, user_id, role, table_id, unit_id, days) VALUES ($1, $2, $3, $4, $5, $6::date[])', [randomUUID(), id, role, place.table, place.unit, shift ?? null]);
     forgetActors();
-    await audit(pool, request.actor, 'role.added', request.params.id, { role });
+    await audit(pool, request.actor, filled?.rowCount ? 'role.changed' : 'role.added', id, { role, table: place.table ?? undefined, unit: place.unit ?? undefined });
     return { ok: true };
   });
 
@@ -689,7 +717,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       `SELECT t.id, t.name, t.place, t.unit_id, count(x.id)::int AS people,
               (SELECT min(x2.search) FROM electors x2 WHERE x2.table_id = t.id) AS first,
               (SELECT max(x2.search) FROM electors x2 WHERE x2.table_id = t.id) AS last,
-              COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'days', a.days)) FROM role_assignments a JOIN users u ON u.id = a.user_id
+              COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'days', a.days, 'assignment', a.id) ORDER BY a.created_at) FROM role_assignments a JOIN users u ON u.id = a.user_id
                WHERE a.table_id = t.id AND a.role = 'fiscal' AND u.removed_at IS NULL), '[]') AS fiscales
        FROM polling_tables t LEFT JOIN electors x ON x.table_id = t.id
        WHERE t.election_id = $1 GROUP BY t.id ORDER BY t.position`,
@@ -793,14 +821,22 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { created: needed };
   });
 
+  /** Its name, its place, its district (null takes it out of the one it had) or its only poll watcher, until it closes. */
   app.put<{ Params: { table: string }; Body: { name?: unknown; place?: unknown; unit?: unknown; fiscal?: unknown } }>('/api/tables/:table', { preHandler: manageElection }, async (request, reply) => {
     const { place, unit, fiscal } = request.body ?? {};
     const election = (await pool.query('SELECT election_id FROM polling_tables WHERE id = $1', [request.params.table])).rows[0]?.election_id;
     if (!election) return reply.code(404).send({ error: 'not_found' });
     if (await closedElection(pool, election)) return reply.code(409).send({ error: 'election_closed' });
+    if (place !== undefined && (typeof place !== 'string' || place.length > 200)) return reply.code(400).send({ error: 'invalid_place' });
+    if (unit !== undefined && unit !== null && (typeof unit !== 'string' || !(await pool.query('SELECT 1 FROM units WHERE id = $1 AND election_id = $2', [unit, election])).rowCount)) return reply.code(400).send({ error: 'invalid_unit' });
+    if (fiscal !== undefined && (typeof fiscal !== 'string' || !UUID.test(fiscal) || !(await pool.query('SELECT 1 FROM users WHERE id = $1 AND removed_at IS NULL', [fiscal])).rowCount)) return reply.code(400).send({ error: 'invalid_user' });
     const name = text(request.body?.name, 80);
-    await pool.query('UPDATE polling_tables SET name = COALESCE($2, name), place = COALESCE($3, place), unit_id = COALESCE($4, unit_id) WHERE id = $1', [request.params.table, name, typeof place === 'string' ? place : null, typeof unit === 'string' ? unit : null]);
-    if (name || typeof place === 'string' || typeof unit === 'string') await audit(pool, request.actor, 'table.changed', request.params.table, { name: Boolean(name), place: typeof place === 'string', unit: typeof unit === 'string' ? unit : undefined });
+    await pool.query(
+      'UPDATE polling_tables SET name = COALESCE($2, name), place = COALESCE($3, place), unit_id = CASE WHEN $5 THEN $4 ELSE unit_id END WHERE id = $1',
+      [request.params.table, name, typeof place === 'string' ? place.trim() : null, typeof unit === 'string' ? unit : null, unit !== undefined],
+    );
+    if (unit !== undefined) forgetActors();
+    if (name || typeof place === 'string' || unit !== undefined) await audit(pool, request.actor, 'table.changed', request.params.table, { name: Boolean(name), place: typeof place === 'string', unit: unit === undefined ? undefined : unit });
     if (typeof fiscal === 'string') {
       await pool.query(`DELETE FROM role_assignments WHERE table_id = $1 AND role = 'fiscal'`, [request.params.table]);
       await pool.query(`INSERT INTO role_assignments (id, user_id, role, table_id) VALUES ($1, $2, 'fiscal', $3)`, [randomUUID(), fiscal, request.params.table]);
@@ -812,13 +848,56 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   app.get<{ Params: { id: string } }>('/api/elections/:id/units', { preHandler: manageElection }, async (request) => {
     const rows = await pool.query(
-      `SELECT n.id, n.name,
-              (SELECT u.name FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.unit_id = n.id AND a.role = 'jefe' AND u.removed_at IS NULL LIMIT 1) AS chief,
+      `SELECT n.id, n.name, c.id AS chief_id, c.name AS chief,
               (SELECT count(*)::int FROM polling_tables t WHERE t.unit_id = n.id) AS tables
-       FROM units n WHERE n.election_id = $1 ORDER BY n.name`,
+       FROM units n LEFT JOIN LATERAL (
+         SELECT u.id, u.name FROM role_assignments a JOIN users u ON u.id = a.user_id
+         WHERE a.unit_id = n.id AND a.role = 'jefe' AND u.removed_at IS NULL ORDER BY a.created_at LIMIT 1
+       ) c ON true
+       WHERE n.election_id = $1 ORDER BY n.name`,
       [request.params.id],
     );
-    return { units: rows.rows };
+    const status = (await pool.query('SELECT status FROM elections WHERE id::text = $1', [request.params.id])).rows[0]?.status ?? null;
+    return { units: rows.rows, status };
+  });
+
+  /**
+   * A district's name, or its chief: the one it had stops being its chief, and stays in the team. Until the election
+   * closes, since a chief who cannot go is replaced on the day too.
+   */
+  app.put<{ Params: { unit: string }; Body: { name?: unknown; chief?: unknown } }>('/api/units/:unit', { preHandler: manageElection }, async (request, reply) => {
+    const { chief } = request.body ?? {};
+    const name = request.body?.name === undefined ? null : text(request.body.name, 120);
+    if (request.body?.name !== undefined && !name) return reply.code(400).send({ error: 'invalid_name' });
+    if (chief !== undefined && (typeof chief !== 'string' || !UUID.test(chief) || !(await pool.query('SELECT 1 FROM users WHERE id = $1 AND removed_at IS NULL', [chief])).rowCount)) return reply.code(400).send({ error: 'invalid_user' });
+    const election = (await pool.query('SELECT election_id FROM units WHERE id = $1', [request.params.unit])).rows[0]?.election_id;
+    if (!election) return reply.code(404).send({ error: 'not_found' });
+    if (await closedElection(pool, election)) return reply.code(409).send({ error: 'election_closed' });
+    const before = await inTransaction(pool, async (client) => {
+      if (name) await client.query('UPDATE units SET name = $2 WHERE id = $1', [request.params.unit, name]);
+      if (typeof chief !== 'string') return [];
+      const removed = await client.query(`DELETE FROM role_assignments WHERE unit_id = $1 AND role = 'jefe' AND user_id <> $2 RETURNING user_id`, [request.params.unit, chief]);
+      await client.query(
+        `INSERT INTO role_assignments (id, user_id, role, unit_id) SELECT $1, $2, 'jefe', $3
+         WHERE NOT EXISTS (SELECT 1 FROM role_assignments WHERE unit_id = $3 AND role = 'jefe' AND user_id = $2)`,
+        [randomUUID(), chief, request.params.unit],
+      );
+      return removed.rows.map((row) => row.user_id as string);
+    });
+    if (typeof chief === 'string') forgetActors();
+    await audit(pool, request.actor, 'unit.changed', request.params.unit, { name: Boolean(name), chief: typeof chief === 'string' ? chief : undefined, before: before.length ? before : undefined });
+    return { ok: true };
+  });
+
+  /** Only while the election is prepared: its tables stay, with no district, and its chief stays in the team without that task. */
+  app.delete<{ Params: { unit: string } }>('/api/units/:unit', { preHandler: manageElection }, async (request, reply) => {
+    const found = (await pool.query('SELECT n.name, e.status FROM units n JOIN elections e ON e.id = n.election_id WHERE n.id = $1', [request.params.unit])).rows[0];
+    if (!found) return reply.code(404).send({ error: 'not_found' });
+    if (found.status !== 'preparacion') return reply.code(409).send({ error: 'only_while_preparing' });
+    await pool.query('DELETE FROM units WHERE id = $1', [request.params.unit]);
+    forgetActors();
+    await audit(pool, request.actor, 'unit.deleted', request.params.unit, { name: found.name });
+    return { ok: true };
   });
 
   app.post<{ Params: { id: string }; Body: { name?: unknown } }>('/api/elections/:id/units', { preHandler: manageElection }, async (request, reply) => {

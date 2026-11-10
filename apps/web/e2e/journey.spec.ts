@@ -140,7 +140,9 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   await expect(page.getByRole('heading')).toHaveText('Faltan 3 mesas sin fiscal');
   let link = '';
   for (const name of ['Marta Ibáñez', 'Sol Ruiz', 'Eva Paz']) {
+    // The team comes first: someone not in it yet is added from there.
     await page.getByTestId('table-missing').first().click();
+    await page.getByRole('button', { name: 'Sumar a alguien nuevo' }).click();
     await page.getByTestId('person-name').fill(name);
     await page.getByTestId('person-phone').fill('+54 9 341 555-0000');
     await button(page, 'Invitar').click();
@@ -150,6 +152,10 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
     await button(page, 'Listo').click();
   }
   await expect(page.getByRole('heading')).toHaveText('Todas las mesas tienen fiscal');
+  // A covered table opens too, with who goes there.
+  await page.getByTestId('table-covered').first().click();
+  await expect(page.getByTestId('fiscal-here')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Volver' }).click();
   await button(page, 'Invitar a los fiscales').click();
   await expect(page.getByTestId('pending-invite')).toHaveCount(3);
   await page.getByRole('button', { name: 'Volver' }).click();

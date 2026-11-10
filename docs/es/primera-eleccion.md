@@ -98,12 +98,17 @@ Si el padrón ya traía las mesas, este paso está hecho. Si no, la app dice «T
 mesa» si hace falta y tocá «Está bien». Después, tocá cada mesa para cambiarle el «Nombre» o escribir «Dónde queda», y «Listo».
 
 **Distritos.** Si son pocas mesas, no hacen falta. Si no, en la elección tocá «Distritos», escribí el «Nombre del distrito» y tocá «Agregar
-distrito». Tocá el distrito para elegir sus mesas, y «Sumar a su jefe» para invitarlo. Cada jefe ve solo las mesas de su distrito.
+distrito». Tocá el distrito para elegir sus mesas (una mesa que ya es suya, tocada de nuevo, sale del distrito) y para cambiarle el
+nombre. «Sumar a su jefe», o «Cambiar de jefe» si ya tiene, muestra primero a tu equipo; «Sumar a alguien nuevo» lo invita. Un distrito
+tiene un solo jefe: el anterior sigue en tu equipo, sin esa tarea. Mientras preparás la elección, «Borrar el distrito» lo saca, y sus
+mesas quedan sin distrito. Cada jefe ve solo las mesas de su distrito.
 
 ## 6. Los fiscales
 
-Tocá «Ver los fiscales». La app dice cuántas mesas faltan. Tocá una mesa sin fiscal, escribí quién va y tocá «Invitar». Si la elección
-dura varios días, elegís qué días va: cada día puede ir una persona distinta.
+Tocá «Ver los fiscales». La app dice cuántas mesas faltan. Tocá una mesa sin fiscal: primero aparece tu equipo, empezando por los fiscales
+que todavía no tienen mesa. Elegí a alguien y tocá «Asignar a…». Si va alguien que todavía no está, tocá «Sumar a alguien nuevo», escribí
+quién va y tocá «Invitar». Si la elección dura varios días, elegís qué días va: cada día puede ir una persona distinta. Una mesa que ya
+tiene fiscal también se toca, para quitarlo («Quitar de esta mesa») o para sumar otro.
 
 Cuando estén todos, «Invitar a los fiscales» arma una invitación nueva para cada fiscal que todavía no entró: se mandan de a una con
 «Mandar por WhatsApp», o todas juntas con «Copiar todos».
