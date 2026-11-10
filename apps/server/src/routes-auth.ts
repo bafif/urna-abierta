@@ -223,6 +223,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const table = [...tables.rows].sort((a, b) => rank(a) - rank(b))[0] ?? null;
     let contact = null;
     let ended = false;
+    let deleted: { election: string; tables: string[] } | null = null;
     if (table) {
       // Someone with a phone, or the plan B has nothing to call: the chief of the table, one of the whole election, coordination.
       const chief = await pool.query(
@@ -243,6 +244,12 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
         [actor.userId],
       );
       ended = closed.rowCount !== 0;
+      // Whoever had a table in an election that got deleted hears it, for a week, and their phone lets go of that table.
+      const gone = await pool.query(
+        `SELECT table_id, election FROM deleted_tables WHERE user_id = $1 AND deleted_at > now() - interval '7 days' ORDER BY deleted_at DESC`,
+        [actor.userId],
+      );
+      if (gone.rows[0]) deleted = { election: gone.rows[0].election, tables: gone.rows.map((row) => row.table_id) };
     }
     return {
       user: { id: actor.userId, name: actor.name },
@@ -279,6 +286,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
       },
       contact,
       ended,
+      deleted,
     };
   });
 }

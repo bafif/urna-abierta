@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type pg from 'pg';
 import { foldText, MAX_BATCH, MAX_PHOTO_BYTES, parseOperation, SECURITY_PROFILES, type Operation, type RollEntry } from '@urna-abierta/domain';
 import { audit, auditView, authenticated, can, canReachTable, erasedId, getSetting, securityProfile, type Actor } from './actor.ts';
@@ -133,6 +133,15 @@ async function closedFor(pool: pg.Pool, actor: Actor, table: string): Promise<bo
   return ['cerrada', 'purgada'].includes((await statusOf(pool, table)) ?? '');
 }
 
+/**
+ * A table this person had in an election that got deleted: the phone hears it like a close, asks who it is again and
+ * lets go of that table. Anyone else is told only that it is not theirs.
+ */
+async function refuse(pool: pg.Pool, actor: Actor, table: string, reply: FastifyReply) {
+  const deleted = await pool.query('SELECT 1 FROM deleted_tables WHERE user_id = $1 AND table_id = $2', [actor.userId, table]);
+  return deleted.rowCount ? reply.code(410).send({ error: 'election_deleted' }) : reply.code(403).send({ error: 'forbidden' });
+}
+
 export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoStore) {
   const signedIn = authenticated(pool);
 
@@ -140,7 +149,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
   app.get<{ Params: { table: string } }>('/api/tables/:table/bundle', { preHandler: signedIn }, async (request, reply) => {
     const { table } = request.params;
     if (!TABLE_ID.test(table)) return reply.code(400).send({ error: 'invalid_table' });
-    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (!(await canReachTable(pool, request.actor, table))) return refuse(pool, request.actor, table, reply);
     if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
     const electors = await tableRoll(pool, table);
     await audit(pool, request.actor, 'roll.downloaded', table, { people: electors.length });
@@ -151,7 +160,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const { table, operations } = request.body ?? {};
     if (typeof table !== 'string' || !TABLE_ID.test(table) || !Array.isArray(operations)) return reply.code(400).send({ error: 'invalid_request' });
     if (operations.length > MAX_BATCH) return reply.code(413).send({ error: 'batch_too_large', max: MAX_BATCH });
-    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (!(await canReachTable(pool, request.actor, table))) return refuse(pool, request.actor, table, reply);
     const status = await statusOf(pool, table);
     if (!status) return reply.code(404).send({ error: 'no_such_table' });
     const valid: Operation[] = [];
@@ -171,7 +180,7 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     const { table, since } = request.query;
     const cursor = Number(since ?? 0);
     if (!table || !TABLE_ID.test(table) || !Number.isSafeInteger(cursor) || cursor < 0) return reply.code(400).send({ error: 'invalid_request' });
-    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    if (!(await canReachTable(pool, request.actor, table))) return refuse(pool, request.actor, table, reply);
     if (await closedFor(pool, request.actor, table)) return reply.code(410).send({ error: 'election_closed' });
     // What a table marked names people: a poll watcher reads their own all day, anyone else is recorded.
     if (!request.actor.assignments.some((a) => a.role === 'fiscal' && a.table_id === table)) await auditView(pool, request.actor, 'table.pulled', table);

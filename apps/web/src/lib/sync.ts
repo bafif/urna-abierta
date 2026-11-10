@@ -40,7 +40,8 @@ function noteClock(store: SyncStore, serverTime: string | undefined, sentAt: num
   if (Number.isFinite(at)) store.serverTime?.(at - (sentAt + Date.now()) / 2);
 }
 
-async function push(store: SyncStore, table: string, operations: Operation[], apiBase: string, request: typeof fetch, timeoutMs: number): Promise<PushAnswer | null> {
+/** 'gone': the table is no longer there for this person, because the election closed or was deleted. */
+async function push(store: SyncStore, table: string, operations: Operation[], apiBase: string, request: typeof fetch, timeoutMs: number): Promise<PushAnswer | 'gone' | null> {
   const sentAt = Date.now();
   const response = await request(`${apiBase}/sync/push`, {
     method: 'POST',
@@ -48,6 +49,7 @@ async function push(store: SyncStore, table: string, operations: Operation[], ap
     body: JSON.stringify({ table, operations }),
     signal: AbortSignal.timeout(timeoutMs),
   });
+  if (response.status === 410) return 'gone';
   if (!response.ok) return null;
   const body = (await response.json()) as PushAnswer;
   noteClock(store, body.server_time, sentAt);
@@ -68,6 +70,7 @@ export async function syncOnce(
       const batch = await store.pending(MAX_BATCH);
       if (batch.length === 0) break;
       const body = await push(store, table, batch, apiBase, request, REQUEST_TIMEOUT_MS);
+      if (body === 'gone') return 'closed';
       if (!body || body.acked.length + body.rejected.length === 0) return 'failed';
     }
     for (;;) {
@@ -104,7 +107,7 @@ export async function pushNow(
 ): Promise<boolean> {
   try {
     const body = await push(store, table, operations, apiBase, request, timeoutMs);
-    return Boolean(body && operations.every((operation) => body.acked.includes(operation.id)));
+    return Boolean(body && body !== 'gone' && operations.every((operation) => body.acked.includes(operation.id)));
   } catch {
     return false;
   }

@@ -393,8 +393,10 @@ class AppState {
    * table, and only when nothing is left to send, it goes. `reached`: the server answered just now.
    */
   private async letGoIfFinished(reached: boolean): Promise<void> {
-    if (!this.tableId || this.pendingCount + this.pendingPhotos > 0) return;
     const { me } = session;
+    // A table of an election that got deleted has nowhere to send what is left: it goes too.
+    const deleted = reached && Boolean(this.tableId) && (me?.deleted?.tables.includes(this.tableId) ?? false);
+    if (!this.tableId || (this.pendingCount + this.pendingPhotos > 0 && !deleted)) return;
     const lastDay = me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
     const timeZone = me?.table ? me.table.timeZone : await this.db.getMeta<string>('timeZone');
     const roll = { tableId: this.tableId, reached: reached && me !== null, assigned: me?.table?.id, lastDay, hoursKept: me?.security.localHoursAfterClose, timeZone, clockOffset: this.clockOffset };

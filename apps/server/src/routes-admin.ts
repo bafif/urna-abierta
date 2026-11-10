@@ -512,13 +512,27 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { ok: true };
   });
 
-  /** Only while it is prepared, and with its name written: its roll, its tables and who goes where go. The team stays. */
+  /**
+   * Only while it is prepared, and with its name written: its roll, its tables and who goes where go. The team stays,
+   * and whoever had a table in it is told so on their phone for a week.
+   */
   app.delete<{ Params: { id: string }; Body: { name?: unknown } }>('/api/elections/:id', { preHandler: manageElection }, async (request, reply) => {
+    if (!UUID.test(request.params.id)) return reply.code(404).send({ error: 'not_found' });
     const found = (await pool.query('SELECT name, status FROM elections WHERE id = $1', [request.params.id])).rows[0];
     if (!found) return reply.code(404).send({ error: 'not_found' });
     if (found.status !== 'preparacion') return reply.code(409).send({ error: 'only_while_preparing' });
     if (request.body?.name !== found.name) return reply.code(400).send({ error: 'name_does_not_match' });
-    await pool.query('DELETE FROM elections WHERE id = $1', [request.params.id]);
+    await inTransaction(pool, async (client) => {
+      await client.query(`DELETE FROM deleted_tables WHERE deleted_at < now() - interval '7 days'`);
+      await client.query(
+        `INSERT INTO deleted_tables (user_id, table_id, election)
+         SELECT DISTINCT a.user_id, a.table_id, $2 FROM role_assignments a JOIN polling_tables t ON t.id = a.table_id
+         WHERE t.election_id = $1 AND a.role = 'fiscal' ON CONFLICT DO NOTHING`,
+        [request.params.id, found.name],
+      );
+      await client.query('DELETE FROM elections WHERE id = $1', [request.params.id]);
+    });
+    forgetActors();
     forgetStatuses();
     await audit(pool, request.actor, 'election.deleted', request.params.id, { name: found.name });
     return { ok: true };

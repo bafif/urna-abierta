@@ -55,6 +55,8 @@ export interface Me {
   contact: { name: string; phone: string | null } | null;
   /** Has no table because the election they worked already closed. */
   ended?: boolean;
+  /** Has no table because the election was deleted while it was prepared: its name, and the tables they had in it. */
+  deleted?: { election: string; tables: string[] } | null;
 }
 
 function read<T>(key: string): T | null {

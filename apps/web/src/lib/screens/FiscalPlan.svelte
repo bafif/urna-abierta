@@ -92,6 +92,15 @@
 
 {#if !app.ready}
   <Pantalla />
+{:else if !table && session.me?.deleted}
+  <Pantalla titulo={t('plan.deleted.title', { election: session.me.deleted.election })} bajada={t('plan.deleted.text')}>
+    {#snippet pie()}
+      <div class="pila">
+        <button class="boton primario" onclick={() => session.refresh()}>{t('plan.noTable.check')}</button>
+        <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+      </div>
+    {/snippet}
+  </Pantalla>
 {:else if !table && session.me?.ended}
   <!-- What is still on the phone goes out after the close too, so the person is told to wait for it. -->
   <Pantalla titulo={t('plan.ended.title')} bajada={pending > 0 ? t('plan.finished.pending') : t('plan.ended.text')}>
