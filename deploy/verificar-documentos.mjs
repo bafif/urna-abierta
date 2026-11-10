@@ -132,6 +132,8 @@ for (const path of documents) {
   for (const [line, target] of links.get(path)) {
     if (EXTERNAL.test(target) || target.startsWith('{{')) continue;
     const [destination, anchor] = resolve(path, target);
+    // Climbing out of the repository leads to a page of GitHub, like ../../releases, not to a file.
+    if (destination === '..' || destination.startsWith('../')) continue;
     if (!existsSync(join(root, destination))) {
       problems.push(`${path}:${line}: ${target} leads to a file that does not exist${target.replace(/^\/+/, '') === destination ? '' : ` (${destination})`}`);
       continue;
