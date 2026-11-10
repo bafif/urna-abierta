@@ -18,7 +18,7 @@ const FAMILY = [
 ];
 const GIVEN = [
   'Ana', 'Andrés', 'Belén', 'Bruno', 'Camila', 'Dario', 'Elena', 'Facundo', 'Florencia', 'Gastón', 'Inés', 'Joaquín',
-  'Julieta', 'Lucía', 'Martín', 'María José', 'Nicolás', 'Paula', 'Ramiro', 'Sofía', 'Tomás', 'Valentina',
+  'Julieta', 'Laura', 'Martín', 'María José', 'Nicolás', 'Paula', 'Ramiro', 'Sofía', 'Tomás', 'Valentina',
 ];
 
 /** Same seed, same roll: every run of a test sees the same invented people. */
