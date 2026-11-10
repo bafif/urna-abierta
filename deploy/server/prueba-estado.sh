@@ -1,5 +1,6 @@
 #!/bin/sh
-# Runs «urna estado» against fakes of podman, curl, timedatectl and openssl, and checks what it says.
+# Runs «urna estado» against fakes of podman, curl, timedatectl and openssl, and checks what it says, in Spanish
+# and in English.
 #   sh deploy/server/prueba-estado.sh
 set -eu
 urna=$(cd "$(dirname "$0")" && pwd)/urna
@@ -29,12 +30,15 @@ chmod +x "$work/bin/"*
 touch "$work/home/copias/urna-20270101-000000.tar.gpg"
 
 failures=0
-# estado <name> <.env lines> [VAR=value…]: runs it, keeping what it says in $said.
+# estado <name> <.env lines> [VAR=value…]: runs it on a system in Spanish, keeping what it says in $said. $args, when
+# set, goes in place of «estado».
+args=''
 estado() {
   name=$1 env=$2
   shift 2
   printf '%s\n' 'URNA_IMAGE_SERVER=ghcr.io/bafif/urna-abierta-server:v9.9.9' 'URNA_SITE=https://203.0.113.24' 'URNA_POD=otra' "$env" >"$work/home/.env"
-  said=$(env PATH="$work/bin:$PATH" URNA_HOME="$work/home" URNA_RUN_AS_ROOT=si "$@" sh "$urna" estado 2>&1 || true)
+  # shellcheck disable=SC2086
+  said=$(env PATH="$work/bin:$PATH" URNA_HOME="$work/home" URNA_RUN_AS_ROOT=si LANG=es_AR.UTF-8 LC_ALL= LC_MESSAGES= LANGUAGE= URNA_IDIOMA= "$@" sh "$urna" ${args:-estado} 2>&1 || true)
 }
 says() {
   case "$said" in
@@ -79,6 +83,37 @@ says 'bien   certificado hasta: Feb  1 00:00:00 2027 GMT'
 estado 'el bucket no anda' "$bucket" "$cert" FAKE_HEALTH='{"ok":true,"photos":{"storage":"s3","working":false}}'
 says 'FALLA  fotos: no se pueden guardar en el bucket fotos-prueba'
 says '«podman logs --tail 50 otra-server»'
+
+# In English: on a system that is not in Spanish, and when asked for it.
+estado 'in English, without a certificate yet' '' LANG=C.UTF-8
+says 'wait   the server answers: without a certificate it cannot be asked'
+says 'FAIL   certificate: there is none yet'
+says 'open TCP 80 and 443, and UDP 443, in the cloud firewall'
+never 'FALLA'
+
+estado 'in English, answering, with a bucket' "$bucket" "$cert" LANG=en_US.UTF-8 FAKE_HEALTH='{"ok":true,"photos":{"storage":"s3","working":true}}'
+says 'ok     the server answers'
+says 'ok     photos: in the bucket fotos-prueba at https://s3.ejemplo.test, encrypted'
+says 'ok     certificate until: Feb  1 00:00:00 2027 GMT'
+
+estado 'in English, not answering' "$bucket" "$cert" URNA_IDIOMA=en
+says 'FAIL   the server answers: it does not answer. See the last thing it said with “podman logs --tail 50 otra-server”'
+
+# The language of the installer, in .env, wins over the system's; --idioma wins over both.
+estado 'el idioma del instalador' 'URNA_IDIOMA=es' "$cert" LANG=en_US.UTF-8
+says 'bien   certificado hasta'
+args='--idioma en estado'
+estado 'with --idioma' 'URNA_IDIOMA=es' "$cert"
+says 'ok     certificate until'
+args=''
+estado 'LANGUAGE con español' '' "$cert" LANG=en_US.UTF-8 LANGUAGE=fr:es
+says 'bien   certificado hasta'
+
+args=ayuda
+estado 'help in English' '' LANG=C
+says 'urna estado              says whether everything is fine'
+says 'With --idioma es or --idioma en before the command'
+args=''
 
 [ "$failures" = 0 ] && echo 'urna estado: todo como se espera.'
 exit "$failures"

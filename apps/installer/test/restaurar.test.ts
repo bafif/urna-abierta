@@ -38,7 +38,8 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
   ].join('\n'), { mode: 0o755 });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   let count = 0;
-  const env = { ...process.env, GNUPGHOME: gnupg, PATH: `${bin}:${process.env.PATH}`, URNA_HEALTH_URL: 'file:///etc/hostname' };
+  // What it says is checked in Spanish; one test checks the English.
+  const env = { ...process.env, GNUPGHOME: gnupg, PATH: `${bin}:${process.env.PATH}`, URNA_HEALTH_URL: 'file:///etc/hostname', URNA_IDIOMA: 'es' };
 
   /** A server as the installation leaves it, with a photo of its own. */
   function server() {
@@ -87,6 +88,14 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     expect(readFileSync(join(home, '.env'), 'utf8')).toContain(`URNA_FIELD_KEY=${FIELD_KEY}\n`);
     expect(readFileSync(join(home, 'fotos', PHOTO), 'utf8')).toBe('foto de la copia');
     expect(existsSync(join(home, 'fotos', 'propia'))).toBe(false);
+  });
+
+  it('says the same in English when the server is in English', () => {
+    const { restore } = server();
+    const done = restore(backup(), { URNA_IDIOMA: '', LANG: 'en_US.UTF-8', LC_ALL: '', LC_MESSAGES: '', LANGUAGE: '' });
+    expect(done.said).toContain('Backup restored');
+    const refused = server().restore(backup({ leave: ['clave-campos'] }), { URNA_IDIOMA: 'en' });
+    expect([refused.ok, refused.said.includes('it is incomplete')]).toEqual([false, true]);
   });
 
   it('reads each file out of the backup as it goes: nothing of it is copied to the temporary folder but the backup itself', () => {

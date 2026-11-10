@@ -9,14 +9,42 @@
 #   urna actualizar [versión]          makes a backup and moves to the newest version, or to the one given
 #   urna reiniciar           creates the containers again with what .env says, keeping the data
 #   urna direccion <ip o dominio>      changes the address of the site
+#
+# It answers in Spanish or in English: «urna --idioma en estado» chooses for one run (see language below).
 set -eu
 
 home=${URNA_HOME:-/opt/urna-abierta}
+# --idioma es|en before the command, or URNA_IDIOMA, choose the language of the messages for one run. URNA_IDIOMA in
+# .env keeps the one the installer was used in. Without either, the system's: Spanish when LANGUAGE, LC_ALL,
+# LC_MESSAGES or LANG say Spanish, English for anything else.
+case "${1:-}" in
+  --idioma=*) URNA_IDIOMA=${1#--idioma=}; shift ;;
+  --idioma) URNA_IDIOMA=${2:-}; shift; [ $# -eq 0 ] || shift ;;
+esac
+language() {
+  for chosen in "${URNA_IDIOMA:-}" "$(sed -n 's/^URNA_IDIOMA=//p' "$home/.env" 2>/dev/null | tail -n 1)"; do
+    case "$chosen" in es | en) echo "$chosen"; return ;; esac
+  done
+  for locale in "${LC_ALL:-}" "${LC_MESSAGES:-}" "${LANG:-}"; do
+    case "$locale" in '' | C | C[._@]* | POSIX | POSIX[._@]*) ;; *) break ;; esac
+  done
+  case "$locale" in '' | C | C[._@]* | POSIX | POSIX[._@]*) echo en; return ;; esac
+  for tag in $(printf '%s' "${LANGUAGE:-}" | tr ':' ' ') "$locale"; do
+    case "$tag" in es | es[-_.@]*) echo es; return ;; esac
+  done
+  echo en
+}
+lang=$(language)
+# What it runs again, as root or for a backup before updating, answers in the same language.
+URNA_IDIOMA=$lang
+export URNA_IDIOMA
+# t 'en español' 'in English': the line in the language of the messages.
+t() { if [ "$lang" = es ]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }
 # The backup to restore is opened first, from the folder the command was run in, and as root when it runs as root:
 # it may be where the user `urna` cannot read, like the home of whoever connected. It goes on as standard input.
 if [ "${1:-}" = restaurar ] && [ $# -eq 3 ] && [ "$2" != - ]; then
-  [ -f "$2" ] || { echo "No encuentro el archivo $2. Fijate la ruta, o pasala completa, como /home/ubuntu/copia.tar.gpg." >&2; exit 1; }
-  [ -r "$2" ] || { echo "No puedo leer $2. Probá con sudo." >&2; exit 1; }
+  [ -f "$2" ] || { t "No encuentro el archivo $2. Fijate la ruta, o pasala completa, como /home/ubuntu/copia.tar.gpg." "There is no file $2. Check the path, or give the full one, like /home/ubuntu/copia.tar.gpg." >&2; exit 1; }
+  [ -r "$2" ] || { t "No puedo leer $2. Probá con sudo." "$2 cannot be read. Try with sudo." >&2; exit 1; }
   exec <"$2"
   set -- restaurar - "$3"
 fi
@@ -33,6 +61,7 @@ set -a
 # shellcheck disable=SC1091
 . "$home/.env"
 set +a
+URNA_IDIOMA=$lang
 pod=${URNA_POD:-urna}
 ports=${URNA_PORTS--p 80:80 -p 443:443 -p 443:443/udp}
 # The address of the site, without its scheme: what its certificate is for.
@@ -142,9 +171,9 @@ wait_healthy() {
   for _ in $(seq 1 "${1:-120}"); do
     ask_here --max-time 5 "$health" >/dev/null 2>&1 && return 0
     if [ "$(server_restarts)" != "$restarts" ]; then
-      echo 'El servidor se frena apenas arranca. Lo último que dijo:' >&2
+      t 'El servidor se frena apenas arranca. Lo último que dijo:' 'The server stops right after it starts. The last thing it said:' >&2
       podman logs --tail 20 "$pod-server" 2>&1 | awk '!seen[$0]++' | tail -n 8 | sed 's/^/  /' >&2
-      echo "Si es un dato de $home/.env, corregilo y corré «urna reiniciar». Mientras tanto, el sitio no anda." >&2
+      t "Si es un dato de $home/.env, corregilo y corré «urna reiniciar». Mientras tanto, el sitio no anda." "If it is a setting in $home/.env, fix it and run “urna reiniciar”. Until then, the site is down." >&2
       return 2
     fi
     sleep 2
@@ -164,10 +193,10 @@ certificate_ends() {
 not_answering() {
   [ "$1" = 2 ] && exit 1
   if [ -n "$(certificate_ends)" ]; then
-    echo "Arrancó, pero el servidor no responde, y el certificado ya está. Mirá lo último que dijo con «$(server_logs)»." >&2
+    t "Arrancó, pero el servidor no responde, y el certificado ya está. Mirá lo último que dijo con «$(server_logs)»." "It started, but the server does not answer, and the certificate is already there. See the last thing it said with “$(server_logs)”." >&2
     exit 1
   fi
-  echo 'Arrancó y queda andando, pero todavía no responde. La primera vez casi siempre falta el certificado, que llega cuando los puertos 80 y 443 están abiertos en el firewall de la nube. «urna estado» dice qué falta.' >&2
+  t 'Arrancó y queda andando, pero todavía no responde. La primera vez casi siempre falta el certificado, que llega cuando los puertos 80 y 443 están abiertos en el firewall de la nube. «urna estado» dice qué falta.' 'It started and keeps running, but it does not answer yet. The first time, what is missing is almost always the certificate, which arrives once ports 80 and 443 are open in the cloud firewall. “urna estado” says what is missing.' >&2
   exit 3
 }
 
@@ -181,7 +210,7 @@ backup() {
   mkdir -p "$home/copias"
   # One backup at a time: then what a backup cut short left behind can go before the next one starts.
   exec 9>"$home/copias/.en-curso"
-  flock -n 9 || { echo 'Ya hay una copia en curso.' >&2; return 0; }
+  flock -n 9 || { t 'Ya hay una copia en curso.' 'A backup is already in progress.' >&2; return 0; }
   rm -f "$home"/copias/urna-*.tar.gpg.parcial
   stamp=$(date -u +%Y%m%d-%H%M%S)
   work=$(mktemp -d)
@@ -218,10 +247,10 @@ backup() {
   if has_bucket; then
     purged_stamp=''
     [ "${purged:-0}" -gt 0 ] && purged_stamp=$(date -u -d "@$purged" +%Y%m%d-%H%M%S)
-    if podman exec "$pod-server" node apps/server/src/backup-upload.ts "/copias/urna-$stamp.tar.gpg" "$keep" "$purged_stamp" >&2; then
+    if podman exec -e URNA_IDIOMA="$lang" "$pod-server" node apps/server/src/backup-upload.ts "/copias/urna-$stamp.tar.gpg" "$keep" "$purged_stamp" >&2; then
       touch "$home/.copia-en-bucket"
     else
-      echo "No se pudo mandar la copia al bucket $URNA_S3_BUCKET: quedó solo en este servidor." >&2
+      t "No se pudo mandar la copia al bucket $URNA_S3_BUCKET: quedó solo en este servidor." "The backup could not be sent to the bucket $URNA_S3_BUCKET: it is only on this server." >&2
     fi
   fi
 }
@@ -240,30 +269,31 @@ restore() {
   chmod 600 "$work/llave"
   LC_ALL=C gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$work/llave" --decrypt -o "$work/copia.tar" 2>"$work/gpg" || touch "$work/mal"
   if grep -q 'Bad session key' "$work/gpg"; then
-    echo 'Esa llave no abre esta copia. Tiene que ser la llave de recuperación de la instalación que hizo la copia.' >&2
+    t 'Esa llave no abre esta copia. Tiene que ser la llave de recuperación de la instalación que hizo la copia.' 'That key does not open this backup. It has to be the recovery key of the installation that made it.' >&2
     exit 1
   fi
-  incomplete() { echo 'Ese archivo no es una copia de Urna Abierta, o está incompleto. Bajalo de nuevo y volvé a probar.' >&2; exit 1; }
-  strange() { echo "Esa copia trae $1, que una copia de Urna Abierta no tiene, así que no restauré nada. Si no la hiciste vos o alguien de confianza, no la uses." >&2; exit 1; }
+  incomplete() { t 'Ese archivo no es una copia de Urna Abierta, o está incompleto. Bajalo de nuevo y volvé a probar.' 'That file is not an Urna Abierta backup, or it is incomplete. Download it again and try once more.' >&2; exit 1; }
+  # strange 'lo que trae' 'what it has'
+  strange() { t "Esa copia trae $1, que una copia de Urna Abierta no tiene, así que no restauré nada. Si no la hiciste vos o alguien de confianza, no la uses." "That backup has $2, which an Urna Abierta backup does not have, so nothing was restored. If neither you nor someone you trust made it, do not use it." >&2; exit 1; }
   [ ! -e "$work/mal" ] && tar -tf "$work/copia.tar" >"$work/nombres" 2>/dev/null || incomplete
   while IFS= read -r name; do
-    case "$name" in base.dump | fotos.tar | clave-campos) ;; *) strange 'un archivo de más' ;; esac
+    case "$name" in base.dump | fotos.tar | clave-campos) ;; *) strange 'un archivo de más' 'an extra file' ;; esac
   done <"$work/nombres"
-  [ -z "$(sort "$work/nombres" | uniq -d)" ] || strange 'un archivo repetido'
+  [ -z "$(sort "$work/nombres" | uniq -d)" ] || strange 'un archivo repetido' 'a repeated file'
   [ "$(wc -l <"$work/nombres")" -eq 3 ] || incomplete
   # A link or anything else that is not a plain file.
-  tar -tvf "$work/copia.tar" | grep -qv '^-' && strange 'un enlace'
+  tar -tvf "$work/copia.tar" | grep -qv '^-' && strange 'un enlace' 'a link'
   # Each file is read out of the backup when it is needed, never copied next to it: besides the photos, which have to
   # land somewhere, restoring takes no more room than the backup itself, where /tmp may be a small part of the memory.
   # What reads them says when one is not whole; a read cut short on purpose, as by head, says nothing.
   member() { tar -xOf "$work/copia.tar" "$1" 2>/dev/null; }
   [ "$(member base.dump | head -c 1 | wc -c)" -eq 1 ] || incomplete
   field_key=$(member clave-campos)
-  case "$field_key" in *[!0-9a-f]*) strange 'una clave de campos rara' ;; esac
-  [ "${#field_key}" -eq 64 ] || strange 'una clave de campos rara'
+  case "$field_key" in *[!0-9a-f]*) strange 'una clave de campos rara' 'an odd field key' ;; esac
+  [ "${#field_key}" -eq 64 ] || strange 'una clave de campos rara' 'an odd field key'
   member fotos.tar | tar -tf - >"$work/fotos" 2>/dev/null || incomplete
-  grep -Evx 'fotos(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*/?' "$work/fotos" >/dev/null && strange 'archivos fuera de la carpeta de las fotos'
-  member fotos.tar | tar -tvf - | grep -Eqv '^[-d]' && strange 'un enlace entre las fotos'
+  grep -Evx 'fotos(/[A-Za-z0-9_-][A-Za-z0-9._-]*)*/?' "$work/fotos" >/dev/null && strange 'archivos fuera de la carpeta de las fotos' 'files outside the photos folder'
+  member fotos.tar | tar -tvf - | grep -Eqv '^[-d]' && strange 'un enlace entre las fotos' 'a link among the photos'
   # Next to where they go, so that putting them in place is only a rename.
   staging=$(mktemp -d "$home/.restaurando.XXXXXX")
   if [ -s "$work/fotos" ]; then member fotos.tar | tar -C "$staging" -xf - --no-same-owner fotos; fi
@@ -272,20 +302,20 @@ restore() {
   podman rm -f "$pod-server" >/dev/null 2>&1 || true
   # If the database does not let its data go, nothing changed yet: the site comes back as it was, and says why.
   if ! podman exec "$pod-db" psql -q -U urna -d urna -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' >/dev/null 2>"$work/base"; then
-    echo "La base no me dejó reemplazar sus datos, así que no restauré nada. Dijo: $(tail -n 1 "$work/base")" >&2
+    t "La base no me dejó reemplazar sus datos, así que no restauré nada. Dijo: $(tail -n 1 "$work/base")" "The database did not let its data be replaced, so nothing was restored. It said: $(tail -n 1 "$work/base")" >&2
     start || true
     exit 1
   fi
   member base.dump | podman exec -i "$pod-db" pg_restore -U urna -d urna --no-owner ||
-    { echo 'La copia no terminó de entrar en la base, y el sitio quedó frenado para que no arranque con la mitad de los datos. Volvé a correr «urna restaurar» con la misma copia.' >&2; exit 1; }
+    { t 'La copia no terminó de entrar en la base, y el sitio quedó frenado para que no arranque con la mitad de los datos. Volvé a correr «urna restaurar» con la misma copia.' 'The backup did not finish going into the database, and the site was left stopped so that it does not start with half the data. Run “urna restaurar” again with the same backup.' >&2; exit 1; }
   sed -i "s|^URNA_FIELD_KEY=.*|URNA_FIELD_KEY=$field_key|" "$home/.env"
   URNA_FIELD_KEY=$field_key
   podman unshare rm -rf "$home/fotos"
   mv "$staging/fotos" "$home/fotos"
   start
   wait_healthy 60 || not_answering $?
-  echo "Copia restaurada. Las copias que se hagan desde ahora se abren con la llave de recuperación de este servidor."
-  has_bucket || echo "Si las fotos iban a un bucket S3, completá las líneas URNA_S3_ de $home/.env y corré «urna reiniciar»: esos datos no entran en la copia."
+  t "Copia restaurada. Las copias que se hagan desde ahora se abren con la llave de recuperación de este servidor." "Backup restored. Backups made from now on open with the recovery key of this server."
+  has_bucket || t "Si las fotos iban a un bucket S3, completá las líneas URNA_S3_ de $home/.env y corré «urna reiniciar»: esos datos no entran en la copia." "If the photos went to an S3 bucket, fill in the URNA_S3_ lines of $home/.env and run “urna reiniciar”: those settings are not in the backup."
 }
 
 # The newest published version: where GitHub's address for the latest release leads.
@@ -298,21 +328,21 @@ newest() {
 update() {
   version=${1:-$(newest)}
   case "$version" in
-    '') echo 'No pude averiguar cuál es la última versión. Buscala en github.com/bafif/urna-abierta/releases y pedila, como en «urna actualizar v0.2.0».' >&2; exit 1 ;;
+    '') t 'No pude averiguar cuál es la última versión. Buscala en github.com/bafif/urna-abierta/releases y pedila, como en «urna actualizar v0.2.0».' 'Could not find out which version is the newest. Look it up at github.com/bafif/urna-abierta/releases and ask for it, as in “urna actualizar v0.2.0”.' >&2; exit 1 ;;
     [0-9]*) version=v$version ;;
   esac
-  case "$version" in *[!A-Za-z0-9._-]*) echo "$version no es una versión: tiene que ser algo como v0.2.0." >&2; exit 2 ;; esac
+  case "$version" in *[!A-Za-z0-9._-]*) t "$version no es una versión: tiene que ser algo como v0.2.0." "$version is not a version: it has to be something like v0.2.0." >&2; exit 2 ;; esac
   before=${URNA_IMAGE_SERVER##*:}
   server=${URNA_IMAGE_SERVER%:*}:$version
   web=${URNA_IMAGE_WEB%:*}:$version
   if [ "$server" = "$URNA_IMAGE_SERVER" ] && [ "$web" = "$URNA_IMAGE_WEB" ]; then
-    echo "Ya está en la versión $version."
+    t "Ya está en la versión $version." "It is already on version $version."
     return
   fi
-  echo "Bajando la versión $version…"
+  t "Bajando la versión $version…" "Downloading version $version…"
   # A version never changes once published: if it is already here, it is the one.
   for image in "$server" "$web"; do
-    podman image exists "$image" || podman pull -q "$image" >/dev/null || { echo "No se pudo bajar la versión $version. No cambié nada." >&2; exit 1; }
+    podman image exists "$image" || podman pull -q "$image" >/dev/null || { t "No se pudo bajar la versión $version. No cambié nada." "Version $version could not be downloaded. Nothing changed." >&2; exit 1; }
   done
   # The database keeps its major version, and gets its fixes when the registry answers.
   podman pull -q "$URNA_IMAGE_DB" >/dev/null 2>&1 || true
@@ -320,9 +350,9 @@ update() {
   # the database, that backup is the only way back to the older one, which refuses a database it does not know.
   older='' older_copy=''
   if [ -f "$home/.antes-de-actualizar" ]; then read -r older older_copy <"$home/.antes-de-actualizar" || true; fi
-  echo 'Haciendo una copia antes de actualizar…'
+  t 'Haciendo una copia antes de actualizar…' 'Making a backup before updating…'
   # As its own process, so that any step that fails stops it.
-  copy=$("$0" copia) || { echo 'No se pudo hacer la copia, así que no cambié nada. Mirá «urna estado».' >&2; exit 1; }
+  copy=$("$0" copia) || { t 'No se pudo hacer la copia, así que no cambié nada. Mirá «urna estado».' 'The backup could not be made, so nothing changed. Look at “urna estado”.' >&2; exit 1; }
   # Going back keeps the backup from before the update it undoes.
   [ "$version" = "$older" ] || printf '%s %s\n' "$before" "$copy" >"$home/.antes-de-actualizar"
   # Its commands replace these, but only if they read as a script. The running copy keeps its own file.
@@ -333,35 +363,36 @@ update() {
     rm -f "$home/urna.nueva"
   fi
   sed -i "s|^URNA_IMAGE_SERVER=.*|URNA_IMAGE_SERVER=$server|; s|^URNA_IMAGE_WEB=.*|URNA_IMAGE_WEB=$web|" "$home/.env"
-  echo "Arrancando la versión $version…"
+  t "Arrancando la versión $version…" "Starting version $version…"
   if ! "$home/urna" reiniciar >/dev/null; then
     if [ "$version" = "$older" ] && [ -f "$older_copy" ]; then
-      echo "La versión $version no abre la base tal como la dejó la $before. Para volver a los datos de antes de actualizar: «urna restaurar $older_copy TU-LLAVE-DE-RECUPERACION». Lo que se cargó después quedó en $copy, que abre la $before." >&2
+      t "La versión $version no abre la base tal como la dejó la $before. Para volver a los datos de antes de actualizar: «urna restaurar $older_copy TU-LLAVE-DE-RECUPERACION». Lo que se cargó después quedó en $copy, que abre la $before." "Version $version cannot open the database as $before left it. To go back to the data from before the update: “urna restaurar $older_copy YOUR-RECOVERY-KEY”. What was entered after that is in $copy, which $before opens." >&2
     else
-      echo "La versión $version no arrancó. Para volver a la $before con los datos de antes: «urna actualizar $before» y después «urna restaurar $copy TU-LLAVE-DE-RECUPERACION». Si la $version llegó a cambiar la base, la $before no arranca hasta que restaures esa copia." >&2
+      t "La versión $version no arrancó. Para volver a la $before con los datos de antes: «urna actualizar $before» y después «urna restaurar $copy TU-LLAVE-DE-RECUPERACION». Si la $version llegó a cambiar la base, la $before no arranca hasta que restaures esa copia." "Version $version did not start. To go back to $before with the data from before: “urna actualizar $before” and then “urna restaurar $copy YOUR-RECOVERY-KEY”. If $version got to change the database, $before does not start until you restore that backup." >&2
     fi
     exit 1
   fi
-  echo "Listo: está en la versión $version. La copia de antes quedó en $copy."
+  t "Listo: está en la versión $version. La copia de antes quedó en $copy." "Done: it is on version $version. The backup from before is in $copy."
 }
 
 # Where the photos are, according to .env and according to the server, which may not have taken .env yet.
 photos_status() {
   if [ -n "${URNA_S3_ENDPOINT:-}" ] && [ -n "${URNA_S3_BUCKET:-}" ]; then
-    where="en el bucket $URNA_S3_BUCKET de $URNA_S3_ENDPOINT, cifradas. El bucket no entra en la copia"
+    where=$(t "en el bucket $URNA_S3_BUCKET de $URNA_S3_ENDPOINT, cifradas. El bucket no entra en la copia" "in the bucket $URNA_S3_BUCKET at $URNA_S3_ENDPOINT, encrypted. The bucket is not part of the backup")
+    photos=$(t fotos photos)
     case "$1" in
-      *'"storage":"disk"'*) check 'fotos' mal 'el servidor todavía las guarda en el disco. Corré «urna reiniciar» para que tome lo que dice .env' ;;
-      *'"working":false'*) check 'fotos' mal "no se pueden guardar $where. Mirá qué dice el servidor con «$(server_logs)»" ;;
+      *'"storage":"disk"'*) check "$photos" mal "$(t 'el servidor todavía las guarda en el disco. Corré «urna reiniciar» para que tome lo que dice .env' 'the server still keeps them on disk. Run “urna reiniciar” so that it takes what .env says')" ;;
+      *'"working":false'*) check "$photos" mal "$(t "no se pueden guardar $where. Mirá qué dice el servidor con «$(server_logs)»" "they cannot be saved $where. See what the server says with “$(server_logs)”")" ;;
       # The check the server does on starting can take a minute when the bucket does not answer.
-      *'"working":null'*) check 'fotos' espera "el servidor todavía está probando el bucket $URNA_S3_BUCKET. Volvé a correr «urna estado» en un minuto" ;;
-      *'"storage":"s3"'*) check "fotos: $where" ok ;;
+      *'"working":null'*) check "$photos" espera "$(t "el servidor todavía está probando el bucket $URNA_S3_BUCKET. Volvé a correr «urna estado» en un minuto" "the server is still testing the bucket $URNA_S3_BUCKET. Run “urna estado” again in a minute")" ;;
+      *'"storage":"s3"'*) check "$photos: $where" ok ;;
       # A server that does not answer cannot say whether they arrive, but where they go is still worth knowing.
-      *) check 'fotos' espera "según .env se guardan $where. Hasta que el servidor conteste, no se sabe si llegan" ;;
+      *) check "$photos" espera "$(t "según .env se guardan $where. Hasta que el servidor conteste, no se sabe si llegan" "according to .env they are saved $where. Until the server answers, there is no knowing whether they arrive")" ;;
     esac
   else
     case "$1" in
-      *'"storage":"s3"'*) check 'fotos' mal 'el servidor las manda a un bucket que .env ya no nombra. Corré «urna reiniciar»' ;;
-      *) check "fotos: en el disco, en $home/fotos, y entran en la copia" ok ;;
+      *'"storage":"s3"'*) check "$(t fotos photos)" mal "$(t 'el servidor las manda a un bucket que .env ya no nombra. Corré «urna reiniciar»' 'the server sends them to a bucket that .env no longer names. Run “urna reiniciar”')" ;;
+      *) check "$(t "fotos: en el disco, en $home/fotos, y entran en la copia" "photos: on disk, in $home/fotos, and they are part of the backup")" ok ;;
     esac
   fi
 }
@@ -371,44 +402,75 @@ status() {
   # ok, aviso (worth knowing, but in order), espera (not confirmed yet) or anything else for a failure.
   check() {
     case "$2" in
-      ok) printf 'bien   %s\n' "$1"; return ;;
-      aviso) printf 'aviso  %s\n' "$1"; return ;;
-      espera) printf 'espera %s: %s\n' "$1" "$3" ;;
-      *) printf 'FALLA  %s: %s\n' "$1" "$3" ;;
+      ok) printf '%-7s%s\n' "$(t bien ok)" "$1"; return ;;
+      aviso) printf '%-7s%s\n' "$(t aviso note)" "$1"; return ;;
+      espera) printf '%-7s%s: %s\n' "$(t espera wait)" "$1" "$3" ;;
+      *) printf '%-7s%s: %s\n' "$(t FALLA FAIL)" "$1" "$3" ;;
     esac
     problems=$((problems + 1))
   }
-  check "versión: ${URNA_IMAGE_SERVER##*:}" ok
+  check "$(t versión version): ${URNA_IMAGE_SERVER##*:}" ok
   for name in db server web; do
-    state=$(podman inspect --format '{{.State.Status}}' "$pod-$name" 2>/dev/null || echo ausente)
-    [ "$state" = running ] && check "$name" ok || check "$name" mal "está $state. Probá «urna arrancar»"
+    state=$(podman inspect --format '{{.State.Status}}' "$pod-$name" 2>/dev/null || t ausente missing)
+    [ "$state" = running ] && check "$name" ok || check "$name" mal "$(t "está $state. Probá «urna arrancar»" "it is $state. Try “urna arrancar”")"
   done
   answer=$(ask_here --max-time 10 "$health" 2>/dev/null || true)
   ends=$(certificate_ends)
+  answers=$(t 'el servidor responde' 'the server answers')
   if [ -n "$answer" ]; then
-    check 'el servidor responde' ok
+    check "$answers" ok
   elif [ -z "$ends" ]; then
     # Without a certificate nobody gets in, this command neither: what is missing is the certificate, not the server.
-    check 'el servidor responde' espera 'sin certificado no se le puede preguntar. Mirá el renglón del certificado'
+    check "$answers" espera "$(t 'sin certificado no se le puede preguntar. Mirá el renglón del certificado' 'without a certificate it cannot be asked. See the certificate line')"
   else
-    check 'el servidor responde' mal "no contesta. Mirá lo último que dijo con «$(server_logs)»"
+    check "$answers" mal "$(t "no contesta. Mirá lo último que dijo con «$(server_logs)»" "it does not answer. See the last thing it said with “$(server_logs)”")"
   fi
   photos_status "$answer"
   free=$(df -Pm "$home" | awk 'NR == 2 {print $4}')
-  [ "$free" -gt 500 ] && check "disco: quedan $free MB" ok || check 'disco' mal "quedan $free MB. Borrá copias viejas"
+  [ "$free" -gt 500 ] && check "$(t "disco: quedan $free MB" "disk: $free MB left")" ok || check "$(t disco disk)" mal "$(t "quedan $free MB. Borrá copias viejas" "$free MB left. Delete old backups")"
   newest=$(find "$home/copias" -name 'urna-*.tar.gpg' -mmin -420 2>/dev/null | head -n 1)
-  [ -n "$newest" ] && check 'hay una copia de las últimas 7 horas' ok || check 'copias' mal 'no hay una reciente. Probá «urna copia»'
+  [ -n "$newest" ] && check "$(t 'hay una copia de las últimas 7 horas' 'there is a backup from the last 7 hours')" ok || check "$(t copias backups)" mal "$(t 'no hay una reciente. Probá «urna copia»' 'there is no recent one. Try “urna copia”')"
   if ! has_bucket; then
-    check 'las copias quedan solo en este servidor: si se pierde, se pierden con él. Bajá una desde la app cada tanto, o mandalas a un bucket S3' aviso
+    check "$(t 'las copias quedan solo en este servidor: si se pierde, se pierden con él. Bajá una desde la app cada tanto, o mandalas a un bucket S3' 'backups are only on this server: if it is lost, they are lost with it. Download one from the app now and then, or send them to an S3 bucket')" aviso
   elif [ -n "$(find "$home/.copia-en-bucket" -mmin -420 2>/dev/null)" ]; then
-    check "las copias también van al bucket $URNA_S3_BUCKET" ok
+    check "$(t "las copias también van al bucket $URNA_S3_BUCKET" "backups also go to the bucket $URNA_S3_BUCKET")" ok
   else
-    check 'copias en el bucket' mal "ninguna de las últimas 7 horas llegó a $URNA_S3_BUCKET. Corré «urna copia» y fijate qué dice"
+    check "$(t 'copias en el bucket' 'backups in the bucket')" mal "$(t "ninguna de las últimas 7 horas llegó a $URNA_S3_BUCKET. Corré «urna copia» y fijate qué dice" "none from the last 7 hours reached $URNA_S3_BUCKET. Run “urna copia” and see what it says")"
   fi
-  if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then check 'la hora está sincronizada' ok; else check 'hora' mal 'este servidor no sincroniza la hora'; fi
-  if [ -n "$ends" ]; then check "certificado hasta: $ends" ok; else check 'certificado' mal "todavía no hay, y sin él nadie entra. Let's Encrypt lo da cuando llega a este servidor por los puertos 80 y 443: abrí TCP 80 y 443, y UDP 443, en el firewall de la nube. Llega solo, aunque si los puertos estuvieron cerrados mucho tiempo puede tardar horas: «urna reiniciar» lo pide de nuevo enseguida"; fi
-  [ "$problems" = 0 ] && echo 'Todo en orden.'
+  if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then check "$(t 'la hora está sincronizada' 'the clock is synchronized')" ok; else check "$(t hora clock)" mal "$(t 'este servidor no sincroniza la hora' 'this server does not synchronize its clock')"; fi
+  if [ -n "$ends" ]; then check "$(t "certificado hasta: $ends" "certificate until: $ends")" ok; else check "$(t certificado certificate)" mal "$(t "todavía no hay, y sin él nadie entra. Let's Encrypt lo da cuando llega a este servidor por los puertos 80 y 443: abrí TCP 80 y 443, y UDP 443, en el firewall de la nube. Llega solo, aunque si los puertos estuvieron cerrados mucho tiempo puede tardar horas: «urna reiniciar» lo pide de nuevo enseguida" "there is none yet, and without it nobody gets in. Let's Encrypt issues it when it reaches this server on ports 80 and 443: open TCP 80 and 443, and UDP 443, in the cloud firewall. It arrives by itself, although if the ports were closed for a long time it can take hours: “urna reiniciar” asks for it again right away")"; fi
+  [ "$problems" = 0 ] && t 'Todo en orden.' 'All in order.'
   return "$problems"
+}
+
+usage() {
+  if [ "$lang" = es ]; then
+    cat <<'EOF'
+urna estado              dice si está todo bien y, si no, qué hacer
+urna arrancar            lo arranca
+urna frenar              lo frena, sin borrar nada
+urna copia               hace ahora una copia cifrada, y la manda al bucket si hay uno
+urna restaurar <archivo> <llave>   reemplaza los datos por los de una copia
+urna actualizar [versión]          hace una copia y pasa a la última versión, o a la que se pida
+urna reiniciar           vuelve a crear los contenedores con lo que dice .env, sin tocar los datos
+urna direccion <ip o dominio>      cambia la dirección del sitio
+
+Con --idioma en o --idioma es antes del comando, contesta en ese idioma.
+EOF
+  else
+    cat <<'EOF'
+urna estado              says whether everything is fine, and what to do if it is not
+urna arrancar            starts it
+urna frenar              stops it, without deleting anything
+urna copia               makes an encrypted backup now, and sends it to the bucket if there is one
+urna restaurar <file> <key>        replaces the data with a backup
+urna actualizar [version]          makes a backup and moves to the newest version, or to the one given
+urna reiniciar           creates the containers again with what .env says, keeping the data
+urna direccion <ip or domain>      changes the address of the site
+
+With --idioma es or --idioma en before the command, it answers in that language.
+EOF
+  fi
 }
 
 case "${1:-estado}" in
@@ -422,22 +484,22 @@ case "${1:-estado}" in
     # Also when it is only the certificate that is missing: the database is there, and a backup needs no certificate.
     [ "$answered" = 2 ] || first_backup
     [ "$answered" = 0 ] || not_answering "$answered"
-    echo 'Andando.'
+    t 'Andando.' 'Running.'
     ;;
   frenar) stop_all ;;
   copia) backup ;;
   restaurar)
-    [ $# -eq 3 ] || { echo 'Uso: urna restaurar <archivo> <llave>' >&2; exit 2; }
+    [ $# -eq 3 ] || { t 'Uso: urna restaurar <archivo> <llave>' 'Usage: urna restaurar <file> <key>' >&2; exit 2; }
     restore "$3"
     ;;
   actualizar) update "${2:-}" ;;
   reiniciar)
     replace_containers
     wait_healthy || not_answering $?
-    echo 'Andando, con lo que dice .env.'
+    t 'Andando, con lo que dice .env.' 'Running, with what .env says.'
     ;;
   direccion)
-    [ $# -eq 2 ] || { echo 'Uso: urna direccion <ip o dominio>' >&2; exit 2; }
+    [ $# -eq 2 ] || { t 'Uso: urna direccion <ip o dominio>' 'Usage: urna direccion <ip or domain>' >&2; exit 2; }
     case "$2" in
       *[!0-9.]*) site=$2; cert=auto ;;
       *) site=https://$2; cert=ip ;;
@@ -445,8 +507,8 @@ case "${1:-estado}" in
     sed -i "s|^URNA_SITE=.*|URNA_SITE=$site|; s|^URNA_CERT=.*|URNA_CERT=$cert|" "$home/.env"
     podman rm -f "$pod-web" >/dev/null 2>&1 || true
     URNA_SITE=$site URNA_CERT=$cert start
-    echo "Ahora está en $site. Cada fiscal va a tener que volver a preparar la mesa."
+    t "Ahora está en $site. Cada fiscal va a tener que volver a preparar la mesa." "It is now at $site. Every poll watcher will have to prepare their table again."
     ;;
   estado) status ;;
-  *) sed -n '2,11p' "$0" | cut -c3-; exit 2 ;;
+  *) usage; exit 2 ;;
 esac

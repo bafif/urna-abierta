@@ -116,6 +116,9 @@ describe('backups to the bucket', () => {
       expect(server.objects.get('/fotos-prueba/prueba/backups/urna-20270407-003000.tar.gpg')?.toString()).toBe('por comando');
       const missing = promisify(execFile)(process.execPath, [script, file], { env: { ...process.env, URNA_S3_ENDPOINT: '', URNA_S3_BUCKET: '' } });
       await expect(missing).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('urna reiniciar') });
+      // In the language «urna» passes on.
+      const english = promisify(execFile)(process.execPath, [script, file], { env: { ...process.env, URNA_IDIOMA: 'en', URNA_S3_ENDPOINT: '', URNA_S3_BUCKET: '' } });
+      await expect(english).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('The bucket did not take it: the server does not have the settings of the bucket') });
     } finally {
       await server.close();
     }
