@@ -40,8 +40,21 @@
       await session.refresh();
       themeMessage = t('settings.theme.added');
     } catch (error) {
-      themeMessage = error instanceof ApiError && error.problems.length > 0 ? `${t('settings.theme.refused')} ${error.problems[0]}` : t('settings.theme.refused');
+      themeMessage =
+        error instanceof ApiError && error.code === 'too_many_themes'
+          ? t('settings.theme.tooMany')
+          : error instanceof ApiError && error.problems.length > 0
+            ? `${t('settings.theme.refused')} ${error.problems[0]}`
+            : t('settings.theme.refused');
     }
+  }
+
+  /** Whoever leaves a shared computer, or hands the phone to someone else, takes the access with them. */
+  async function logout() {
+    const pending = app.pendingCount + app.pendingPhotos;
+    if (!confirm(pending > 0 ? t('settings.logout.pending', { count: pending }) : t('settings.logout.confirm'))) return;
+    await session.logout();
+    nav.home();
   }
 </script>
 
@@ -89,5 +102,8 @@
     </dl>
     <button class="enlace" onclick={copyReport}>{copied ? t('settings.copied') : t('settings.copy')}</button>
     <p class="aclara">{t('settings.note')}</p>
+  {/if}
+  {#if session.token && !app.practice}
+    <button class="enlace peligro" data-testid="logout" onclick={logout}>{t('settings.logout')}</button>
   {/if}
 </Pantalla>

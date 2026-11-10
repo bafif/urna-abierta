@@ -30,6 +30,8 @@
     countedDays: string[];
     envelopesDiffer: boolean;
     talliesDiffer: boolean;
+    tallyOverRoll: boolean;
+    tallyUnknown: boolean;
     /** When each day was closed there, by its first envelope count. */
     countedAt: Record<string, string>;
     tallied: string[];
@@ -129,7 +131,7 @@
   const noTally = (table: Table) => !complete(table) && !table.talliesDiffer && overdue(table);
   const noPhoto = (table: Table) => complete(table) && !table.photo && overdue(table);
   const needsSomeone = (table: Table) =>
-    table.incidents.length > 0 || table.envelopesDiffer || table.talliesDiffer || silent(table) || (counting && (noTally(table) || noPhoto(table)));
+    table.incidents.length > 0 || table.envelopesDiffer || table.talliesDiffer || table.tallyOverRoll || table.tallyUnknown || silent(table) || (counting && (noTally(table) || noPhoto(table)));
   const needing = $derived(tables.filter(needsSomeone));
   const fine = $derived(tables.filter((table) => !needsSomeone(table)));
   const done = $derived(tables.filter(complete).length);
@@ -158,6 +160,12 @@
         {:else if table.talliesDiffer}
           <strong>{t('district.talliesDiffer', { table: table.name })}</strong>
           <span>{t('district.talliesDiffer.text')}</span>
+        {:else if table.tallyUnknown}
+          <strong>{t('district.tallyUnknown', { table: table.name })}</strong>
+          <span>{t('district.tallyUnknown.text')}</span>
+        {:else if table.tallyOverRoll}
+          <strong>{t('district.tallyOverRoll', { table: table.name })}</strong>
+          <span>{t('district.tallyOverRoll.text')}</span>
         {:else if table.envelopesDiffer}
           <strong>{t('district.envelopesDiffer', { table: table.name })}</strong>
           <span>{t('district.envelopesDiffer.text')}</span>

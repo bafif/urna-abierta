@@ -9,6 +9,9 @@ export default defineConfig({
       paths: { base: (process.env.BASE_PATH ?? '') as '' | `/${string}` },
       // Registered by hand: an update must never replace the app in the middle of an election.
       serviceWorker: { register: false },
+      // The page says which inline script is its own, by its hash: one slipped in through some text does not run, and
+      // cannot read this device's credential. Caddy's header still allows inline scripts; both have to agree.
+      csp: { mode: 'hash', directives: { 'script-src': ['self'] } },
     }),
   ],
 });

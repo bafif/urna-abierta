@@ -64,7 +64,7 @@
 
   async function saveConsent() {
     await session.api(`${base}/consent`, { method: 'PUT', body: { date, means } });
-    person = { ...person!, consent: { date, means } };
+    person = { ...person!, consent: { date, means: means.trim() } };
     date = '';
     means = '';
     message = t('persons.consentSaved');
@@ -112,7 +112,7 @@
 {:else if person && doing === 'withdraw'}
   <Pantalla accion="seguridad" volver onback={() => (doing = null)} ojo={person.full_name} titulo={t('persons.withdraw.title')} bajada={t('persons.withdraw.text')} desliza>
     <label class="campo"><span>{t('persons.withdraw.date')}</span><input type="date" bind:value={date} data-testid="withdraw-date" /></label>
-    <label class="campo"><span>{t('persons.withdraw.means')}</span><input bind:value={means} data-testid="withdraw-means" /></label>
+    <label class="campo"><span>{t('persons.withdraw.means')}</span><input bind:value={means} maxlength="200" data-testid="withdraw-means" /></label>
     {#snippet pie()}
       <button class="boton primario" disabled={!date || !means.trim()} data-testid="withdraw-save" onclick={withdraw}><Ic name="tilde" /><span>{t('persons.withdraw.save')}</span></button>
     {/snippet}
@@ -139,8 +139,8 @@
     {:else}
       <p class="etiqueta">{t('persons.consent')}</p>
       <label class="campo"><span>{t('persons.consentDate')}</span><input type="date" bind:value={date} /></label>
-      <label class="campo"><span>{t('persons.consentMeans')}</span><input bind:value={means} /></label>
-      <button class="enlace" disabled={!date || !means} onclick={saveConsent}>{t('save')}</button>
+      <label class="campo"><span>{t('persons.consentMeans')}</span><input bind:value={means} maxlength="200" /></label>
+      <button class="enlace" disabled={!date || !means.trim()} onclick={saveConsent}>{t('save')}</button>
     {/if}
     <button class="boton secundario" data-testid="person-export" onclick={exportData}>{t('persons.export')}</button>
     <div class="renglon-botones">
