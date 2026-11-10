@@ -8,6 +8,7 @@
   import { nav } from '../nav.svelte.ts';
   import { pwa } from '../pwa.svelte.ts';
   import { session } from '../session.svelte.ts';
+  import { scheduleText } from '../schedule.ts';
 
   let preparing = $state(false);
   let failed = $state(false);
@@ -22,6 +23,12 @@
   const canCorrect = $derived(app.countedDays.size > 0);
   const rollToo = $derived(step === 'tally' || step === 'photo' || step === 'done');
 
+  /** When voting closes: today's, or the first day's before it starts. Said only when the election says it. */
+  const closeTime = $derived.by(() => {
+    const hours = session.me?.table?.hours ?? {};
+    return (hours[app.today] ?? hours[days[0] ?? ''])?.close ?? '';
+  });
+  const ownTimes = $derived(scheduleText(session.me?.table?.schedule, { from: t('schedule.from'), arrive: t('schedule.arrive'), meet: t('schedule.meet') }));
   const stations = $derived.by((): Station[] => {
     const order = ['prepare', 'mark', 'count', 'tally'];
     const now = { prepare: 0, waiting: 1, mark: 1, rest: 2, tally: 3, photo: 3, done: 4 }[step];
@@ -33,7 +40,7 @@
     const when = {
       prepare: t('plan.prepare.when'),
       mark: multiDay ? t('plan.mark.whenDays', { n: days.length }) : t('plan.mark.when'),
-      count: multiDay ? t('plan.count.whenDays') : t('plan.count.when'),
+      count: closeTime ? t(multiDay ? 'plan.count.atDays' : 'plan.count.at', { time: closeTime }) : multiDay ? t('plan.count.whenDays') : t('plan.count.when'),
       tally: multiDay ? t('plan.tally.whenDays') : t('plan.tally.when'),
     };
     const help = {
@@ -63,7 +70,7 @@
       const next = days.find((day) => day > app.today);
       return next ? t('plan.rest.next', { day: formatDay(next) }) : '';
     }
-    if (step === 'done') return pending > 0 ? t('plan.finished.pending') : t('plan.finished.sent');
+    if (step === 'done') return pending > 0 ? t('plan.finished.pending') : app.arrivedLate ? t('plan.finished.late') : t('plan.finished.sent');
     return '';
   });
 
@@ -85,6 +92,15 @@
 
 {#if !app.ready}
   <Pantalla />
+{:else if !table && session.me?.deleted}
+  <Pantalla titulo={t('plan.deleted.title', { election: session.me.deleted.election })} bajada={t('plan.deleted.text')}>
+    {#snippet pie()}
+      <div class="pila">
+        <button class="boton primario" onclick={() => session.refresh()}>{t('plan.noTable.check')}</button>
+        <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
+      </div>
+    {/snippet}
+  </Pantalla>
 {:else if !table && session.me?.ended}
   <!-- What is still on the phone goes out after the close too, so the person is told to wait for it. -->
   <Pantalla titulo={t('plan.ended.title')} bajada={pending > 0 ? t('plan.finished.pending') : t('plan.ended.text')}>
@@ -109,6 +125,10 @@
 {:else}
   <Pantalla ojo={formatDay(app.today)} titulo={title} bajada={subtitle} desliza>
     <Stations steps={stations} />
+    {#if ownTimes && step !== 'done'}<p class="aclara" data-testid="own-times">{t('plan.yourTimes', { times: ownTimes })}</p>{/if}
+    {#if app.movedTo}
+      <p class="resultado bien" role="status" data-testid="moved"><Ic name="tilde" />{t('plan.moved', { table: app.movedTo })}</p>
+    {/if}
     {#if app.correctionSaved}
       <p class="resultado bien" role="status" data-testid="correction-saved"><Ic name="tilde" />{chief ? t('correct.saved', { name: chief }) : t('correct.saved.noName')}</p>
     {/if}

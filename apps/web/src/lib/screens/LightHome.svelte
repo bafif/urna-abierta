@@ -30,6 +30,8 @@
   /** Until the elections and categories are in, the screen offers nothing to touch: it may still turn into the list. */
   let loaded = $state(false);
   let categories = $state.raw<Category[]>([]);
+  /** How many categories this person cannot see: then every person they open says that those stay as they are. */
+  let hidden = $state(0);
   let query = $state('');
   let people = $state.raw<Person[]>([]);
   let person = $state<Person | null>(null);
@@ -42,12 +44,13 @@
     try {
       const [open, defined] = await Promise.all([
         session.api<{ elections: OpenElection[] }>('/open-elections'),
-        session.api<{ categories: Category[] }>('/semaphore/categories'),
+        session.api<{ categories: Category[]; hidden?: number }>('/semaphore/categories'),
       ]);
       elections = open.elections;
       election = autoPick(elections);
       choosing = !election && elections.length > 1;
       categories = defined.categories;
+      hidden = defined.hidden ?? 0;
       loaded = true;
     } catch {
       offline = true;
@@ -114,6 +117,8 @@
   </Pantalla>
 {:else if person}
   <Pantalla accion="equipo" volver onback={() => (person = null)} ojo={t('light.eyebrow')} titulo={person.name} bajada={person.table ? t('light.where', { table: person.table, order: person.order ?? '' }) : ''} desliza>
+    <!-- Said of everyone alike: said only of whoever has one, it would tell what it keeps from this person. -->
+    {#if hidden > 0}<p class="aviso-suave" data-testid="sealed-hint">{t('light.sealedHint')}</p>{/if}
     <Options {items} bind:value={choice} />
     {#if choice}<button class="enlace" onclick={() => (choice = null)}>{t('light.clear')}</button>{/if}
     {#if failed}<p class="problema" role="alert">{t(failed === 'sensitive' ? 'light.sensitiveMark' : 'light.needSignal')}</p>{/if}

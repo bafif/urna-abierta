@@ -141,6 +141,9 @@ test('pasting a text: it gives the block, with its keys, and waits for the addre
   const block = await page.getByTestId('paste-block').inputValue();
   expect(block.startsWith('#!/bin/sh\n')).toBe(true);
   expect(block).toContain('URNA_SITE=auto');
+  // The way in for later: the public half of the installer's key, never the private one.
+  expect(block).toMatch(/^URNA_ADMIN_KEY=AAAA[\w+/=]+$/m);
+  expect(block).not.toContain('PRIVATE KEY');
   expect(Buffer.byteLength(block)).toBeLessThan(16 * 1024);
   await page.locator('[data-field="pasteAddress"]').fill('no');
   await button(page, 'Comprobar').click();
@@ -166,8 +169,10 @@ test('on this computer: from the first screen to the first administrator, with t
   await button(page, 'Instalar').click();
   await expect(page.getByRole('heading')).toHaveText('Tu Urna Abierta ya está andando', { timeout: 150_000 });
   await expect(page.getByTestId('theme-failed')).toHaveCount(0);
-  const key = await page.getByTestId('recovery-key').innerText();
-  expect(key).toMatch(/^[A-Z2-9]{5}(-[A-Z2-9]{5}){4}$/);
+  // On this computer there are no backups, so there is no key to keep, and nothing to tick before opening it.
+  await expect(page.getByTestId('recovery-key')).toHaveCount(0);
+  await expect(page.getByTestId('local-note')).toContainText('no hay llave para guardar');
+  await expect(button(page, 'Abrir Urna Abierta')).toBeEnabled();
   await expect(page.getByTestId('address')).toHaveText(/^http:\/\/localhost:\d+$/);
   const reader = page.getByTestId('reader-link');
   await expect(reader).toHaveText('bajá el lector de padrones');

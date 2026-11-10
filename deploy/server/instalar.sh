@@ -29,7 +29,8 @@ until apt_get update -qq; do
   tries=$((tries + 1))
   sleep 20
 done
-apt_get install -y -qq podman uidmap slirp4netns passt gnupg curl openssl dbus-user-session >/dev/null
+# sudo: a minimal Debian may come without it, and the way in for later (urna-admin) needs it.
+apt_get install -y -qq podman uidmap slirp4netns passt gnupg curl openssl dbus-user-session sudo >/dev/null
 
 # Small free machines: a little swap avoids killing the database under a peak.
 if [ "$(swapon --show | wc -l)" = 0 ] && [ "$(awk '/MemTotal/ {print $2}' /proc/meminfo)" -lt 2000000 ] && [ -z "${URNA_NO_SWAP:-}" ]; then
@@ -153,6 +154,23 @@ run_as_urna podman run --rm --network none --entrypoint cat "$URNA_IMAGE_SERVER"
 chown urna:urna "$home/urna"
 chmod 755 "$home/urna"
 ln -sf "$home/urna" /usr/local/bin/urna
+
+# A way in for later, to update the server or restore a copy, with the key of the access file the installer gave.
+if [ -n "${URNA_ADMIN_KEY:-}" ]; then
+  id urna-admin >/dev/null 2>&1 || useradd -m -s /bin/bash urna-admin
+  install -d -m 700 -o urna-admin -g urna-admin /home/urna-admin/.ssh
+  printf 'ssh-ed25519 %s urna-abierta\n' "$URNA_ADMIN_KEY" >/home/urna-admin/.ssh/authorized_keys
+  chown urna-admin:urna-admin /home/urna-admin/.ssh/authorized_keys
+  chmod 600 /home/urna-admin/.ssh/authorized_keys
+  printf 'urna-admin ALL=(ALL) NOPASSWD:ALL\n' >/etc/sudoers.d/urna-admin
+  chmod 440 /etc/sudoers.d/urna-admin
+fi
+# Whoever came in with root's password the first time: from now on, only keys. This file goes before the ones of the
+# cloud, and the first value sshd reads is the one it keeps.
+if [ "${URNA_SOLO_LLAVES:-}" = si ] && [ -n "${URNA_ADMIN_KEY:-}" ] && [ -d /etc/ssh/sshd_config.d ]; then
+  printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' >/etc/ssh/sshd_config.d/10-urna-abierta.conf
+  systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+fi
 
 say 'starting'
 # With a user session it starts through systemd, so that it comes back after a reboot.

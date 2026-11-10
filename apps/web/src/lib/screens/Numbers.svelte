@@ -17,6 +17,7 @@
   let { election: given }: { election?: string } = $props();
   let elections = $state.raw<OpenElection[]>([]);
   let name = $state('');
+  let pickedId = $state('');
   let stats = $state.raw<Stats | null>(null);
   let problem = $state(false);
   /** With several elections and none clearly under way, the person says which one. */
@@ -25,6 +26,7 @@
   async function show(picked: OpenElection | undefined | null) {
     choosing = !picked && elections.length > 1;
     name = picked?.name ?? '';
+    pickedId = picked?.id ?? '';
     stats = null;
     problem = false;
     try {
@@ -90,6 +92,7 @@
         </div>
       {/if}
       <p class="aclara">{t('numbers.note')}</p>
+      <button class="enlace" data-testid="results-link" onclick={() => nav.go('results', { election: pickedId })}>{t('results.open')}</button>
     {/if}
     {#snippet pie()}
       {#if !given}<button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>{/if}

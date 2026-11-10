@@ -76,6 +76,7 @@ test('creating an election that asks for a second step leads to it, not to an em
   await button(page, 'Seguir').click();
   await page.getByTestId('category-name').fill('Concejales');
   await page.getByTestId('category-lists').fill('Lista Azul');
+  await button(page, 'Seguir').click();
   await button(page, 'Crear la elección').click();
 
   const secret = await page.getByTestId('totp-secret').innerText();
@@ -110,6 +111,7 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   await button(page, 'Seguir').click();
   await page.getByTestId('category-name').fill('Centro');
   await page.getByTestId('category-lists').fill('Lista Azul\nLista Verde');
+  await button(page, 'Seguir').click();
   await button(page, 'Crear la elección').click();
 
   // The roll: it shows what it understood before loading anything.
@@ -138,7 +140,9 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   await expect(page.getByRole('heading')).toHaveText('Faltan 3 mesas sin fiscal');
   let link = '';
   for (const name of ['Marta Ibáñez', 'Sol Ruiz', 'Eva Paz']) {
+    // The team comes first: someone not in it yet is added from there.
     await page.getByTestId('table-missing').first().click();
+    await page.getByRole('button', { name: 'Sumar a alguien nuevo' }).click();
     await page.getByTestId('person-name').fill(name);
     await page.getByTestId('person-phone').fill('+54 9 341 555-0000');
     await button(page, 'Invitar').click();
@@ -148,6 +152,10 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
     await button(page, 'Listo').click();
   }
   await expect(page.getByRole('heading')).toHaveText('Todas las mesas tienen fiscal');
+  // A covered table opens too, with who goes there.
+  await page.getByTestId('table-covered').first().click();
+  await expect(page.getByTestId('fiscal-here')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Volver' }).click();
   await button(page, 'Invitar a los fiscales').click();
   await expect(page.getByTestId('pending-invite')).toHaveCount(3);
   await page.getByRole('button', { name: 'Volver' }).click();
@@ -205,7 +213,9 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
   // Whoever coordinates sees it, and what needs someone comes first.
   await button(page, 'Ver cómo va').click();
   await expect(page.getByRole('heading')).toHaveText('2 mesas te necesitan');
-  await expect(page.getByText('La otra anda bien.')).toBeVisible();
+  // The table that counted its envelopes turned the panel to the count: it already loaded everything.
+  await expect(page.getByText('La otra ya cargó todo.')).toBeVisible();
+  await expect(page.getByTestId('count-progress')).toContainText('1 de 3');
   await button(page, 'Ver esas mesas').click();
   await page.locator('.fila-mesa').first().click();
   await expect(page.getByTestId('voted')).toHaveText('3');
@@ -239,6 +249,14 @@ test('a whole election: from the empty party to erasing the names', async ({ pag
 
   // The end: only totals remain.
   await button(page, 'Pasar al escrutinio').click();
+  // The results add up what was chosen: the corrected count waits for someone to choose between its two versions.
+  await button(page, 'Resultados').click();
+  await expect(page.getByTestId('results-counted')).toHaveText('0');
+  await expect(page.getByTestId('results-left-out')).toHaveText('Faltan 3 mesas: 2 todavía no cargaron, y en 1 hay que elegir entre dos escrutinios.');
+  const sheet = page.waitForEvent('download');
+  await button(page, 'Bajar en planilla').click();
+  expect((await sheet).suggestedFilename()).toBe('resultados.csv');
+  await page.getByRole('button', { name: 'Volver' }).click();
   await button(page, 'Cerrar la elección').click();
   await button(page, 'Números').click();
   await expect(page.getByTestId('share')).toHaveText('12 %');
@@ -525,6 +543,7 @@ test('someone asks for their data and to be erased', async ({ page, request }) =
   expect(page14).toContain('Tus derechos');
   expect(page14).toContain('99000001');
   expect(page14).not.toMatch(/election_id|needs_review/);
+  await page.getByTestId('person-correct').click();
   await page.getByTestId('person-fix-name').fill('Nombre Corregido');
   await page.getByTestId('person-fix').click();
   await expect(page.getByText('Datos corregidos.')).toBeVisible();

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import ssh2 from 'ssh2';
 import { assetText } from './assets.ts';
 
 export const VERSION = process.env.URNA_VERSION ?? 'latest';
@@ -24,6 +25,11 @@ export interface Secrets {
   setupCode: string;
   /** Opens the backups. It is shown once, and the party keeps it. */
   recoveryKey: string;
+  /**
+   * To get into the server later, to update it or restore a copy, as `urna-admin`. The private half only goes in the
+   * access file; the server gets the public one.
+   */
+  adminKey?: { private: string; public: string };
 }
 
 /** Without letters that get mixed up when someone copies it by hand. */
@@ -44,8 +50,13 @@ export function newSecrets(): Secrets {
   return {
     setupCode: readable(12),
     recoveryKey: [group(), group(), group(), group(), group()].join('-'),
+    // Without a passphrase, as approved: one thing less to keep, and the access file says to guard it.
+    adminKey: ssh2.utils.generateKeyPairSync('ed25519', { comment: 'urna-abierta' }),
   };
 }
+
+/** The base64 part of a public key: the script spells out the rest, so that nothing with spaces goes in it. */
+const publicKeyBody = (key: string) => key.split(' ')[1] ?? '';
 
 export type Cert = 'ip' | 'auto' | 'internal';
 
@@ -70,6 +81,8 @@ export interface ScriptSettings {
   /** Only for tests: images loaded from a file instead of downloaded. */
   imagesTar?: string;
   extraEnv?: string[];
+  /** The person came in with a password the first time: from then on the server takes only keys. */
+  keysOnly?: boolean;
 }
 
 const SAFE_VALUE = /^[\w@%+=:,./-]*$/;
@@ -106,7 +119,7 @@ export function withoutComments(script: string): string {
 }
 
 /** One block that does the whole installation: what runs over SSH, and what gets pasted when creating a server. */
-export function renderScript({ secrets, site, cert, theme, images: chosen = images(), imagesTar, extraEnv = [] }: ScriptSettings): string {
+export function renderScript({ secrets, site, cert, theme, images: chosen = images(), imagesTar, extraEnv = [], keysOnly = false }: ScriptSettings): string {
   if (extraEnv.some((line) => !/^[A-Z_]+=/.test(line) || !SAFE_VALUE.test(line.slice(line.indexOf('=') + 1)))) throw new Error('unsafe extra setting');
   // The recovery key goes as it is: the server encrypts each backup with it. The servers' guide says what that means.
   const settings = [
@@ -119,6 +132,8 @@ export function renderScript({ secrets, site, cert, theme, images: chosen = imag
     assign('URNA_IMAGE_SERVER', chosen.server),
     assign('URNA_IMAGE_WEB', chosen.web),
     ...(imagesTar ? [assign('URNA_IMAGES_TAR', imagesTar)] : []),
+    ...(secrets.adminKey ? [assign('URNA_ADMIN_KEY', publicKeyBody(secrets.adminKey.public))] : []),
+    ...(keysOnly && secrets.adminKey ? [assign('URNA_SOLO_LLAVES', 'si')] : []),
     ...(extraEnv.length ? [`URNA_EXTRA_ENV='${extraEnv.join('\n')}'`] : []),
   ];
   // The `urna` script does not go here: it comes in the server image, so that each version brings its own.

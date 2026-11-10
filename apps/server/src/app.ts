@@ -163,9 +163,28 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
   return { election, links, tables: fiscales, chiefs };
 }
 
+/** Postgres codes for a value it cannot read or that points nowhere: a wrong request, not a broken server. */
+const UNREADABLE = ['22P02', '22007', '22008', '22021', '22001', '23503'];
+
+/** What a request may bring, unless its route says otherwise: the roll, photos and themes do. */
+const BODY_LIMIT = 256 * 1024;
+
 export function buildApp(pool: pg.Pool, { testMode = false, photos = photoStoreFromEnv() }: { testMode?: boolean; photos?: PhotoStore } = {}): FastifyInstance {
   // Caddy is the only way in, and it says which address each request came from.
-  const app = Fastify({ logger: false, bodyLimit: 256 * 1024, trustProxy: true });
+  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: true });
+  // A route with no limit of its own takes the one of the parser that reads its body: a zip or a photo sent to any
+  // route, even one that needs no account, would be read up to the size of a roll. Each route keeps the small one
+  // unless it says otherwise.
+  app.addHook('onRoute', (route) => {
+    route.bodyLimit ??= BODY_LIMIT;
+  });
+  // What Postgres cannot read, such as an id with the wrong shape or a day that does not exist, is a wrong request,
+  // and says so: it is not a broken server.
+  app.setErrorHandler((error, _request, reply) => {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && UNREADABLE.includes(code)) return reply.code(400).send({ error: 'invalid_request' });
+    return reply.send(error);
+  });
 
   // Where the photos go, and whether that answers: «urna estado» reads it. Never the bucket or its keys.
   app.get('/api/health', async () => {

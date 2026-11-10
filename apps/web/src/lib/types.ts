@@ -10,4 +10,8 @@ export interface ElectionSummary {
   tables: number;
   tables_without_fiscal: number;
   categories: { id: string; name: string; lists: { id: string; name: string }[] }[];
+  /** At what time each day is voted, by day. */
+  hours?: Record<string, { open: string; close: string }>;
+  /** The day the party decided to erase the names by. */
+  purge_by?: string | null;
 }

@@ -2,13 +2,45 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, auditView, can, canReachTable, erasedId, getSetting, requires, rollKey, seal, tablesInScope, unseal } from './actor.ts';
+import { audit, auditView, authenticated, can, canReachTable, erasedId, getSetting, requires, rollKey, seal, tablesInScope, unseal, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
 import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
 
 const SUMMARY_CACHE_MS = 10_000;
 const SMALLEST_GROUP = 5;
+/** What a person reviews when it arrives after the close. A late alert already reaches the chief, marked as late. */
+const LATE_TYPES = ['envelopes.counted', 'tally.submitted', 'tally.photo'];
+/** What only looked at something, besides every «…viewed». Everything else changed something. */
+const SEEN_ACTIONS = ['roll.downloaded', 'roll.review_opened', 'person.exported', 'person.searched', 'results.downloaded', 'semaphore.searched', 'semaphore.sensitive_viewed', 'backup.downloaded'];
+const OPERATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type Results = Record<string, number>;
+
+/**
+ * What each table counts for in each category, keyed `table:category`: the version the chief chose, or the only one
+ * there is. With two versions and no choice, or a correction after it, it is 'undecided': nothing picks one by itself.
+ */
+async function tallyOutcomes(pool: pg.Pool, scope: string[]): Promise<Map<string, { results: Results } | 'undecided'>> {
+  const [tallies, decided] = await Promise.all([
+    pool.query(`SELECT table_id, payload, received_at FROM operations WHERE table_id = ANY($1) AND type = 'tally.submitted' AND NOT quarantined ORDER BY seq`, [scope]),
+    pool.query(`SELECT d.table_id, d.category, d.decided_at, o.payload->'results' AS results FROM tally_decisions d JOIN operations o ON o.id = d.operation_id WHERE d.table_id = ANY($1)`, [scope]),
+  ]);
+  const versions = new Map<string, { received_at: Date; payload: { category: string; results: Results } }[]>();
+  for (const row of tallies.rows) {
+    const key = `${row.table_id}:${row.payload.category}`;
+    versions.set(key, [...(versions.get(key) ?? []), row]);
+  }
+  const decisionOf = new Map(decided.rows.map((row) => [`${row.table_id}:${row.category}`, row]));
+  const outcome = new Map<string, { results: Results } | 'undecided'>();
+  for (const [key, found] of versions) {
+    const decision = decisionOf.get(key);
+    if (decision && !correctedSince(decision, found)) outcome.set(key, { results: decision.results });
+    else if (new Set(found.map((version) => JSON.stringify(version.payload.results))).size === 1) outcome.set(key, { results: found[0]!.payload.results });
+    else outcome.set(key, 'undecided');
+  }
+  return outcome;
+}
 
 /** Who voted, counted in one query: a mark stands unless an undo names it. */
 async function votesPerTable(pool: pg.Pool, tables: string[]): Promise<Map<string, number>> {
@@ -81,8 +113,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   const cache = new Map<string, { at: number; value: unknown }>();
 
   app.get('/api/district/elections', { preHandler: watch }, async () => {
-    const rows = await pool.query(`SELECT id, name, status, days FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
-    return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((day: Date) => day.toISOString().slice(0, 10)) })) };
+    const rows = await pool.query(`SELECT id, name, status, days, categories, hours, time_zone FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
+    // The categories say when a table has tallied everything.
+    return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((day: Date) => day.toISOString().slice(0, 10)), categories: row.categories.map((category: { id: string; name: string }) => ({ id: category.id, name: category.name })) })) };
   });
 
   /** Not a dashboard: what needs someone now comes first, and the rest fits in one line. */
@@ -110,7 +143,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
          ORDER BY o.device_time DESC`,
         [scope],
       ),
-      pool.query(`SELECT table_id, type, payload, received_at FROM operations WHERE table_id = ANY($1) AND type IN ('envelopes.counted', 'tally.submitted') AND NOT quarantined ORDER BY seq`, [scope]),
+      pool.query(`SELECT table_id, type, payload, received_at FROM operations WHERE table_id = ANY($1) AND type IN ('envelopes.counted', 'tally.submitted', 'tally.photo') AND NOT quarantined ORDER BY seq`, [scope]),
     ]);
     const decided = await pool.query(
       `SELECT d.table_id, d.category, d.decided_at, o.payload->'results' AS results FROM tally_decisions d JOIN operations o ON o.id = d.operation_id WHERE d.table_id = ANY($1)`,
@@ -132,6 +165,10 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       return {
         // A table that counted its envelopes has closed for the day: its silence says nothing.
         countedDays: own.filter((row) => row.type === 'envelopes.counted').map((row) => row.payload.day),
+        // When each day was closed there, by the first count of its envelopes: an hour later, a missing tally is worth a call.
+        countedAt: Object.fromEntries(own.filter((row) => row.type === 'envelopes.counted').reverse().map((row) => [row.payload.day, row.received_at])),
+        tallied: [...versions.keys()],
+        photo: own.some((row) => row.type === 'tally.photo'),
         envelopesDiffer: Boolean(envelopes && envelopes.envelopes !== envelopes.marked),
         talliesDiffer: [...versions].some(([category, distinct]) => distinct.size > 1 && !settled(table, category)),
       };
@@ -220,6 +257,143 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { ok: true };
   });
 
+  // ---------- The schedule ----------
+
+  /** Each table with its poll watchers, their times and its chief: the whole party for coordination, a district for its chief. */
+  app.get<{ Params: { id: string } }>('/api/elections/:id/schedule', { preHandler: watch }, async (request, reply) => {
+    const election = (await pool.query('SELECT name, days, hours, time_zone FROM elections WHERE id = $1', [request.params.id])).rows[0];
+    if (!election) return reply.code(404).send({ error: 'not_found' });
+    const scope = await tablesInScope(pool, request.actor, request.params.id);
+    const tables = await pool.query(
+      `SELECT t.id, t.name, t.place, n.name AS unit,
+              (SELECT u.name FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.role = 'jefe' AND u.removed_at IS NULL AND (a.unit_id = t.unit_id OR (a.unit_id IS NULL AND a.election_id = t.election_id)) ORDER BY a.unit_id NULLS LAST LIMIT 1) AS chief,
+              COALESCE((SELECT json_agg(json_build_object('name', u.name, 'phone', u.phone, 'days', a.days, 'schedule', a.schedule) ORDER BY a.created_at)
+                FROM role_assignments a JOIN users u ON u.id = a.user_id WHERE a.table_id = t.id AND a.role = 'fiscal' AND u.removed_at IS NULL), '[]') AS fiscales
+       FROM polling_tables t LEFT JOIN units n ON n.id = t.unit_id WHERE t.id = ANY($1) ORDER BY t.position`,
+      [scope],
+    );
+    await auditView(pool, request.actor, 'schedule.viewed', request.params.id);
+    return {
+      name: election.name, days: election.days.map((day: Date) => day.toISOString().slice(0, 10)), hours: election.hours, timeZone: election.time_zone,
+      tables: tables.rows.map((table) => ({ ...table, fiscales: table.fiscales.map((fiscal: { days: string[] | null }) => ({ ...fiscal, days: fiscal.days?.map((day) => String(day).slice(0, 10)) ?? null })) })),
+    };
+  });
+
+  // ---------- Results ----------
+
+  /** Coordination and statistics see the whole party; a chief, their district. */
+  async function resultsScope(actor: Actor, election: string): Promise<string[] | null> {
+    if (can(actor, 'stats.read') || can(actor, 'election.manage')) return (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [election])).rows.map((row) => row.id);
+    return can(actor, 'district.watch') ? tablesInScope(pool, actor, election) : null;
+  }
+
+  /**
+   * The chosen version of each table, summed per list, and what was left out and why. With ?tables=1, each table's
+   * own numbers too, for the spreadsheet: that download is logged.
+   */
+  app.get<{ Params: { id: string }; Querystring: { tables?: string } }>('/api/elections/:id/results', { preHandler: authenticated(pool) }, async (request, reply) => {
+    const { id } = request.params;
+    const scope = await resultsScope(request.actor, id);
+    if (!scope) return reply.code(403).send({ error: 'forbidden' });
+    const election = (await pool.query('SELECT name, status, categories FROM elections WHERE id = $1', [id])).rows[0];
+    if (!election) return reply.code(404).send({ error: 'not_found' });
+    const outcome = await tallyOutcomes(pool, scope);
+    const categories = (election.categories as { id: string; name: string; lists: { id: string; name: string }[] }[]).map((category) => {
+      const votes = new Map<string, number>();
+      let counted = 0;
+      let undecided = 0;
+      for (const table of scope) {
+        const found = outcome.get(`${table}:${category.id}`);
+        if (found === 'undecided') undecided++;
+        else if (found) {
+          counted++;
+          for (const [list, count] of Object.entries(found.results)) votes.set(list, (votes.get(list) ?? 0) + count);
+        }
+      }
+      return { id: category.id, name: category.name, counted, undecided, missing: scope.length - counted - undecided, lists: category.lists.map((list) => ({ id: list.id, name: list.name, votes: votes.get(list.id) ?? 0 })) };
+    });
+    if (request.query.tables !== '1') {
+      await auditView(pool, request.actor, 'results.viewed', id);
+      return { name: election.name, status: election.status, tables: scope.length, categories };
+    }
+    const tables = await pool.query('SELECT id, name FROM polling_tables WHERE id = ANY($1) ORDER BY position', [scope]);
+    await audit(pool, request.actor, 'results.downloaded', id, { tables: scope.length });
+    return {
+      name: election.name, status: election.status, tables: scope.length, categories,
+      perTable: tables.rows.map((table) => ({
+        name: table.name,
+        categories: Object.fromEntries(categories.map((category) => {
+          const found = outcome.get(`${table.id}:${category.id}`);
+          return [category.id, found === 'undecided' ? 'undecided' : found ? found.results : null];
+        })),
+      })),
+    };
+  });
+
+  // ---------- What arrives after the close ----------
+
+  /** It counts for nothing until a person looks at it: coordination, or the chief of that table's district. */
+  app.get<{ Params: { id: string } }>('/api/elections/:id/late', { preHandler: watch }, async (request) => {
+    const { id } = request.params;
+    const scope = await tablesInScope(pool, request.actor, id);
+    const election = (await pool.query('SELECT closed_at, categories FROM elections WHERE id = $1', [id])).rows[0];
+    const late = await pool.query(
+      `SELECT o.id, o.table_id, t.name AS table_name, o.type, o.payload, o.received_at, u.name AS author
+       FROM operations o JOIN polling_tables t ON t.id = o.table_id LEFT JOIN users u ON u.id = o.author
+       WHERE o.table_id = ANY($1) AND o.quarantined AND o.type = ANY($2) AND NOT EXISTS (SELECT 1 FROM late_reviews r WHERE r.operation_id = o.id)
+       ORDER BY o.received_at, o.seq`,
+      [scope, LATE_TYPES],
+    );
+    // What those tables already had, to compare with.
+    const counted = await pool.query(
+      `SELECT table_id, type, payload FROM operations WHERE table_id = ANY($1) AND type IN ('envelopes.counted', 'tally.submitted') AND NOT quarantined ORDER BY seq`,
+      [[...new Set(late.rows.map((row) => row.table_id))]],
+    );
+    return {
+      closedAt: election?.closed_at ?? null,
+      categories: election?.categories ?? [],
+      items: late.rows.map((row) => {
+        const own = counted.rows.filter((other) => other.table_id === row.table_id);
+        const earlier = row.type === 'tally.submitted' ? own.filter((other) => other.type === 'tally.submitted' && other.payload.category === row.payload.category) : [];
+        return {
+          id: row.id, table: { id: row.table_id, name: row.table_name }, type: row.type, payload: row.payload, at: row.received_at, author: row.author,
+          envelopes: own.filter((other) => other.type === 'envelopes.counted').at(-1)?.payload.envelopes ?? null,
+          earlier: earlier.length > 0,
+          clash: earlier.some((other) => JSON.stringify(other.payload.results) !== JSON.stringify(row.payload.results)),
+        };
+      }),
+    };
+  });
+
+  /** Always a person's decision, and it is logged. Added, it counts like anything that arrived in time. */
+  app.post<{ Params: { operation: string }; Body: { decision?: unknown } }>('/api/late/:operation', { preHandler: watch }, async (request, reply) => {
+    const { operation } = request.params;
+    const { decision } = request.body ?? {};
+    if (!OPERATION_ID.test(operation) || (decision !== 'sumado' && decision !== 'descartado')) return reply.code(400).send({ error: 'invalid_request' });
+    const table = (await pool.query('SELECT table_id FROM operations WHERE id = $1 AND quarantined AND type = ANY($2)', [operation, LATE_TYPES])).rows[0]?.table_id;
+    if (!table) return reply.code(404).send({ error: 'not_found' });
+    if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const reviewed = await client.query('INSERT INTO late_reviews (operation_id, decision, decided_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [operation, decision, request.actor.userId]);
+      if (!reviewed.rowCount) {
+        await client.query('ROLLBACK');
+        return reply.code(409).send({ error: 'already_decided' });
+      }
+      if (decision === 'sumado') await client.query('UPDATE operations SET quarantined = false WHERE id = $1', [operation]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    await audit(pool, request.actor, decision === 'sumado' ? 'late.added' : 'late.discarded', table, { operation });
+    cache.clear();
+    return { decision };
+  });
+
   // ---------- Statistics: numbers only, and no group small enough to point at someone ----------
   app.get<{ Params: { id: string } }>('/api/elections/:id/stats', { preHandler: requires(pool, 'stats.read') }, async (request) => {
     const scope = (await pool.query('SELECT id, name FROM polling_tables WHERE election_id = $1 ORDER BY position', [request.params.id])).rows;
@@ -250,9 +424,92 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   const readLight = requires(pool, 'semaphore.read');
   const writeLight = requires(pool, 'semaphore.write');
 
+  /** Whoever cannot see sensitive categories learns how many there are, so that nobody makes another one like it without knowing. */
   app.get('/api/semaphore/categories', { preHandler: readLight }, async (request) => {
     const rows = await pool.query('SELECT id, name, color, sensitive FROM semaphore_categories ORDER BY position, name');
-    return { categories: rows.rows.filter((row) => !row.sensitive || can(request.actor, 'semaphore.sensitive')) };
+    const seen = rows.rows.filter((row) => !row.sensitive || can(request.actor, 'semaphore.sensitive'));
+    return { categories: seen, hidden: rows.rows.length - seen.length };
+  });
+
+  /** Who has a category: the plain marks, and the sealed ones that name it once opened. */
+  async function marksOf(category: string): Promise<{ plain: number; sealed: { election_id: string; elector_id: string }[] }> {
+    const plain = (await pool.query('SELECT count(*)::int AS n FROM semaphore_marks WHERE category_id = $1', [category])).rows[0].n;
+    const sealed = (await pool.query('SELECT election_id, elector_id, sealed FROM semaphore_marks WHERE sealed IS NOT NULL')).rows.filter((row) => unseal(row.sealed) === category);
+    return { plain, sealed };
+  }
+
+  const manageLight = requires(pool, 'election.manage');
+  /** A sensitive category is only for whoever may see them: nobody else learns its name, nor touches it. */
+  async function categoryFor(actor: Actor, id: string): Promise<{ sensitive: boolean } | 'forbidden' | null> {
+    if (!OPERATION_ID.test(id)) return null;
+    const found = (await pool.query('SELECT sensitive FROM semaphore_categories WHERE id = $1', [id])).rows[0];
+    if (!found) return null;
+    return found.sensitive && !can(actor, 'semaphore.sensitive') ? 'forbidden' : found;
+  }
+
+  app.get<{ Params: { id: string } }>('/api/semaphore/categories/:id', { preHandler: manageLight }, async (request, reply) => {
+    const found = await categoryFor(request.actor, request.params.id);
+    if (found === null) return reply.code(404).send({ error: 'not_found' });
+    if (found === 'forbidden') return reply.code(403).send({ error: 'forbidden' });
+    const marks = await marksOf(request.params.id);
+    return { people: marks.plain + marks.sealed.length };
+  });
+
+  /**
+   * Its name, its colour, and whether it is sensitive, at any time. Marked sensitive, the marks it already has are
+   * sealed right then; only whoever may see sensitive categories takes that back, and both are logged.
+   */
+  app.put<{ Params: { id: string }; Body: { name?: unknown; color?: unknown; sensitive?: unknown } }>('/api/semaphore/categories/:id', { preHandler: manageLight }, async (request, reply) => {
+    const { name, color, sensitive } = request.body ?? {};
+    const found = await categoryFor(request.actor, request.params.id);
+    if (found === null) return reply.code(404).send({ error: 'not_found' });
+    if (found === 'forbidden') return reply.code(403).send({ error: 'forbidden' });
+    if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 60)) return reply.code(400).send({ error: 'invalid_name' });
+    if (color !== undefined && (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color))) return reply.code(400).send({ error: 'invalid_color' });
+    if (sensitive !== undefined && typeof sensitive !== 'boolean') return reply.code(400).send({ error: 'invalid_request' });
+    if (sensitive === false && found.sensitive && !can(request.actor, 'semaphore.sensitive')) return reply.code(403).send({ error: 'needs_sensitive_permission' });
+    const id = request.params.id;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE semaphore_categories SET name = COALESCE($2, name), color = COALESCE($3, color), sensitive = COALESCE($4, sensitive) WHERE id = $1', [id, typeof name === 'string' ? name.trim() : null, color ?? null, sensitive ?? null]);
+      if (sensitive === true && !found.sensitive) {
+        const plain = await client.query('SELECT election_id, elector_id FROM semaphore_marks WHERE category_id = $1', [id]);
+        for (const row of plain.rows) await client.query('UPDATE semaphore_marks SET category_id = NULL, sealed = $3 WHERE election_id = $1 AND elector_id = $2', [row.election_id, row.elector_id, seal(id)]);
+      }
+      if (sensitive === false && found.sensitive) {
+        for (const row of (await marksOf(id)).sealed) await client.query('UPDATE semaphore_marks SET category_id = $3, sealed = NULL WHERE election_id = $1 AND elector_id = $2', [row.election_id, row.elector_id, id]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    await audit(pool, request.actor, 'semaphore.category_changed', id, sensitive !== undefined && sensitive !== found.sensitive ? { sensitive } : {});
+    return { ok: true };
+  });
+
+  /** The order of the list, as the person leaves it. Categories they cannot see keep their place. */
+  app.put<{ Body: { ids?: unknown } }>('/api/semaphore/order', { preHandler: manageLight }, async (request, reply) => {
+    const { ids } = request.body ?? {};
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !OPERATION_ID.test(id))) return reply.code(400).send({ error: 'invalid_request' });
+    const positions = (await pool.query('SELECT id, position FROM semaphore_categories WHERE id = ANY($1) ORDER BY position', [ids])).rows.map((row) => row.position);
+    for (const [index, id] of ids.entries()) await pool.query('UPDATE semaphore_categories SET position = $2 WHERE id = $1', [id, positions[index] ?? index]);
+    return { ok: true };
+  });
+
+  /** Only once nobody has it: a mark must not disappear because its category did. */
+  app.delete<{ Params: { id: string } }>('/api/semaphore/categories/:id', { preHandler: manageLight }, async (request, reply) => {
+    const found = await categoryFor(request.actor, request.params.id);
+    if (found === null) return reply.code(404).send({ error: 'not_found' });
+    if (found === 'forbidden') return reply.code(403).send({ error: 'forbidden' });
+    const marks = await marksOf(request.params.id);
+    if (marks.plain + marks.sealed.length > 0) return reply.code(409).send({ error: 'in_use', people: marks.plain + marks.sealed.length });
+    await pool.query('DELETE FROM semaphore_categories WHERE id = $1', [request.params.id]);
+    await audit(pool, request.actor, 'semaphore.category_deleted', request.params.id);
+    return { ok: true };
   });
 
   /** It starts empty: each party defines its own categories. */
@@ -378,6 +635,12 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     );
     const { ref } = person.rows[0];
     await audit(pool, request.actor, 'person.exported', ref);
+    // Art. 14: who saw or changed their data, as the log keeps it by their reference. This export is the last line.
+    const log = await pool.query(
+      `SELECT l.at, l.action, u.name AS who FROM audit_log l LEFT JOIN users u ON u.id = l.user_id
+       WHERE l.target = $1 OR l.detail->'people' ? $1 ORDER BY l.id`,
+      [String(ref)],
+    );
     const row = mark.rows[0];
     // A sensitive category is opened only for whoever has its own permission, and that is recorded as such.
     const hidden = Boolean(row?.sealed) && !can(request.actor, 'semaphore.sensitive');
@@ -409,6 +672,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       consent: found.consent,
       semaphore: row ? { category: name, sensitive: Boolean(row.sealed), hidden, notedAt: row.noted_at, ...(under ? { under } : {}) } : null,
       markedVoted: voted.rows.map((r) => r.device_time),
+      log: log.rows.map((r) => ({ at: r.at, action: r.action, who: r.who })),
       others: others.rows.map((r) => r.name as string),
     };
   });
@@ -429,6 +693,29 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const saved = await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2 AND erased_at IS NULL RETURNING ref', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
     if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
     await audit(pool, request.actor, 'person.consent', saved.rows[0].ref);
+    return { ok: true };
+  });
+
+  /** Art. 6 and 27: they took their consent back. When and how is kept, and their mark in the traffic light goes now. */
+  app.post<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent/withdraw', { preHandler: managePersons }, async (request, reply) => {
+    const { date, means } = request.body ?? {};
+    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof means !== 'string' || !means.trim() || means.length > 200) return reply.code(400).send({ error: 'invalid_request' });
+    const saved = await pool.query(
+      `UPDATE electors SET consent = consent || jsonb_build_object('withdrawn', jsonb_build_object('date', $3::text, 'means', $4::text))
+       WHERE election_id = $1 AND id = $2 AND erased_at IS NULL AND consent IS NOT NULL RETURNING ref`,
+      [request.params.election, request.params.id, date, means.trim()],
+    );
+    if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [request.params.election, request.params.id]);
+    await audit(pool, request.actor, 'person.consent_withdrawn', saved.rows[0].ref);
+    return { ok: true };
+  });
+
+  /** A consent loaded by mistake goes, and the log says who removed it. */
+  app.delete<{ Params: { election: string; id: string } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {
+    const saved = await pool.query('UPDATE electors SET consent = NULL WHERE election_id = $1 AND id = $2 AND erased_at IS NULL AND consent IS NOT NULL RETURNING ref', [request.params.election, request.params.id]);
+    if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    await audit(pool, request.actor, 'person.consent_removed', saved.rows[0].ref);
     return { ok: true };
   });
 
@@ -466,7 +753,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         [id],
       );
       await client.query(`DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND type IN ('voter.marked', 'voter.unmarked')`, [id]);
-      await client.query(`UPDATE elections SET status = 'purgada' WHERE id = $1`, [id]);
+      // What arrived after the close and nobody added: it was never counted. A late alert stays, as the chief saw it.
+      await client.query('DELETE FROM operations WHERE table_id IN (SELECT id FROM polling_tables WHERE election_id = $1) AND quarantined AND type = ANY($2)', [id, LATE_TYPES]);
+      await client.query(`UPDATE elections SET status = 'purgada', purged_at = now() WHERE id = $1`, [id]);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -479,15 +768,69 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { status: 'purgada' };
   });
 
-  app.get<{ Querystring: { before?: string } }>('/api/audit', { preHandler: requires(pool, 'audit.read') }, async (request) => {
-    const before = Number(request.query.before) || Number.MAX_SAFE_INTEGER;
+  /**
+   * Who saw or changed what, newest first, with what each entry was about. Filtered by who, by whether it only looked,
+   * and by the people of the roll with a surname, which is what a request needs. A chief sees what was about their
+   * district. Old values are never kept here: the log cannot be erased, and a name would outlive the purge.
+   */
+  app.get<{ Querystring: { before?: string; who?: string; kind?: string; q?: string } }>('/api/audit', { preHandler: authenticated(pool) }, async (request, reply) => {
+    const all = can(request.actor, 'audit.read');
+    if (!all && !can(request.actor, 'district.watch')) return reply.code(403).send({ error: 'forbidden' });
     await auditView(pool, request.actor, 'audit.viewed');
+    const params: unknown[] = [SEEN_ACTIONS];
+    const where: string[] = [];
+    const param = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+    const { who, kind, q } = request.query;
+    if (typeof who === 'string' && OPERATION_ID.test(who)) where.push(`l.user_id = ${param(who)}`);
+    if (kind === 'seen' || kind === 'changed') where.push(`${kind === 'seen' ? '' : 'NOT '}(l.action LIKE '%.viewed' OR l.action = ANY($1))`);
+    // A chief sees what was about their own tables, and finds only the people of those.
+    let scope: string[] | null = null;
+    if (!all) {
+      const units = request.actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);
+      scope = (await pool.query('SELECT id FROM polling_tables WHERE $1 OR unit_id = ANY($2)', [units.includes(null), units])).rows.map((row) => row.id);
+    }
+    let people: string[] = [];
+    if (typeof q === 'string' && q.trim().length >= 3 && q.length <= 120) {
+      const typed = foldText(q).replace(/[\\%_]/g, (character) => `\\${character}`);
+      const found = await pool.query(
+        `SELECT ref::text AS ref, full_name FROM electors WHERE search LIKE '%' || $1 || '%' ESCAPE '\\' AND erased_at IS NULL AND ($2::text[] IS NULL OR table_id = ANY($2))
+         ORDER BY search LIMIT 50`,
+        [typed, scope],
+      );
+      if (found.rows.length === 0) return { entries: [], counts: { seen: 0, changed: 0 }, people: [] };
+      people = found.rows.map((row) => row.full_name);
+      const refs = param(found.rows.map((row) => row.ref));
+      where.push(`(l.target = ANY(${refs}) OR l.detail->'people' ?| ${refs})`);
+    }
+    if (scope) {
+      const tables = param(scope);
+      where.push(`(l.target = ANY(${tables}) OR x.table_id = ANY(${tables}))`);
+    }
+    const from = `FROM audit_log l
+       LEFT JOIN users u ON u.id = l.user_id
+       LEFT JOIN elections e ON e.id::text = l.target
+       LEFT JOIN polling_tables t ON t.id = l.target
+       LEFT JOIN electors x ON x.ref::text = l.target
+       LEFT JOIN polling_tables xt ON xt.id = x.table_id
+       LEFT JOIN users tu ON tu.id::text = l.target
+       LEFT JOIN units un ON un.id = l.target`;
+    const filter = where.length ? `AND ${where.join(' AND ')}` : '';
+    const counts = people.length
+      ? (await pool.query(`SELECT count(*) FILTER (WHERE l.action LIKE '%.viewed' OR l.action = ANY($1))::int AS seen, count(*) FILTER (WHERE NOT (l.action LIKE '%.viewed' OR l.action = ANY($1)))::int AS changed ${from} WHERE true ${filter}`, params)).rows[0]
+      : undefined;
+    const page = Number(request.query.before);
+    const before = param(Number.isSafeInteger(page) && page > 0 ? page : Number.MAX_SAFE_INTEGER);
     const rows = await pool.query(
-      `SELECT l.id, l.at, l.action, l.target, u.name AS who FROM audit_log l LEFT JOIN users u ON u.id = l.user_id
-       WHERE l.id < $1 ORDER BY l.id DESC LIMIT 100`,
-      [before],
+      `SELECT l.id, l.at, l.action, u.name AS who, COALESCE(e.name, t.name, NULLIF(x.full_name, ''), tu.name, un.name, CASE WHEN l.action IN ('election.deleted', 'unit.deleted') THEN l.detail->>'name' END) AS about, xt.name AS about_table,
+              CASE WHEN jsonb_typeof(l.detail->'people') = 'array' THEN jsonb_array_length(l.detail->'people') END AS people,
+              (l.action LIKE '%.viewed' OR l.action = ANY($1)) AS seen
+       ${from} WHERE l.id < ${before} ${filter} ORDER BY l.id DESC LIMIT 100`,
+      params,
     );
-    return { entries: rows.rows };
+    return { entries: rows.rows, ...(counts ? { counts, people } : {}) };
   });
 }
 

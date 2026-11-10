@@ -7,7 +7,16 @@ export const MAX_BATCH = 50;
 export const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 const uuid = v.pipe(v.string(), v.uuid());
-const shortId = v.pipe(v.string(), v.minLength(1), v.maxLength(64));
+const storable = (text: string) => !text.includes('\u0000');
+const shortId = v.pipe(v.string(), v.minLength(1), v.maxLength(64), v.check(storable));
+/** A day of the calendar: «2027-02-31» has the shape of one, and Postgres refuses it. */
+const realDate = (text: string) => {
+  const [year, month, day] = text.slice(0, 10).split('-').map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return year >= 1 && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+const moment = v.pipe(v.string(), v.isoTimestamp(), v.check((text) => realDate(text) && Number.isFinite(Date.parse(text))));
+const calendarDay = v.pipe(v.string(), v.isoDate(), v.check(realDate));
 const count = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1_000_000));
 
 const common = {
@@ -16,7 +25,7 @@ const common = {
   table: shortId,
   device: shortId,
   device_seq: v.pipe(v.number(), v.integer(), v.minValue(0)),
-  device_time: v.pipe(v.string(), v.isoTimestamp()),
+  device_time: moment,
 };
 
 export const operationSchema = v.variant('type', [
@@ -28,7 +37,7 @@ export const operationSchema = v.variant('type', [
   }),
   v.object({ ...common, type: v.literal('incident.reported'), payload: v.object({ kind: shortId }) }),
   /** Each night: how many envelopes the box holds, and how many were crossed out at that moment. */
-  v.object({ ...common, type: v.literal('envelopes.counted'), payload: v.object({ day: v.pipe(v.string(), v.isoDate()), envelopes: count, marked: count }) }),
+  v.object({ ...common, type: v.literal('envelopes.counted'), payload: v.object({ day: calendarDay, envelopes: count, marked: count }) }),
   /** A count is a version: nothing ever merges two of them. */
   v.object({ ...common, type: v.literal('tally.submitted'), payload: v.object({ category: shortId, results: v.record(shortId, count) }) }),
   v.object({ ...common, type: v.literal('tally.photo'), payload: v.object({ sha256: v.pipe(v.string(), v.regex(/^[0-9a-f]{64}$/)) }) }),

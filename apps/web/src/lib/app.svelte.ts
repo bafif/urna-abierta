@@ -15,6 +15,8 @@ const SHRINK_LIMIT_MS = 15_000;
 const SHRINK_AGAIN_LIMIT_MS = 10_000;
 /** An urgent alert goes out by itself: if it does not get through in this time, the plan B shows. */
 const ALERT_LIMIT_MS = 8_000;
+/** Survives the wipe of the roll until the next table: something reached the server after the close. */
+const LATE_KEY = 'urna-llego-tarde';
 /** Who this is and their table are asked again this often while there is signal: they say if the roll changed. */
 const ME_EVERY_MS = 5 * 60_000;
 /** A smaller difference is not worth writing down again. */
@@ -141,7 +143,16 @@ class AppState {
   private marks = new MarkState();
   /** Everything applied to the marks, to rebuild them if a write fails. */
   private applied: Operation[] = [];
-  private readonly store: SyncStore = { ...storeFor(this.db, (operations) => this.applyRemote(operations)), serverTime: (offset) => this.noteClock(offset) };
+  private readonly store: SyncStore = {
+    ...storeFor(this.db, (operations) => this.applyRemote(operations)),
+    serverTime: (offset) => this.noteClock(offset),
+    arrivedLate: () => {
+      this.arrivedLate = true;
+      localStorage.setItem(LATE_KEY, '1');
+    },
+  };
+  /** Something reached the server after the close: the phone says coordination will look at it, not that all went fine. */
+  arrivedLate = $state(typeof localStorage !== 'undefined' && localStorage.getItem(LATE_KEY) === '1');
   private deviceId = '';
   private lastMeAt = Date.now();
   /** The phone's clock and the time that passed, the last time they were looked at. */
@@ -182,6 +193,8 @@ class AppState {
   clockOffset = $state(0);
   /** A correction was just saved: the plan says so for a moment. */
   correctionSaved = $state(false);
+  /** The table this phone was moved to, prepared by itself: the plan says why it changed. */
+  movedTo = $state<string | null>(null);
   private correctionTimer: ReturnType<typeof setTimeout> | undefined;
   /** The roll of the table changed on the server, and the phone already has the new one. */
   rollUpdated = $state(false);
@@ -380,12 +393,21 @@ class AppState {
    * table, and only when nothing is left to send, it goes. `reached`: the server answered just now.
    */
   private async letGoIfFinished(reached: boolean): Promise<void> {
-    if (!this.tableId || this.pendingCount + this.pendingPhotos > 0) return;
     const { me } = session;
+    // A table of an election that got deleted has nowhere to send what is left: it goes too.
+    const deleted = reached && Boolean(this.tableId) && (me?.deleted?.tables.includes(this.tableId) ?? false);
+    if (!this.tableId || (this.pendingCount + this.pendingPhotos > 0 && !deleted)) return;
     const lastDay = me?.table?.days.at(-1) ?? (await this.db.getMeta<string>('lastDay'));
     const timeZone = me?.table ? me.table.timeZone : await this.db.getMeta<string>('timeZone');
     const roll = { tableId: this.tableId, reached: reached && me !== null, assigned: me?.table?.id, lastDay, hoursKept: me?.security.localHoursAfterClose, timeZone, clockOffset: this.clockOffset };
-    if (rollCanGo(roll)) await this.wipe();
+    if (!rollCanGo(roll)) return;
+    // Moved to another table: the old roll goes, and the new one is prepared right away.
+    const moved = roll.reached && roll.assigned && roll.assigned !== roll.tableId ? me?.table : null;
+    await this.wipe();
+    if (moved) {
+      this.movedTo = moved.name;
+      await this.prepare().catch(() => undefined);
+    }
   }
 
   private async wipe(): Promise<void> {
@@ -394,6 +416,8 @@ class AppState {
       await this.db.operations.clear();
       await this.db.photos.clear();
       await this.db.meta.bulkDelete(['cursor', 'tableId', 'lastDay', 'timeZone']);
+      localStorage.removeItem(LATE_KEY);
+      this.arrivedLate = false;
     });
     localStorage.removeItem(PREPARED_KEY);
     this.electors = [];

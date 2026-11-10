@@ -13,6 +13,9 @@ Set aside two hours.
 - [ ] Install on a new server, with the installer. Note how long it took.
 - [ ] Build the invented roll: `node deploy/padron-inventado.mjs 350 > roll.csv`. Do not use `deploy/serve.sh`, which is a test database.
 - [ ] Create the whole election from the app: party, team, days, lists, roll, tables.
+- [ ] Correct what was set up: move where a table ends by surname, move one person alone to another table, and review the doubtful rows.
+- [ ] In **Change the details**, set the voting hours. From a poll watcher's card, give them a shift, an arrival time and a meeting point,
+      and look at the **Schedule**: does it read well printed?
 - [ ] Send the invitations through the channel you actually use.
 
 ## First use
@@ -39,6 +42,11 @@ Set aside two hours.
 - [ ] Each poll watcher counts the envelopes. One table enters a number that does not match: does the poll watcher notice? Does the chief see it?
 - [ ] They enter the count one list at a time and take the photo of the sheet, with good and bad light.
 - [ ] Two poll watchers enter different numbers at the same table: the chief has to choose which one stands.
+- [ ] The chief's panel turns to the **Count**: a bar of how many tables loaded everything, and first those that need someone. With **See
+      the totals** they see their district's results; coordination sees the whole party's and downloads the spreadsheet.
+- [ ] A poll watcher corrects their count from the plan: the chief has to choose again.
+- [ ] After the election closes, a poll watcher who was without signal sends their count. Their phone has to say it arrived late, and
+      coordination sees it in **Things arrived after the close**, where they add it or discard it.
 
 ## Recovering from a disaster
 
@@ -58,6 +66,9 @@ How each tool is used is in the [personal data](personal-data.md) guide.
       record a consent and erase their data. Measure how long each step took: the law's deadlines are 10 calendar days and 5 business
       days. Can what was downloaded be understood without explanation?
 - [ ] The **Log** shows the search, the download, the correction, the consent and the erasure, with who did each.
+- [ ] In the **Log**, type that person's surname: everything about them has to stay, with how many times their data was seen and changed.
+      Download it as a spreadsheet.
+- [ ] Record a consent for someone with a traffic light mark, then **They took their consent back**: their mark has to go right then.
 - [ ] Create a traffic light category marked as sensitive and note someone with it. Someone with “Note who votes for us” must not see it:
       if they give that person a plain category, or clear it, the sensitive one is still there, and nothing tells them it was. Someone
       with “See the sensitive categories” sees it, and the log says “Looked at sensitive categories”.

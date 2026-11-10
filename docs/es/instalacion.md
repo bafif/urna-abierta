@@ -41,7 +41,7 @@ Te hace tres preguntas y hace el resto.
 | Opción | Qué necesitás |
 |---|---|
 | Crear un servidor nuevo | Una cuenta en Oracle Cloud, AWS o Google Cloud. [Acá está cómo crearla](servidores.md) |
-| Ya tengo un servidor | Ubuntu o Debian, su dirección y una llave SSH de un usuario con `sudo` sin contraseña |
+| Ya tengo un servidor | Ubuntu o Debian, su dirección y una llave SSH de un usuario con `sudo` sin contraseña, o la contraseña de root: sirve solo para entrar la primera vez, y después el servidor deja de aceptar contraseñas |
 | Pegar un texto | Pegar un bloque al crear el servidor, sin darle ninguna credencial al instalador |
 | Probar en esta computadora | Podman o Docker abierto. Para mirarla o hacer un simulacro: [con teléfonos](#probar-con-teléfonos-sin-servidor) |
 
@@ -52,7 +52,7 @@ para los PDF escaneados: lo explica [Cargar el padrón](#cargar-el-padrón).
 **3. ¿Cómo querés que se vea?** Elegís uno de los temas, viéndolos antes en claro y en oscuro. Cada persona lo puede cambiar después en
 su teléfono. También podés [hacer el tuyo](temas.md) y cargarlo acá, arrastrando el archivo.
 
-Al terminar te da la dirección de tu servidor y una llave de recuperación para las copias de seguridad, y abre la app. Ahí sigue un
+Al terminar te da la dirección de tu servidor, una llave de recuperación para las copias de seguridad y el archivo de acceso, con la llave para entrar al servidor y cómo actualizarlo o restaurar una copia. Cuando marcás «Ya guardé la llave», abre la app. Ahí sigue un
 asistente para el partido, el equipo y la primera elección: lo recorre [Tu primera elección](primera-eleccion.md).
 
 **Guardá esa llave.** Es lo único que abre tus copias de seguridad, y no se puede volver a generar.

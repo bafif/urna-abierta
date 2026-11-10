@@ -20,6 +20,8 @@ import { checkSsh, runScript, type SshTarget } from '../src/ssh.ts';
 import { attempt, buildImages, finish, podman, record, sleep } from './maquinas.ts';
 
 const work = mkdtempSync(join(tmpdir(), 'urna-servidor-'));
+// Each run makes new machines on the same ports: the fingerprints it sees stay in its own folder, not in the person's.
+process.env.URNA_CONFIG_DIR = join(work, 'config');
 const name = process.env.URNA_E2E_NAME ?? 'urna-maquina';
 const port = Number(process.env.URNA_E2E_PORT ?? 2221);
 const IMAGE = `localhost/${name}-prueba`;

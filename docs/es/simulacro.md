@@ -13,6 +13,9 @@ visto nunca la app. Reservá dos horas.
 - [ ] Instalá en un servidor nuevo, con el instalador. Anotá cuánto tardó.
 - [ ] Armá el padrón inventado: `node deploy/padron-inventado.mjs 350 > padron.csv`. No uses `deploy/serve.sh`, que es una base de prueba.
 - [ ] Creá la elección completa desde la app: partido, equipo, días, listas, padrón, mesas.
+- [ ] Corregí lo armado: mové el corte de una mesa por apellido, pasá a una persona sola a otra mesa y revisá las filas dudosas.
+- [ ] En **Cambiar los datos**, poné el horario de votación. Desde la ficha de un fiscal, dale un turno, una hora de llegada y un punto de
+      encuentro, y mirá el **Cronograma**: ¿se entiende impreso?
 - [ ] Mandá las invitaciones por el medio que uses de verdad.
 
 ## Primer uso
@@ -39,6 +42,11 @@ visto nunca la app. Reservá dos horas.
 - [ ] Cada fiscal cuenta los sobres. Una mesa carga un número que no coincide: ¿lo nota el fiscal? ¿Lo ve el jefe?
 - [ ] Cargan el escrutinio de a una lista y sacan la foto del acta, con buena y con mala luz.
 - [ ] Dos fiscales cargan números distintos en la misma mesa: el jefe tiene que elegir cuál vale.
+- [ ] El panel del jefe pasa a **Escrutinio**: una barra de cuántas mesas cargaron todo, y primero las que lo necesitan. Con **Ver los
+      totales** ve los resultados de su distrito; coordinación ve los de todo el partido y baja la planilla.
+- [ ] Un fiscal corrige su escrutinio desde el plan: el jefe tiene que volver a elegir.
+- [ ] Después de cerrar la elección, un fiscal que estuvo sin señal manda su escrutinio. Su teléfono tiene que decir que llegó tarde, y
+      coordinación lo ve en **Llegaron cosas después del cierre**, donde lo suma o lo descarta.
 
 ## Recuperarse de un desastre
 
@@ -59,6 +67,10 @@ Cómo se usa cada herramienta está en la guía de [datos personales](datos-pers
       consentimiento y borrá sus datos. Medí cuánto tardó cada cosa: los plazos de la ley son de 10 días corridos y 5 hábiles. ¿Lo que se
       bajó se entiende sin explicación?
 - [ ] En **Registro** aparecen la búsqueda, la descarga, la corrección, el consentimiento y el borrado, con quién lo hizo.
+- [ ] En **Registro**, escribí el apellido de esa persona: tiene que quedar todo lo de ella, con cuántas veces se vieron y se cambiaron
+      sus datos. Bajalo en planilla.
+- [ ] Anotale un consentimiento a alguien con una marca en el semáforo, y después **Retiró su consentimiento**: su marca se tiene que
+      borrar en ese momento.
 - [ ] Creá una categoría del semáforo marcada como sensible y anotá a alguien con ella. Alguien con «Anotar quién nos vota» no la tiene
       que ver: si le pone una categoría común o se la saca, la sensible sigue ahí, sin que nada le avise que estaba. Alguien con «Ver
       las categorías sensibles» la ve, y el registro dice «Miró categorías sensibles».

@@ -15,24 +15,10 @@
   }
 
   let people = $state.raw<Person[]>([]);
-  let open = $state<string | null>(null);
 
-  const load = async () => {
+  onMount(async () => {
     people = (await session.api<{ users: Person[] }>('/users')).users;
-  };
-  onMount(load);
-
-  async function invite(person: Person) {
-    const { invitation } = await session.api<{ invitation: string }>(`/users/${person.id}/invitation`, { method: 'POST' });
-    nav.go('invite', { name: person.name, phone: person.phone, token: invitation });
-  }
-
-  async function remove(person: Person) {
-    if (!confirm(t('team.removeConfirm', { name: person.name }))) return;
-    await session.api(`/users/${person.id}`, { method: 'DELETE' });
-    open = null;
-    await load();
-  }
+  });
 
   function finished() {
     localStorage.setItem('urna-abierta-equipo-despues', '1');
@@ -43,19 +29,10 @@
 <Pantalla accion="equipo" volver titulo={t('team.title')} desliza>
   <div class="tarjetas">
     {#each people as person (person.id)}
-      <button class="tarjeta persona persona-boton" data-testid="team-person" onclick={() => (open = open === person.id ? null : person.id)}>
+      <button class="tarjeta persona persona-boton" data-testid="team-person" onclick={() => nav.go('person', { id: person.id })}>
         <strong>{person.name}</strong>
         <span>{person.roles.map((item) => roleName(item.role)).join(', ')}{person.joined ? '' : ` · ${t('team.notJoined')}`}</span>
       </button>
-      {#if open === person.id && person.id !== session.me?.user.id}
-        <div class="renglon-botones">
-          <!-- Managing the team and inviting are two tasks: whoever only looks after the system does not invite. -->
-          {#if session.allows('team.invite')}
-            <button class="enlace" onclick={() => invite(person)}>{t('team.invite')}</button>
-          {/if}
-          <button class="enlace" onclick={() => remove(person)}>{t('team.remove')}</button>
-        </div>
-      {/if}
     {/each}
   </div>
   <button class="boton secundario" onclick={() => nav.go('addPerson')}><Ic name="mas" /><span>{t('team.add')}</span></button>

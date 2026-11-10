@@ -65,3 +65,7 @@ html, body { margin: 0; height: 100%; }
   .vistas-previas { display: none; }
   .vista-doble { grid-template-columns: 1fr; }
 }
+.acciones-llave { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+a.boton { text-decoration: none; }
+.casilla { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
+.casilla input { width: 26px; height: 26px; margin: 2px 0 0; accent-color: var(--acento); }

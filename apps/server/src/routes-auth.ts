@@ -1,5 +1,5 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { dayIn, mainRole, SECURITY_PROFILES, storedPhone, themeProblems } from '@urna-abierta/domain';
 import { attemptLimiter, audit, authenticated, can, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpMatches, unseal, type Actor } from './actor.ts';
@@ -11,6 +11,8 @@ const defaultParty = () => ({ name: '', theme: process.env.URNA_TEMA ?? 'aula' }
 const INVITATION_DAYS = 14;
 const GUESSES_ALLOWED = 10;
 const GUESS_WINDOW_MS = 15 * 60_000;
+/** Wrong 8-digit codes from anywhere in that window: guessing one of a hundred million takes far more than this. */
+const CODE_GUESSES_ALLOWED = 200;
 
 /**
  * `by` is who asks for it, or null for the demo of whoever runs the server. A device that comes from the link of
@@ -70,6 +72,9 @@ export const MAX_THEME_BYTES = 24 * 1024 * 1024;
 
 export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   const guesses = attemptLimiter(GUESSES_ALLOWED, GUESS_WINDOW_MS);
+  // A code of 8 digits is guessable from many addresses: past this many wrong ones in a window, from anywhere, codes
+  // wait. Invitation links, which cannot be guessed, keep working.
+  const codeGuesses = attemptLimiter(CODE_GUESSES_ALLOWED, GUESS_WINDOW_MS);
   const beforeSecondFactor = authenticated(pool, { beforeSecondFactor: true });
 
   /** What anyone can know before logging in: nothing more than how the app should look. */
@@ -101,7 +106,12 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** The theme chosen in the installer, which arrives right after the server starts and before anyone gets in. */
-  app.put<{ Body: { code?: unknown; theme?: unknown } }>('/api/setup/theme', { bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
+  // Once someone got in, a theme this big is not even read.
+  const stillOpen = async (_request: FastifyRequest, reply: FastifyReply) => {
+    const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
+    if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
+  };
+  app.put<{ Body: { code?: unknown; theme?: unknown } }>('/api/setup/theme', { onRequest: stillOpen, bodyLimit: MAX_THEME_BYTES }, async (request, reply) => {
     const { code, theme } = request.body ?? {};
     const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
     if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
@@ -127,6 +137,8 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { token } = request.body ?? {};
     if (typeof token !== 'string') return reply.code(400).send({ error: 'invalid_request' });
     if (guesses.blocked(request.ip)) return reply.code(429).send({ error: 'too_many_attempts' });
+    const short = /^\d{8}$/.test(token);
+    if (short && codeGuesses.blocked('codes')) return reply.code(429).send({ error: 'too_many_attempts' });
     const used = await pool.query(
       `UPDATE invitations SET used_at = now() WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now() RETURNING user_id, may_enroll`,
       [hashToken(token)],
@@ -134,6 +146,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const userId = used.rows[0]?.user_id;
     if (!userId) {
       guesses.failed(request.ip);
+      if (short) codeGuesses.failed('codes');
       return reply.code(410).send({ error: 'invitation_not_valid' });
     }
     await audit(pool, { userId } as never, 'device.joined', userId);
@@ -191,7 +204,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { profile, chosen, minimum } = await securityProfile(pool);
     const tableIds = actor.assignments.filter((a) => a.role === 'fiscal' && a.table_id).map((a) => a.table_id);
     const tables = await pool.query(
-      `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories, e.time_zone,
+      `SELECT t.id, t.name, t.place, t.unit_id, e.id AS election_id, e.name AS election, e.days, e.status, e.categories, e.time_zone, e.hours,
               (SELECT count(*)::int FROM electors x WHERE x.table_id = t.id) AS total
        FROM polling_tables t JOIN elections e ON e.id = t.election_id
        WHERE t.id = ANY($1) AND e.status NOT IN ('cerrada', 'purgada')
@@ -210,6 +223,7 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const table = [...tables.rows].sort((a, b) => rank(a) - rank(b))[0] ?? null;
     let contact = null;
     let ended = false;
+    let deleted: { election: string; tables: string[] } | null = null;
     if (table) {
       // Someone with a phone, or the plan B has nothing to call: the chief of the table, one of the whole election, coordination.
       const chief = await pool.query(
@@ -230,6 +244,12 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
         [actor.userId],
       );
       ended = closed.rowCount !== 0;
+      // Whoever had a table in an election that got deleted hears it, for a week, and their phone lets go of that table.
+      const gone = await pool.query(
+        `SELECT table_id, election FROM deleted_tables WHERE user_id = $1 AND deleted_at > now() - interval '7 days' ORDER BY deleted_at DESC`,
+        [actor.userId],
+      );
+      if (gone.rows[0]) deleted = { election: gone.rows[0].election, tables: gone.rows.map((row) => row.table_id) };
     }
     return {
       user: { id: actor.userId, name: actor.name },
@@ -260,10 +280,13 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
         categories: table.categories,
         total: table.total,
         timeZone: table.time_zone,
+        hours: table.hours,
+        schedule: actor.assignments.find((a) => a.role === 'fiscal' && a.table_id === table.id)?.schedule ?? null,
         rollRevision: rollRevision(await tableRoll(pool, table.id)),
       },
       contact,
       ended,
+      deleted,
     };
   });
 }

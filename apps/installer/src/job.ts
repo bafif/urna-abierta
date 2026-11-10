@@ -5,6 +5,7 @@ import { awsCloud } from './clouds/aws.ts';
 import { sleep, type Cloud } from './clouds/common.ts';
 import { googleCloud } from './clouds/google.ts';
 import { oracleCloud } from './clouds/oracle.ts';
+import type { Access } from './access.ts';
 import { startLocal } from './local.ts';
 import { newSecrets, renderScript, siteFor, type Secrets } from './settings.ts';
 import { runScript, type SshTarget } from './ssh.ts';
@@ -28,6 +29,12 @@ export interface InstallRequest {
 export interface InstallResult {
   /** Where the app lives. Empty when the person still has to paste the text. */
   address: string;
+  /** Tried on this computer: there are no backups, so no key to keep. */
+  local?: boolean;
+  /** False when the address never answered in time: the screen says so, and offers to check again. */
+  answered?: boolean;
+  /** For the access file. Only on this computer, which made it. */
+  access?: Access;
   recoveryKey: string;
   setupLink: string;
   /** The block to paste, for that option. */
@@ -123,28 +130,40 @@ export async function install(request: InstallRequest, log: (line: string) => vo
     // Invitations carry the address the app is open at: with phones, everything is set up from the tunnel's.
     const address = phonesUrl ?? url;
     if (phonesUrl && alive) await waitForHealth(phonesUrl, log, 60_000);
-    return { address, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${address}/#setup=${secrets.setupCode}`, ...(await sendCustomTheme(request, url, secrets.setupCode, alive, log)) };
+    return { address, local: true, answered: alive, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${address}/#setup=${secrets.setupCode}`, ...(await sendCustomTheme(request, url, secrets.setupCode, alive, log)) };
   }
 
   const secrets = newSecrets();
+  const access = (address: string, fingerprint?: string): Access => ({
+    address, setupLink: address ? `${address}/#setup=${secrets.setupCode}` : '', recoveryKey: secrets.recoveryKey, user: 'urna-admin', key: secrets.adminKey!.private,
+    ...(fingerprint ? { fingerprint } : {}),
+  });
   if (where.kind === 'text') {
     const text = renderScript({ secrets, site: 'auto', cert: 'ip', theme });
-    return { address: '', recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: '', text };
+    return { address: '', recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: '', text, access: access('') };
   }
 
   let url: string;
+  let fingerprint: string | undefined;
   if (where.kind === 'ssh') {
     const place = siteFor(where.address);
     url = place.url;
-    const script = renderScript({ secrets, site: place.site, cert: place.cert, theme });
+    // Whoever came in with a password leaves with a key: the server stops taking passwords.
+    const script = renderScript({ secrets, site: place.site, cert: place.cert, theme, keysOnly: Boolean(where.target.password) });
     log('connecting');
     await runScript(where.target, script, (line) => {
       if (line.startsWith('urna-abierta: ')) log(`server:${line.slice('urna-abierta: '.length)}`);
+    }, (seen) => {
+      fingerprint = seen;
+      log(`fingerprint:${seen}`);
     });
   } else {
     url = await createInCloud(cloudFor(where), secrets, theme, log);
   }
   const healthy = await waitForHealth(url, log);
   if (!healthy) log('slow');
-  return { address: url, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${url}/#setup=${secrets.setupCode}`, ...(await sendCustomTheme(request, url, secrets.setupCode, healthy, log)) };
+  return {
+    address: url, answered: healthy, recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: `${url}/#setup=${secrets.setupCode}`, access: access(url, fingerprint),
+    ...(await sendCustomTheme(request, url, secrets.setupCode, healthy, log)),
+  };
 }
