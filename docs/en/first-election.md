@@ -250,10 +250,4 @@ Do not tell anyone to go on anyway. That warning may be someone in the middle, a
 
 This list is from November 2026. A new version may solve some of them: check its notes.
 
-- An election cannot be edited from the app after it is created: check the days and the lists before “Create the election”.
-- A team member's task cannot be changed, nor can they get a second one: remove them and add them again. That is why “See the sensitive
-  categories” does not work yet: it has to go together with “Note who votes for us”.
-- Only a table's name and where it is can be changed, and only until the election is closed.
-- There is no view with every table at once for the vote count: it is checked table by table.
 - An urgent alert beeps and vibrates only with “See how it goes” on screen: from another screen, such as a table's detail, it does not.
-- The app does not remind you when to purge.
