@@ -209,8 +209,6 @@ This list is from November 2026. A new version may solve some of them: check its
   The erased row stays at its table and with its order number, without name or document, until the purge.
 - Correcting a person's document does not change their internal identifier, which often carries the document the file had: the old one
   stays there until they are erased or the election is purged.
-- A category can be marked sensitive only when it is created, and a person gets a single task from the app.
-- Consent cannot be withdrawn or cleared from the app: it is replaced by another one, or the data is erased.
 - The encryption of sensitive categories protects a copy of the database taken without the `.env` file. It does not protect a copy of the
   whole disk, nor a backup opened with the key, because the key travels with them.
 - Backups leave the server by themselves only if you set up S3 storage, and one over 5 GB does not fit. Otherwise, to have one elsewhere,

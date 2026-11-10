@@ -207,8 +207,6 @@ Esta lista es de noviembre de 2026. Una versión nueva puede resolver alguno: fi
   el suyo. La fila borrada sigue en su mesa y con su número de orden, sin nombre ni documento, hasta la purga.
 - Corregir el documento de una persona no cambia su identificador interno, que suele llevar el documento que traía el archivo: el viejo
   queda ahí hasta que se la borra o se purga.
-- Una categoría se puede marcar como sensible solo al crearla, y una persona recibe una sola tarea desde la app.
-- El consentimiento no se puede retirar ni borrar desde la app: se reemplaza con otro, o se borran los datos.
 - El cifrado de las categorías sensibles protege una copia de la base sacada sin el archivo `.env`. No protege una copia del disco entero
   ni una copia de seguridad abierta con la llave, porque la clave viaja con ellas.
 - Las copias de seguridad salen del servidor solas solo si configuraste un almacenamiento S3, y una de más de 5 GB no entra. Si no, para
