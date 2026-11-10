@@ -823,22 +823,22 @@ class AppState {
     const write = this.writeStats();
     const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
     return [
-      'Urna Abierta: informe de prueba',
-      `fecha: ${new Date().toISOString()}`,
-      `navegador: ${navigator.userAgent}`,
-      `instalada: ${standalone}`,
-      `almacenamiento protegido: ${this.persisted}`,
-      `espacio usado (MB): ${estimate?.usage ? (estimate.usage / 1e6).toFixed(1) : '?'}`,
-      `datos intactos: ${this.intact}`,
-      `personas: ${this.electors.length}`,
-      `primera apertura: ${this.canary?.firstOpen}`,
-      `apertura anterior: ${this.canary?.previousOpen}`,
-      `aperturas: ${this.canary?.opens}`,
-      `mayor intervalo sin abrir (días): ${this.canary?.longestGapDays.toFixed(2)}`,
-      `pendientes de enviar: ${this.pendingCount}`,
-      `sin espacio: ${this.noRoom}`,
-      `tachar, ms (mediana/peor, ${this.tapSamples.length} muestras): ${tap.median?.toFixed(0)}/${tap.worst?.toFixed(0)}`,
-      `guardar, ms (mediana/peor, ${this.writeSamples.length} muestras): ${write.median?.toFixed(0)}/${write.worst?.toFixed(0)}`,
+      t('report.title'),
+      `${t('report.date')}: ${new Date().toISOString()}`,
+      `${t('report.browser')}: ${navigator.userAgent}`,
+      `${t('report.installed')}: ${standalone}`,
+      `${t('report.protected')}: ${this.persisted}`,
+      `${t('report.used')}: ${estimate?.usage ? (estimate.usage / 1e6).toFixed(1) : '?'}`,
+      `${t('report.intact')}: ${this.intact}`,
+      `${t('report.people')}: ${this.electors.length}`,
+      `${t('report.firstOpen')}: ${this.canary?.firstOpen}`,
+      `${t('report.previousOpen')}: ${this.canary?.previousOpen}`,
+      `${t('report.opens')}: ${this.canary?.opens}`,
+      `${t('report.longestGap')}: ${this.canary?.longestGapDays.toFixed(2)}`,
+      `${t('report.pending')}: ${this.pendingCount}`,
+      `${t('report.noRoom')}: ${this.noRoom}`,
+      `${t('report.tap', { count: this.tapSamples.length })}: ${tap.median?.toFixed(0)}/${tap.worst?.toFixed(0)}`,
+      `${t('report.write', { count: this.writeSamples.length })}: ${write.median?.toFixed(0)}/${write.worst?.toFixed(0)}`,
     ].join('\n');
   }
 }

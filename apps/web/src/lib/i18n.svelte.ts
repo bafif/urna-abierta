@@ -1022,6 +1022,23 @@ const es = {
   'numbers.pick': '¿Qué elección querés ver?',
   'light.pick': '¿En qué elección vas a anotar?',
   'roll.problem.other_sheets': 'La planilla tiene otras hojas con algo escrito, y solo se lee la primera. Si el padrón sigue en otra hoja, pasalo todo a la primera y subila de nuevo.',
+
+  'report.title': 'Urna Abierta: informe de prueba',
+  'report.date': 'fecha',
+  'report.browser': 'navegador',
+  'report.installed': 'instalada',
+  'report.protected': 'almacenamiento protegido',
+  'report.used': 'espacio usado (MB)',
+  'report.intact': 'datos intactos',
+  'report.people': 'personas',
+  'report.firstOpen': 'primera apertura',
+  'report.previousOpen': 'apertura anterior',
+  'report.opens': 'aperturas',
+  'report.longestGap': 'mayor intervalo sin abrir (días)',
+  'report.pending': 'pendientes de enviar',
+  'report.noRoom': 'sin espacio',
+  'report.tap': 'tachar, ms (mediana/peor, {count} muestras)',
+  'report.write': 'guardar, ms (mediana/peor, {count} muestras)',
 } as const;
 
 export type MessageKey = keyof typeof es;
@@ -2050,6 +2067,23 @@ const en: Record<MessageKey, string> = {
   'numbers.pick': 'Which election do you want to see?',
   'light.pick': 'Which election will you note in?',
   'roll.problem.other_sheets': 'The spreadsheet has other sheets with something written, and only the first one is read. If the roll goes on in another sheet, move it all to the first one and upload it again.',
+
+  'report.title': 'Urna Abierta: test report',
+  'report.date': 'date',
+  'report.browser': 'browser',
+  'report.installed': 'installed',
+  'report.protected': 'protected storage',
+  'report.used': 'space used (MB)',
+  'report.intact': 'data intact',
+  'report.people': 'people',
+  'report.firstOpen': 'first opened',
+  'report.previousOpen': 'previous opening',
+  'report.opens': 'times opened',
+  'report.longestGap': 'longest gap without opening it (days)',
+  'report.pending': 'waiting to be sent',
+  'report.noRoom': 'out of space',
+  'report.tap': 'crossing out, ms (median/worst, {count} samples)',
+  'report.write': 'saving, ms (median/worst, {count} samples)',
 };
 
 export const LANGUAGES = { es: 'Español', en: 'English' } as const;
