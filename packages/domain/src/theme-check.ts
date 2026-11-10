@@ -54,6 +54,14 @@ export const BUILT_IN_FONTS = ['Atkinson Hyperlegible Next', 'Anton', 'Barlow Co
 const SYSTEM_FONTS = ['system-ui', 'sans-serif', 'serif', 'monospace', 'ui-monospace', 'ui-sans-serif', 'ui-serif', 'cursive'];
 export const MAX_THEME_FONTS = 24;
 export const MAX_THEME_FONT_BYTES = 16 * 1024 * 1024;
+/** Everything but the fonts goes to every phone each time it opens, logo included: a real one is about 17 KB. */
+export const MAX_THEME_BYTES_WITHOUT_FONTS = 256 * 1024;
+/** How many themes a party can add. One with the same id replaces the other, and does not count again. */
+export const MAX_PARTY_THEMES = 12;
+/** The themes that come with the app, in apps/web/src/lib/temas.js: a party can choose these without adding them. */
+export const BUILT_IN_THEMES = ['aula', 'vidrio', 'feria', 'tablero', 'mate'];
+export const THEME_ID = /^[a-z0-9-]{1,40}$/;
+const MAX_IDEA = 600;
 
 const FONT_NAME = /^[\p{L}\p{N} _-]{1,60}$/u;
 const FONT_WEIGHT = /^\d{1,4}( \d{1,4})?$/;
@@ -96,12 +104,15 @@ const walk = (value: unknown, visit: (text: string) => void): void => {
 /** Everything wrong with a theme someone adds. An empty list means it can be used. */
 export function themeProblems(theme: any): string[] {
   if (!theme || typeof theme !== 'object') return ['no es un tema'];
-  if (typeof theme.id !== 'string' || !/^[a-z0-9-]{1,40}$/.test(theme.id)) return ['id inválido'];
+  if (typeof theme.id !== 'string' || !THEME_ID.test(theme.id)) return ['id inválido'];
   if (typeof theme.nombre !== 'string' || !theme.nombre.trim() || theme.nombre.length > 40) return ['nombre inválido'];
   for (const part of ['claro', 'oscuro', 'fuentes', 'forma', 'recetas']) {
     if (!theme[part] || typeof theme[part] !== 'object') return [`falta ${part}`];
   }
   if (theme.logo !== undefined && (typeof theme.logo !== 'string' || !/^data:image\/(png|svg\+xml|webp);base64,[\w+/=]+$/.test(theme.logo))) return ['el logo tiene que ir como imagen incrustada'];
+  if (theme.idea !== undefined && (typeof theme.idea !== 'string' || theme.idea.length > MAX_IDEA || /[\u0000-\u0008\u000b-\u001f\u007f]/.test(theme.idea))) return [`la idea tiene que ser un texto de hasta ${MAX_IDEA} letras`];
+  const { archivosFuentes: _withFonts, ...withoutFonts } = theme;
+  if (new TextEncoder().encode(JSON.stringify(withoutFonts)).length > MAX_THEME_BYTES_WITHOUT_FONTS) return [`el tema pesa demasiado sin las letras: el máximo es ${MAX_THEME_BYTES_WITHOUT_FONTS / 1024} KB, logo incluido`];
   const problems: string[] = [];
   for (const mode of ['claro', 'oscuro'] as const) {
     for (const key of COLOR_KEYS) {

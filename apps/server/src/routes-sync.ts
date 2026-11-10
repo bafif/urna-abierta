@@ -8,6 +8,8 @@ import { PhotoStoreUnavailable, type PhotoStore } from './photo-store.ts';
 
 const MAX_PULL = 200;
 const TABLE_ID = /^[\w-]{1,64}$/;
+/** A tally sheet per category and some retakes: past this, a table is not sending its tally sheets. */
+const MAX_PHOTOS_PER_TABLE = 60;
 
 /** At most one write every half a minute: hearing from a phone is frequent and tells little. */
 const HEARD_EVERY_MS = 30_000;
@@ -206,6 +208,9 @@ export function syncRoutes(app: FastifyInstance, pool: pg.Pool, photos: PhotoSto
     if (!TABLE_ID.test(table) || !/^[0-9a-f]{64}$/.test(sha)) return reply.code(400).send({ error: 'invalid_request' });
     if (!(await canReachTable(pool, request.actor, table))) return reply.code(403).send({ error: 'forbidden' });
     if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'not_an_image' });
+    // The same photo again is fine; one more past the limit is refused, and the phone stops sending it.
+    const stored = await pool.query('SELECT count(*)::int AS photos, coalesce(bool_or(sha256 = $2), false) AS known FROM photos WHERE table_id = $1', [table, sha]);
+    if (!stored.rows[0].known && stored.rows[0].photos >= MAX_PHOTOS_PER_TABLE) return reply.code(413).send({ error: 'too_many_photos', max: MAX_PHOTOS_PER_TABLE });
     if (createHash('sha256').update(request.body).digest('hex') !== sha) return reply.code(400).send({ error: 'hash_mismatch' });
     try {
       await photos.put(sha, request.body);

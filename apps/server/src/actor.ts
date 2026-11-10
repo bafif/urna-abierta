@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { isRole, isSecurityProfile, permissionsOf, SECURITY_PROFILES, stricterProfile, type Permission, type Role, type RoleOverrides, type SecurityProfile } from '@urna-abierta/domain';
@@ -38,6 +38,11 @@ export const hashToken = (token: string) => createHash('sha256').update(token).d
  * or devices clears it right away. The limit only covers roles that expire by themselves.
  */
 const ACTOR_MEMORY_MS = 30_000;
+/**
+ * A device nobody used in this long stops getting in, and needs a new link: a phone left in a drawer, or a computer
+ * someone forgot to log out of. Long enough for a poll watcher of the primaries who comes back for the general election.
+ */
+export const DEVICE_IDLE_DAYS = 90;
 const actors = new Map<string, { until: number; actor: Actor }>();
 let edited: RoleOverrides | null = null;
 /** Goes up with each change: an actor read while something changed is used once, and not kept. */
@@ -54,13 +59,15 @@ export async function loadActor(pool: pg.Pool, token: string): Promise<Actor | n
   if (known && known.until > Date.now()) return known.actor;
   const reading = generation;
   const found = await pool.query(
-    `SELECT d.id AS device_id, d.second_factor_at, d.may_enroll, u.id AS user_id, u.name
+    `SELECT d.id AS device_id, d.second_factor_at, d.may_enroll, u.id AS user_id, u.name, d.last_seen_at < now() - interval '1 hour' AS stale
      FROM devices d JOIN users u ON u.id = d.user_id
-     WHERE d.token_hash = $1 AND d.revoked_at IS NULL AND u.removed_at IS NULL`,
-    [hashToken(token)],
+     WHERE d.token_hash = $1 AND d.revoked_at IS NULL AND u.removed_at IS NULL AND d.last_seen_at > now() - make_interval(days => $2)`,
+    [hashToken(token), DEVICE_IDLE_DAYS],
   );
   const row = found.rows[0];
   if (!row) return null;
+  // Any use keeps it alive, not only opening the app: a phone that only syncs is in use. At most once an hour.
+  if (row.stale) await pool.query('UPDATE devices SET last_seen_at = now() WHERE id = $1', [row.device_id]);
   const roles = await pool.query(
     `SELECT role, election_id, unit_id, table_id, days, schedule, expires_at FROM role_assignments
      WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > now())`,
@@ -181,6 +188,22 @@ export async function tablesInScope(pool: pg.Pool, actor: Actor, election: strin
   return (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1 AND ($2 OR unit_id = ANY($3))', [election, everything, units])).rows.map((r) => r.id);
 }
 
+/** All of it or nothing. */
+export async function inTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function audit(pool: pg.Pool, actor: Actor | null, action: string, target?: string, detail: object = {}) {
   await pool.query('INSERT INTO audit_log (user_id, action, target, detail) VALUES ($1, $2, $3, $4)', [actor?.userId ?? null, action, target ?? null, JSON.stringify(detail)]);
 }
@@ -258,13 +281,24 @@ export function totpCode(secret: string, step: number): string {
   return String(digest.readUInt32BE(offset) & 0x7fffffff).padStart(6, '0').slice(-6);
 }
 
-/** Allows for a phone whose clock is half a minute off. */
-export function totpMatches(secret: string, code: string, now = Date.now()): boolean {
+/**
+ * The time step whose code this is, or null. Allows for a phone whose clock is half a minute off. Whoever checks it keeps
+ * the step, so that the same code, or an earlier one, does not get anyone in again.
+ */
+export function totpStep(secret: string, code: string, now = Date.now()): number | null {
+  if (!/^\d{6}$/.test(code)) return null;
   const step = Math.floor(now / 30_000);
-  return [-1, 0, 1].some((offset) => totpCode(secret, step + offset) === code);
+  let found: number | null = null;
+  // Every step is compared, in constant time, whatever matched first.
+  for (const offset of [-1, 0, 1]) {
+    if (timingSafeEqual(Buffer.from(totpCode(secret, step + offset)), Buffer.from(code))) found = step + offset;
+  }
+  return found;
 }
 
-/** Slows down whoever keeps guessing a code. Kept per address, in memory: one small server, one process. */
+export const totpMatches = (secret: string, code: string, now = Date.now()): boolean => totpStep(secret, code, now) !== null;
+
+/** Slows down whoever keeps guessing a code, or asking for too many. Kept in memory: one small server, one process. */
 export function attemptLimiter(max: number, windowMs: number) {
   const seen = new Map<string, { count: number; until: number }>();
   return {

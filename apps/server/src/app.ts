@@ -164,14 +164,19 @@ export async function seedDemo(pool: pg.Pool, { size = 350, tables = 1, label = 
 }
 
 /** Postgres codes for a value it cannot read or that points nowhere: a wrong request, not a broken server. */
-const UNREADABLE = ['22P02', '22007', '22008', '22021', '22001', '23503'];
+const UNREADABLE = ['22P02', '22P05', '22007', '22008', '22021', '22001', '23503'];
+/**
+ * Caddy, in the same pod or the same network, says which address each request came from. Anyone else who reaches the
+ * server directly is not believed when they say it, so that the limits per address still hold.
+ */
+const TRUSTED_PROXIES = process.env.URNA_TRUSTED_PROXIES ?? 'loopback,linklocal,uniquelocal';
 
 /** What a request may bring, unless its route says otherwise: the roll, photos and themes do. */
 const BODY_LIMIT = 256 * 1024;
 
 export function buildApp(pool: pg.Pool, { testMode = false, photos = photoStoreFromEnv() }: { testMode?: boolean; photos?: PhotoStore } = {}): FastifyInstance {
   // Caddy is the only way in, and it says which address each request came from.
-  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: true });
+  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT, trustProxy: TRUSTED_PROXIES });
   // A route with no limit of its own takes the one of the parser that reads its body: a zip or a photo sent to any
   // route, even one that needs no account, would be read up to the size of a roll. Each route keeps the small one
   // unless it says otherwise.

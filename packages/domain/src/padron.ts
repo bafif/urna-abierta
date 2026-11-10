@@ -10,10 +10,32 @@ export { MAX_UNZIPPED_BYTES };
 export const PADRON_FORMAT = 'padron-abierto';
 export const PADRON_MAJOR = 0;
 
-const text = (max: number) => v.pipe(v.string(), v.minLength(1), v.maxLength(max));
+/** A NUL from a bad export is never part of a name, and Postgres cannot keep it: it goes before anything is measured. */
+const withoutNul = (value: string) => value.replaceAll('\u0000', '');
+const text = (max: number) => v.pipe(v.string(), v.transform(withoutNul), v.minLength(1), v.maxLength(max));
 
 /** The longest id a person can have. */
 const MAX_ID = 64;
+/** More people than this in one file is not a roll this app can work with, whatever its size in bytes. */
+export const MAX_ELECTORS = 1_000_000;
+const MAX_EXTRA_FIELDS = 30;
+const MAX_EXTRA_TEXT = 200;
+
+/**
+ * What else a file says of a person, kept as it came but bounded: a few named fields with short plain values. Anything
+ * nested, or past those bounds, is left out rather than refusing the person.
+ */
+function boundedExtra(extra: Record<string, unknown>, most = MAX_EXTRA_FIELDS): Record<string, string | number | boolean | null> {
+  const kept: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(extra)) {
+    if (Object.keys(kept).length >= most) break;
+    const name = withoutNul(key);
+    if (!name || name.length > 40) continue;
+    if (typeof value === 'string') kept[name] = withoutNul(value).slice(0, MAX_EXTRA_TEXT);
+    else if ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean' || value === null) kept[name] = value;
+  }
+  return kept;
+}
 
 export const manifestSchema = v.looseObject({
   format: v.literal(PADRON_FORMAT),
@@ -44,11 +66,17 @@ export const electorSchema = v.looseObject({
   order: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1)))),
   family_name: v.optional(text(120)),
   given_names: v.optional(text(120)),
-  identifiers: v.optional(v.array(v.object({ type: text(20), value: text(40) }))),
+  identifiers: v.optional(v.pipe(v.array(v.object({ type: text(20), value: text(40) })), v.maxLength(10))),
   address: v.optional(v.nullable(text(200))),
   birth_year: v.optional(v.nullable(v.number())),
-  extra: v.optional(v.record(v.string(), v.unknown())),
-  review: v.optional(v.looseObject({ status: v.picklist(['ok', 'pending']) })),
+  extra: v.optional(v.pipe(v.record(v.string(), v.unknown()), v.transform((extra) => boundedExtra(extra)))),
+  // Its status, and a few short notes a reader may leave next to it, bounded like the rest.
+  review: v.optional(
+    v.pipe(
+      v.looseObject({ status: v.picklist(['ok', 'pending']) }),
+      v.transform(({ status, ...notes }) => ({ ...boundedExtra(notes, 10), status })),
+    ),
+  ),
 });
 
 export type PadronManifest = v.InferOutput<typeof manifestSchema>;
@@ -152,6 +180,7 @@ export function readPadron(bytes: Uint8Array): PadronRead {
   if (!parsedManifest.success) return refused('manifest.json', 'invalid');
   const manifest = parsedManifest.output;
   if (Number(manifest.format_version.split('.')[0]) !== PADRON_MAJOR) return refused('manifest.json', 'unsupported_version');
+  if (manifest.files.electors.count > MAX_ELECTORS) return refused('file', 'too_big');
   const paths = [manifest.files.electors.path, manifest.files.units?.path];
   const body = unzipSome(bytes, (name) => paths.includes(name));
   if (body === 'not_a_zip') return refused('file', 'not_a_zip');
@@ -160,7 +189,9 @@ export function readPadron(bytes: Uint8Array): PadronRead {
   if (!electorsFile) return refused(manifest.files.electors.path, 'missing_file');
   const unitsFile = manifest.files.units ? body.files[manifest.files.units.path] : undefined;
   const units = unitsFile ? readLines('units', strFromU8(unitsFile), unitSchema, problems).map(({ row }) => row) : [];
-  const rows = readLines('electors', strFromU8(electorsFile), electorSchema, problems);
+  const electorsText = strFromU8(electorsFile);
+  if (splitLines(electorsText).length > MAX_ELECTORS) return refused('file', 'too_big');
+  const rows = readLines('electors', electorsText, electorSchema, problems);
   if (rows.length + problems.filter((p) => p.where.startsWith('electors')).length !== manifest.files.electors.count) {
     problems.push({ where: 'manifest.json', problem: 'count_mismatch' });
   }
@@ -261,6 +292,7 @@ function columnsOf(cells: string[]): Columns | null {
 function readTableRoll(allRows: SheetRow[], path: string): PadronRead {
   const rows = allRows.filter((row) => row.cells.some((cell) => cell.trim() !== ''));
   if (rows.length === 0) return refused('file', 'empty');
+  if (rows.length > MAX_ELECTORS + HEADER_SEARCH) return refused('file', 'too_big');
   const header = rows.slice(0, HEADER_SEARCH).findIndex((row) => columnsOf(row.cells));
   if (header < 0) return refused(`line ${rows[0]!.line}`, 'no_name_column');
   const columns = columnsOf(rows[header]!.cells)!;
@@ -340,6 +372,10 @@ function separatorOf(lines: string[]): string {
 
 /** A simple spreadsheet is enough to use the app without the scanner. */
 export function readCsvRoll(content: string): PadronRead {
+  // Counted before splitting: a file of a few bytes per line would otherwise become millions of strings first.
+  let breaks = 0;
+  for (let at = content.indexOf('\n'); at >= 0 && breaks <= MAX_ELECTORS + HEADER_SEARCH; at = content.indexOf('\n', at + 1)) breaks += 1;
+  if (breaks > MAX_ELECTORS + HEADER_SEARCH) return refused('file', 'too_big');
   const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/).map((text, index) => ({ text, line: index + 1 })).filter(({ text }) => text.trim() !== '');
   const separator = separatorOf(lines.map(({ text }) => text));
   return readTableRoll(lines.map(({ text, line }) => ({ line, cells: splitCsvLine(text, separator) })), 'csv');

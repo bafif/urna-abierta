@@ -4,10 +4,10 @@ import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
-import { DEFAULT_TIME_ZONE, foldText, isRole, isSecurityProfile, isTimeZone, storedPhone, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronElector, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, mayInvite, requires, rollKey, securityProfile, setSetting, tablesInScope, type Actor } from './actor.ts';
+import { BUILT_IN_THEMES, DEFAULT_TIME_ZONE, foldText, MAX_PARTY_THEMES, THEME_ID, isRole, isSecurityProfile, isTimeZone, storedPhone, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronElector, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
+import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, inTransaction, mayInvite, requires, rollKey, securityProfile, setSetting, tablesInScope, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
-import { addTheme, createInvitation, MAX_THEME_BYTES } from './routes-auth.ts';
+import { addTheme, createInvitation, MAX_THEME_BYTES, themeFits } from './routes-auth.ts';
 
 /** A CSV saved by Excel in Spanish on Windows comes in Windows-1252: read as UTF-8, its accents would break. */
 function csvText(body: Buffer): string {
@@ -74,22 +74,6 @@ function shiftOf(value: unknown): string[] | undefined | null {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value) || value.length > 60 || !value.every(realDay)) return null;
   return [...new Set(value)].sort();
-}
-
-/** All of it or nothing. */
-async function inTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await work(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
 }
 
 /**
@@ -227,6 +211,9 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const name = text(request.body?.name, 120);
     const theme = text(request.body?.theme, 40) ?? 'aula';
     if (!name) return reply.code(400).send({ error: 'invalid_name' });
+    // Only a theme every phone can find: one that comes with the app, or one the party added.
+    const added = await getSetting<{ id: string }[]>(pool, 'themes', []);
+    if (!THEME_ID.test(theme) || !(BUILT_IN_THEMES.includes(theme) || added.some((other) => other.id === theme))) return reply.code(400).send({ error: 'unknown_theme' });
     await setSetting(pool, 'party', { name, theme });
     await audit(pool, request.actor, 'party.changed');
     return { name, theme };
@@ -237,6 +224,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { theme } = request.body ?? {};
     const problems = themeProblems(theme);
     if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
+    if (!(await themeFits(pool, (theme as { id: string }).id))) return reply.code(409).send({ error: 'too_many_themes', max: MAX_PARTY_THEMES });
     await addTheme(pool, theme as { id: string });
     await audit(pool, request.actor, 'theme.added', (theme as { id: string }).id);
     return { ok: true };

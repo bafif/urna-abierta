@@ -1,8 +1,8 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type pg from 'pg';
-import { dayIn, mainRole, SECURITY_PROFILES, storedPhone, themeProblems } from '@urna-abierta/domain';
-import { attemptLimiter, audit, authenticated, can, forgetActors, getSetting, hashToken, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpMatches, unseal, type Actor } from './actor.ts';
+import { dayIn, mainRole, MAX_PARTY_THEMES, SECURITY_PROFILES, storedPhone, themeProblems } from '@urna-abierta/domain';
+import { attemptLimiter, audit, authenticated, can, forgetActors, getSetting, hashToken, inTransaction, needsSecondFactor, newToken, newTotpSecret, seal, securityProfile, setSetting, totpStep, unseal, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
 import { rollRevision, tableRoll } from './routes-sync.ts';
 
@@ -13,6 +13,8 @@ const GUESSES_ALLOWED = 10;
 const GUESS_WINDOW_MS = 15 * 60_000;
 /** Wrong 8-digit codes from anywhere in that window: guessing one of a hundred million takes far more than this. */
 const CODE_GUESSES_ALLOWED = 200;
+/** Codes to bring a session to an installed app: one is enough, a few if the first expired or was mistyped. */
+const HANDOFFS_ALLOWED = 10;
 
 /**
  * `by` is who asks for it, or null for the demo of whoever runs the server. A device that comes from the link of
@@ -47,6 +49,12 @@ interface StoredTheme {
   archivosFuentes?: { sha256?: string; datos?: string }[];
 }
 
+/** Whether a theme with this id fits: it replaces one with the same id, or there is still room for one more. */
+export async function themeFits(pool: pg.Pool, id: string): Promise<boolean> {
+  const themes = await getSetting<StoredTheme[]>(pool, 'themes', []);
+  return themes.some((other) => other.id === id) || themes.length < MAX_PARTY_THEMES;
+}
+
 /**
  * A theme that passed the reading check. With the same id, it replaces the previous one. It comes as
  * one file, and its fonts are kept apart: each phone asks for them once, and not every time it opens.
@@ -76,6 +84,16 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   // wait. Invitation links, which cannot be guessed, keep working.
   const codeGuesses = attemptLimiter(CODE_GUESSES_ALLOWED, GUESS_WINDOW_MS);
   const beforeSecondFactor = authenticated(pool, { beforeSecondFactor: true });
+  const handoffs = attemptLimiter(HANDOFFS_ALLOWED, GUESS_WINDOW_MS);
+  // Apart from invitations: the setup code is tried only before anyone got in, by whoever installed the server.
+  const setupGuesses = attemptLimiter(GUESSES_ALLOWED, GUESS_WINDOW_MS);
+  /** The setup code, with its own limit per address. Null if it may go on, or else what was already answered. */
+  const refuseSetup = (request: FastifyRequest, reply: FastifyReply, code: unknown) => {
+    if (setupGuesses.blocked(request.ip)) return reply.code(429).send({ error: 'too_many_attempts' });
+    if (isSetupCode(code)) return null;
+    setupGuesses.failed(request.ip);
+    return reply.code(403).send({ error: 'wrong_code' });
+  };
 
   /** What anyone can know before logging in: nothing more than how the app should look. */
   app.get('/api/public', async () => {
@@ -92,14 +110,22 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { code, name, phone, accepted } = request.body ?? {};
     const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
     if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
-    if (!isSetupCode(code)) return reply.code(403).send({ error: 'wrong_code' });
+    if (refuseSetup(request, reply, code)) return reply;
     if (typeof name !== 'string' || !name.trim() || name.length > 120) return reply.code(400).send({ error: 'invalid_name' });
     if (accepted !== true) return reply.code(400).send({ error: 'must_accept_responsibility' });
-    const userId = randomUUID();
-    await pool.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [userId, name.trim(), storedPhone(phone)]);
-    for (const role of ['sistema', 'coordinacion']) {
-      await pool.query('INSERT INTO role_assignments (id, user_id, role) VALUES ($1, $2, $3)', [randomUUID(), userId, role]);
-    }
+    // Two people with the code at the same moment: one of them is the first administrator, and the other hears it.
+    const userId = await inTransaction(pool, async (client) => {
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext('urna-setup'))`);
+      const already = await client.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
+      if (already.rowCount !== 0) return null;
+      const id = randomUUID();
+      await client.query('INSERT INTO users (id, name, phone) VALUES ($1, $2, $3)', [id, name.trim(), storedPhone(phone)]);
+      for (const role of ['sistema', 'coordinacion']) {
+        await client.query('INSERT INTO role_assignments (id, user_id, role) VALUES ($1, $2, $3)', [randomUUID(), id, role]);
+      }
+      return id;
+    });
+    if (!userId) return reply.code(409).send({ error: 'already_set_up' });
     await setSetting(pool, 'responsibility_accepted', { at: new Date().toISOString(), by: userId });
     await audit(pool, { userId } as never, 'setup', userId);
     return { token: await newDevice(pool, userId, true) };
@@ -115,9 +141,10 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { code, theme } = request.body ?? {};
     const admins = await pool.query(`SELECT 1 FROM role_assignments WHERE role = 'sistema' LIMIT 1`);
     if (admins.rowCount !== 0) return reply.code(409).send({ error: 'already_set_up' });
-    if (!isSetupCode(code)) return reply.code(403).send({ error: 'wrong_code' });
+    if (refuseSetup(request, reply, code)) return reply;
     const problems = themeProblems(theme);
     if (problems.length > 0) return reply.code(422).send({ error: 'theme_not_usable', problems });
+    if (!(await themeFits(pool, (theme as StoredTheme).id))) return reply.code(409).send({ error: 'too_many_themes', max: MAX_PARTY_THEMES });
     await addTheme(pool, theme as StoredTheme);
     await audit(pool, null, 'theme.added', (theme as StoredTheme).id);
     return { ok: true };
@@ -154,7 +181,9 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** A short code to bring this person's session to an installed app, which on iPhone starts empty. */
-  app.post('/api/auth/handoff', { preHandler: beforeSecondFactor }, async (request) => {
+  app.post('/api/auth/handoff', { preHandler: beforeSecondFactor }, async (request, reply) => {
+    if (handoffs.blocked(request.actor.userId)) return reply.code(429).send({ error: 'too_many_attempts' });
+    handoffs.failed(request.actor.userId);
     const code = String(randomInt(0, 100_000_000)).padStart(8, '0');
     await pool.query(`INSERT INTO invitations (token_hash, user_id, expires_at, may_enroll) VALUES ($1, $2, now() + interval '15 minutes', $3)`, [hashToken(code), request.actor.userId, request.actor.mayEnroll]);
     return { code };
@@ -184,10 +213,14 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     if (!found.rows[0].totp_sealed && !actor.mayEnroll) return reply.code(403).send({ error: 'needs_new_invitation' });
     const pending = await getSetting<string | null>(pool, `totp_pending_${actor.userId}`, null);
     const sealed: string | null = found.rows[0].totp_sealed ?? pending;
-    if (!sealed || !totpMatches(unseal(sealed), code.replace(/\D/g, ''))) {
+    const step = sealed ? totpStep(unseal(sealed), code.replace(/\D/g, '')) : null;
+    if (step === null) {
       guesses.failed(actor.userId);
       return reply.code(403).send({ error: 'wrong_code' });
     }
+    // Someone who saw the six digits over a shoulder does not get in with them: each code works once, and never one before it.
+    const fresh = await pool.query('UPDATE users SET totp_last_step = $2 WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2) RETURNING 1', [actor.userId, step]);
+    if (fresh.rowCount === 0) return reply.code(403).send({ error: 'code_already_used' });
     if (!found.rows[0].totp_sealed) {
       await pool.query('UPDATE users SET totp_sealed = $2 WHERE id = $1', [actor.userId, sealed]);
       await pool.query('DELETE FROM settings WHERE key = $1', [`totp_pending_${actor.userId}`]);
@@ -195,6 +228,14 @@ export function authRoutes(app: FastifyInstance, pool: pg.Pool) {
     await pool.query('UPDATE devices SET second_factor_at = now() WHERE id = $1', [actor.deviceId]);
     forgetActors();
     await audit(pool, actor, 'device.second_factor', actor.userId);
+    return { ok: true };
+  });
+
+  /** This device stops getting in: whoever had its credential, or finds it later on a shared computer, gets nothing. */
+  app.post('/api/auth/logout', { preHandler: beforeSecondFactor }, async (request) => {
+    await pool.query('UPDATE devices SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [request.actor.deviceId]);
+    forgetActors();
+    await audit(pool, request.actor, 'device.logged_out', request.actor.userId);
     return { ok: true };
   });
 
