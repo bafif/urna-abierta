@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { themeProblemText } from '@urna-abierta/domain';
   import Pantalla from '../components/Pantalla.svelte';
   import { app } from '../app.svelte.ts';
   import { i18n, LANGUAGES, t, type Language } from '../i18n.svelte.ts';
@@ -44,7 +45,7 @@
         error instanceof ApiError && error.code === 'too_many_themes'
           ? t('settings.theme.tooMany')
           : error instanceof ApiError && error.problems.length > 0
-            ? `${t('settings.theme.refused')} ${error.problems[0]}`
+            ? `${t('settings.theme.refused')} ${themeProblemText(error.problems[0], i18n.language)}`
             : t('settings.theme.refused');
     }
   }

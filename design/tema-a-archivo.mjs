@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { themeProblems } from '../packages/domain/src/theme-check.ts';
+import { themeProblems, themeProblemText } from '../packages/domain/src/theme-check.ts';
 
 const [source, output] = process.argv.slice(2);
 if (!source || !output) {
@@ -85,7 +85,7 @@ if (declared.length + fromApp.length > 0) theme.archivosFuentes = [...declared, 
 
 const problems = themeProblems(theme);
 if (problems.length > 0) {
-  console.error(`Ese tema no se puede usar:\n${problems.map((problem) => `- ${problem}`).join('\n')}`);
+  console.error(`Ese tema no se puede usar:\n${problems.map((problem) => `- ${themeProblemText(problem, 'es')}`).join('\n')}`);
   process.exit(1);
 }
 writeFileSync(output, JSON.stringify(theme), { mode: 0o600 });

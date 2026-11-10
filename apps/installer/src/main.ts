@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { asset } from './assets.ts';
-import { themeProblems } from '../../../packages/domain/src/theme-check.ts';
+import { themeProblems, themeProblemText } from '../../../packages/domain/src/theme-check.ts';
 import { CloudFailure, install, uploadTheme, waitForHealth, type InstallRequest, type InstallResult } from './job.ts';
 import { findEngine } from './local.ts';
 import { siteFor, VERSION } from './settings.ts';
@@ -87,7 +87,7 @@ async function api(path: string, request: IncomingMessage, response: ServerRespo
   if (request.method !== 'POST') return send(response, 405, { error: 'post_only' });
   const body = await bodyOf(request);
 
-  if (path === 'check-theme') return send(response, 200, { problems: themeProblems(body.theme) });
+  if (path === 'check-theme') return send(response, 200, { problems: themeProblems(body.theme).map((problem) => themeProblemText(problem, 'es')) });
 
   if (path === 'check-ssh') {
     try {

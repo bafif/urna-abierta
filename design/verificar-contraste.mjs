@@ -2,7 +2,7 @@
 //   node design/verificar-contraste.mjs [more theme files]
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { contrastReport } from '../packages/domain/src/theme-check.ts';
+import { contrastReport, themeProblemText } from '../packages/domain/src/theme-check.ts';
 
 const files = [new URL('../apps/web/src/lib/temas.js', import.meta.url).pathname, ...process.argv.slice(2)];
 const context = { window: {} };
@@ -14,7 +14,7 @@ for (const theme of context.window.TEMAS) {
     const { problems, main, lowest } = contrastReport(theme, mode);
     for (const problem of problems) {
       failures += 1;
-      console.log(`FALLA ${theme.nombre} ${mode}: ${problem}`);
+      console.log(`FALLA ${theme.nombre} ${themeProblemText(problem, 'es')}`);
     }
     console.log(`${theme.nombre.padEnd(9)} ${mode.padEnd(7)} texto ${main.toFixed(1)}:1  margen ${lowest.toFixed(2)}`);
   }
