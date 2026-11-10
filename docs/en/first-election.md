@@ -167,19 +167,20 @@ urgent does not go out, they call: there is no need to wait for the app.
 You notice because nobody can get in, phones pile up items “not sent” and the panel shows every table with “no data”.
 
 1. Open the address from a computer with internet. If it does not load, the problem is the server.
-2. Connect over SSH and run `sudo urna estado`. Each line says `bien` (fine), `aviso` (notice), `espera` (wait) or `FALLA` (failure), and
-   what to do. A notice is not a failure: it is worth knowing, but everything works. The server speaks Spanish:
+2. Connect over SSH and run `sudo urna estado`. Each line says `ok`, `note`, `wait` or `FAIL`, and what to do. A `note` is not a
+   failure: it is worth knowing, but everything works. It answers in the language of the installer, or in the server's (see
+   [Maintaining it](servers.md#maintaining-it)); in Spanish those words are `bien`, `aviso`, `espera` and `FALLA`:
 
    | It says | What to do |
    |---|---|
-   | `FALLA  db`, `server` or `web: está …` | `sudo urna arrancar` |
-   | `FALLA  el servidor responde: no contesta` | Look at what the server said last, with the command below |
-   | `FALLA  disco: quedan N MB` | Download the latest backup from the app and delete old backups from `/opt/urna-abierta/copias` |
-   | `FALLA  copias: no hay una reciente` | `sudo urna copia` |
-   | `FALLA  copias en el bucket` | `sudo urna copia`, and look at what it says. [Backups off the server](servers.md#backups-off-the-server) explains it |
-   | `FALLA  hora` | `sudo timedatectl set-ntp true`. Without the right time, the certificate and the codes fail |
-   | `FALLA  certificado`, and `espera el servidor responde: sin certificado` | Open ports 80 and 443 in the cloud, as the [servers guide](servers.md#without-giving-the-installer-any-key) says. Everything keeps running, and the certificate arrives by itself; if the ports were closed for long it can take hours, and «urna reiniciar» asks for it again at once |
-   | `FALLA  fotos` | [Photos in S3 storage](servers.md#photos-in-s3-storage) explains it |
+   | `FAIL   db`, `server` or `web: it is …` | `sudo urna arrancar` |
+   | `FAIL   the server answers: it does not answer` | Look at what the server said last, with the command below |
+   | `FAIL   disk: N MB left` | Download the latest backup from the app and delete old backups from `/opt/urna-abierta/copias` |
+   | `FAIL   backups: there is no recent one` | `sudo urna copia` |
+   | `FAIL   backups in the bucket` | `sudo urna copia`, and look at what it says. [Backups off the server](servers.md#backups-off-the-server) explains it |
+   | `FAIL   clock` | `sudo timedatectl set-ntp true`. Without the right time, the certificate and the codes fail |
+   | `FAIL   certificate`, and `wait   the server answers: without a certificate` | Open ports 80 and 443 in the cloud, as the [servers guide](servers.md#without-giving-the-installer-any-key) says. Everything keeps running, and the certificate arrives by itself; if the ports were closed for long it can take hours, and `urna reiniciar` asks for it again at once |
+   | `FAIL   photos` | [Photos in S3 storage](servers.md#photos-in-s3-storage) explains it |
 
    To see what the server said last:
 
@@ -187,8 +188,8 @@ You notice because nobody can get in, phones pile up items “not sent” and th
    sudo runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$(id -u urna) HOME=/opt/urna-abierta podman logs --tail 50 urna-server
    ```
 
-   If `urna arrancar` or `urna reiniciar` say “El servidor se frena apenas arranca” (the server stops right after starting), they show
-   why. It is almost always a value in `/opt/urna-abierta/.env`: fix it and run `sudo urna reiniciar`.
+   If `urna arrancar` or `urna reiniciar` say “The server stops right after it starts”, they show why. It is almost always a value in
+   `/opt/urna-abierta/.env`: fix it and run `sudo urna reiniciar`.
 3. If you cannot connect over SSH, check in the cloud console that the machine is on, and restart it from there. Everything comes back by
    itself after a restart. Oracle may reclaim free machines that are not used, and the AWS free account closes when the plan ends.
 4. If the machine is lost, install a new one and restore the latest backup, as [Maintaining it](servers.md#maintaining-it) says. If the

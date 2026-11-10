@@ -102,6 +102,9 @@ sudo urna reiniciar   # creates the containers again with what /opt/urna-abierta
 
 What was running comes back by itself after a reboot.
 
+`urna` answers in the language the installer was used in, kept as `URNA_IDIOMA` in `/opt/urna-abierta/.env`, or in the server's when
+that line is empty. For the other language just once: `sudo urna --idioma es estado`; for good, set that line to `es` or `en`.
+
 ### Updating
 
 `sudo urna actualizar` downloads the latest published version, makes a backup, replaces the `urna` commands with that version's too,
@@ -186,11 +189,11 @@ To turn it on in a server that is already installed:
 1. Edit `/opt/urna-abierta/.env` (for example with `sudo nano /opt/urna-abierta/.env`) and fill in the `URNA_S3_...` lines. If your server
    was installed with an earlier version, those lines are not there: add them at the end. Write the values without quotes or spaces.
 2. `sudo urna reiniciar`, so that the server takes the new settings. The data stays.
-3. `sudo urna estado` should say `bien   fotos: en el bucket ...`. If it says `espera`, the server is still testing the bucket: run it
+3. `sudo urna estado` should say `ok     photos: in the bucket ...`. If it says `wait`, the server is still testing the bucket: run it
    again in a minute.
 
 Each time it starts, the server writes, reads and deletes a test object. If something fails, it writes so in plain sight in its log and
-`urna estado` marks it as `FALLA`, but everything else keeps working: a photo that cannot be stored is not stored anywhere else, and each
+`urna estado` marks it as `FAIL`, but everything else keeps working: a photo that cannot be stored is not stored anywhere else, and each
 phone keeps it and sends it again until it gets in. Deleting the test object needs permission to delete; without it, a single object
 remains, always the same one.
 

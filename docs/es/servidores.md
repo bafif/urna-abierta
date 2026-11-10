@@ -102,6 +102,9 @@ sudo urna reiniciar   # vuelve a crear los contenedores con lo que dice /opt/urn
 
 Lo que estaba andando vuelve solo después de un reinicio.
 
+`urna` contesta en el idioma en que se usó el instalador, que queda como `URNA_IDIOMA` en `/opt/urna-abierta/.env`, o en el del servidor
+si esa línea está vacía. Para el otro idioma por una vez: `sudo urna --idioma en estado`; para siempre, poné `es` o `en` en esa línea.
+
 ### Actualizar
 
 `sudo urna actualizar` baja la última versión publicada, hace una copia, cambia también los comandos de `urna` por los de esa versión y
