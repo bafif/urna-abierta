@@ -690,6 +690,76 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await pool.query('SELECT count(*)::int AS n FROM elections WHERE id = $1', [fresh])).rows[0].n).toBe(0);
     });
 
+    it('a poll watcher whose election was deleted hears it on the phone, which lets go of that table', async () => {
+      await pool.query(`UPDATE elections SET status = 'preparacion' WHERE id = $1`, [demo.election]);
+      const { name } = (await pool.query('SELECT name FROM elections WHERE id = $1', [demo.election])).rows[0];
+      expect((await call('coordinacion', 'DELETE', `/api/elections/${demo.election}`, { name })).statusCode).toBe(200);
+      expect((await call('fiscal', 'GET', '/api/me')).json()).toMatchObject({ table: null, deleted: { election: name, tables: [table] } });
+      // Like a close: the phone asks who it is again, and lets go of the roll even with something left to send.
+      expect((await push('fiscal', table, [operation(table, 1)])).statusCode).toBe(410);
+      expect((await call('fiscal', 'GET', `/api/sync/pull?table=${table}&since=0`)).statusCode).toBe(410);
+      // Whoever never had that table hears only that it is not theirs.
+      expect((await call('otra', 'GET', `/api/sync/pull?table=${table}&since=0`)).statusCode).toBe(403);
+      expect((await call('jefe', 'GET', '/api/me')).json().deleted).toBeNull();
+    });
+
+    it('a district changes its name and its chief, gives and takes tables, and goes only while prepared', async () => {
+      const units = async () => (await call('coordinacion', 'GET', `/api/elections/${demo.election}/units`)).json();
+      const district = async () => (await units()).units.find((found: { id: string }) => found.id === unit);
+      const tasksOf = async (id: string) => (await call('coordinacion', 'GET', '/api/users')).json().users.find((found: { id: string }) => found.id === id)?.roles;
+      const { id: unit } = (await call('coordinacion', 'POST', `/api/elections/${demo.election}/units`, { name: 'Norte' })).json();
+      expect((await call('coordinacion', 'PUT', `/api/tables/${table}`, { unit })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'PUT', `/api/units/${unit}`, { name: 'Norte 2' })).statusCode).toBe(200);
+      expect((await call('coordinacion', 'PUT', `/api/units/${unit}`, { name: '  ' })).statusCode).toBe(400);
+      const { id: ana } = (await call('coordinacion', 'POST', '/api/users', { name: 'Ana', role: 'jefe', unit })).json();
+      const { id: beto } = (await call('coordinacion', 'POST', '/api/users', { name: 'Beto', role: 'semaforo' })).json();
+      expect(await district()).toMatchObject({ name: 'Norte 2', chief: 'Ana', chief_id: ana, tables: 1 });
+      expect((await call('coordinacion', 'PUT', `/api/units/${unit}`, { chief: beto })).statusCode).toBe(200);
+      expect(await district()).toMatchObject({ chief: 'Beto', chief_id: beto });
+      expect(await tasksOf(ana)).toEqual([]);
+      // Someone new as its chief takes the place of the one it had.
+      const { id: carla } = (await call('coordinacion', 'POST', '/api/users', { name: 'Carla', role: 'jefe', unit })).json();
+      expect(await district()).toMatchObject({ chief: 'Carla', chief_id: carla });
+      expect((await tasksOf(beto)).map((task: { role: string }) => task.role)).toEqual(['semaforo']);
+      expect((await call('coordinacion', 'PUT', `/api/units/${unit}`, { chief: 'nadie' })).statusCode).toBe(400);
+      expect((await call('jefe', 'PUT', `/api/units/${unit}`, { name: 'Sur' })).statusCode).toBe(403);
+      // A table leaves its district, and goes only to a district of its own election.
+      expect((await call('coordinacion', 'PUT', `/api/tables/${table}`, { unit: null })).statusCode).toBe(200);
+      expect((await district()).tables).toBe(0);
+      const { id: other } = (await call('coordinacion', 'POST', '/api/elections', { name: 'Otra', kind: 'estudiantil', days: ['2027-05-01'] })).json();
+      const { id: elsewhere } = (await call('coordinacion', 'POST', `/api/elections/${other}/units`, { name: 'Lejos' })).json();
+      expect((await call('coordinacion', 'PUT', `/api/tables/${table}`, { unit: elsewhere })).statusCode).toBe(400);
+      expect((await call('coordinacion', 'PUT', `/api/tables/${table}`, { unit: 'no-existe' })).statusCode).toBe(400);
+      // Deleted only while prepared; its chief stays in the team, without that task.
+      expect((await call('coordinacion', 'DELETE', `/api/units/${unit}`)).statusCode).toBe(409);
+      await pool.query(`UPDATE elections SET status = 'preparacion' WHERE id = $1`, [demo.election]);
+      expect((await call('coordinacion', 'DELETE', `/api/units/${unit}`)).statusCode).toBe(200);
+      expect(await district()).toBeUndefined();
+      expect(await tasksOf(carla)).toEqual([]);
+      const log = (await call('coordinacion', 'GET', '/api/audit')).json().entries;
+      expect(log.find((entry: { action: string }) => entry.action === 'unit.deleted')).toMatchObject({ about: 'Norte 2' });
+    });
+
+    it('someone in the team takes a table: a poll watcher still without one has it written on their task, with their days', async () => {
+      const tasksOf = async (id: string) => (await call('coordinacion', 'GET', '/api/users')).json().users.find((found: { id: string }) => found.id === id)?.roles;
+      const { id: tomas } = (await call('coordinacion', 'POST', '/api/users', { name: 'Tomás', role: 'fiscal' })).json();
+      expect((await call('coordinacion', 'POST', `/api/users/${tomas}/roles`, { role: 'fiscal', table, days: ['2027-04-06'] })).statusCode).toBe(200);
+      expect(await tasksOf(tomas)).toEqual([expect.objectContaining({ role: 'fiscal', table, days: ['2027-04-06'] })]);
+      // Anyone else gets the task added.
+      const { id: juli } = (await call('coordinacion', 'POST', '/api/users', { name: 'Juli', role: 'semaforo' })).json();
+      expect((await call('coordinacion', 'POST', `/api/users/${juli}/roles`, { role: 'fiscal', table })).statusCode).toBe(200);
+      expect((await tasksOf(juli)).map((task: { role: string }) => task.role).sort()).toEqual(['fiscal', 'semaforo']);
+      const fiscales = (await call('coordinacion', 'GET', `/api/elections/${demo.election}/tables`)).json().tables[0].fiscales;
+      expect(fiscales.every((fiscal: { assignment: string }) => typeof fiscal.assignment === 'string')).toBe(true);
+      // What does not exist is a wrong request, and nobody is left half created.
+      expect((await call('coordinacion', 'POST', `/api/users/${juli}/roles`, { role: 'fiscal', table: 'no-existe' })).statusCode).toBe(400);
+      expect((await call('coordinacion', 'POST', `/api/users/${juli}/roles`, { role: 'fiscal', table, days: ['2027-02-31'] })).statusCode).toBe(400);
+      expect((await call('coordinacion', 'POST', '/api/users/nadie/roles', { role: 'fiscal', table })).statusCode).toBe(404);
+      const before = (await pool.query('SELECT count(*)::int AS n FROM users')).rows[0].n;
+      expect((await call('coordinacion', 'POST', '/api/users', { name: 'Nadie', role: 'fiscal', table: 'no-existe' })).statusCode).toBe(400);
+      expect((await pool.query('SELECT count(*)::int AS n FROM users')).rows[0].n).toBe(before);
+    });
+
     it('someone on the team changes name and table, loses a task, and a lost phone stops working while they stay', async () => {
       const me = async () => (await call('fiscal', 'GET', '/api/me')).json();
       const { user } = await me();
@@ -1130,6 +1200,45 @@ describe.skipIf(!url)('against a real Postgres', () => {
       await pool.query(`UPDATE settings SET value = '"estudiantil"' WHERE key = 'security_profile'`);
       expect(await fileProblems()).toEqual([{ where: 'file', problem: 'external_ai' }]);
       expect((await upload(id, writePadron({ electors: people(2) as never }), true)).json().problems).toEqual([]);
+    });
+  });
+
+  describe('what the server reads', () => {
+    it('a body is read only up to what its route takes, and a big one only once who sends it is known', async () => {
+      const big = Buffer.alloc(1024 * 1024);
+      const anyone = await app.inject({ method: 'POST', url: '/api/auth/redeem', headers: { 'content-type': 'application/octet-stream' }, payload: big });
+      expect(anyone.statusCode).toBe(413);
+      const roll = await app.inject({ method: 'POST', url: `/api/elections/${demo.election}/roll`, headers: { 'content-type': 'application/octet-stream' }, payload: big });
+      expect(roll.statusCode).toBe(401);
+      const photo = await app.inject({ method: 'PUT', url: `/api/tables/${table}/photos/${'0'.repeat(64)}`, headers: { 'content-type': 'image/jpeg' }, payload: big });
+      expect(photo.statusCode).toBe(401);
+    });
+
+    it('what Postgres cannot read is a wrong request, and a day that does not exist never gets written', async () => {
+      expect((await call('jefe', 'GET', '/api/district/no-es-un-id')).statusCode).toBe(400);
+      expect((await call('coordinacion', 'PUT', '/api/users/no-es-un-id', { name: 'Otro' })).statusCode).toBe(404);
+      expect((await call('coordinacion', 'POST', '/api/elections', { name: 'Mal', kind: 'estudiantil', days: ['2027-02-31'] })).statusCode).toBe(400);
+      expect((await call('coordinacion', 'POST', '/api/elections', { name: 'Mal', kind: 'estudiantil', days: ['2027-05-01'], categories: [null] })).statusCode).toBe(400);
+      const { id } = (await call('coordinacion', 'POST', '/api/elections', { name: 'Bien', kind: 'estudiantil', days: ['2027-05-01'] })).json();
+      // A wrong part stops the whole change: the deadline that came with it is not written either.
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { purgeBy: '2027-06-01', days: ['2027-02-30'] })).statusCode).toBe(400);
+      expect((await pool.query('SELECT purge_by FROM elections WHERE id = $1', [id])).rows[0].purge_by).toBeNull();
+      expect((await call('coordinacion', 'PUT', `/api/elections/${id}`, { categories: [{ id: 'c', name: 'Consejo', lists: [{ id: 'l' }] }] })).statusCode).toBe(400);
+      // An operation with a day that does not exist goes back as rejected, and the rest of the batch gets in.
+      const wrong = { ...operation(table, 1), device_time: '2027-02-31T10:00:00.000Z' };
+      const answer = (await push('fiscal', table, [wrong, operation(table, 2)])).json();
+      expect(answer.rejected.map((item: { id: string }) => item.id)).toEqual([wrong.id]);
+      expect(answer.acked).toHaveLength(1);
+    });
+
+    it('a lost phone takes with it the links not used yet, and a chief finds in the log only people of their tables', async () => {
+      const { user } = (await call('fiscal', 'GET', '/api/me')).json();
+      const { invitation } = (await call('coordinacion', 'POST', `/api/users/${user.id}/invitation`)).json();
+      expect((await call('coordinacion', 'POST', `/api/users/${user.id}/lost-phone`)).statusCode).toBe(200);
+      expect((await app.inject({ method: 'POST', url: '/api/auth/redeem', payload: { token: invitation } })).statusCode).toBe(410);
+      expect((await call('jefe', 'GET', `/api/audit?q=${encodeURIComponent('%%%')}`)).json().people).toEqual([]);
+      const everyone = (await call('jefe', 'GET', `/api/audit?q=${encodeURIComponent('___')}`)).json();
+      expect(everyone.people ?? []).toEqual([]);
     });
   });
 
