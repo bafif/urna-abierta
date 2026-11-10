@@ -79,7 +79,7 @@ async function installOn(m: { target: SshTarget; name: string }, secrets: Secret
   podman('cp', imageFile, `${m.name}:${inside}`);
   podman('exec', m.name, 'chmod', '644', inside);
   const script = renderScript({
-    secrets, site: 'https://localhost', cert: 'internal', theme, images, imagesTar: inside,
+    secrets, site: 'https://localhost', cert: 'internal', theme, images, imagesTar: inside, language: 'es',
     extraEnv: ['URNA_NETWORK=host', 'URNA_PORTS='],
   }).replace('URNA_EXTRA_ENV=', ['URNA_NO_SWAP=si', ...variables, 'URNA_EXTRA_ENV='].join('\n'));
   const lines: string[] = [];

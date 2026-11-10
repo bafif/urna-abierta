@@ -83,6 +83,8 @@ export interface ScriptSettings {
   extraEnv?: string[];
   /** The person came in with a password the first time: from then on the server takes only keys. */
   keysOnly?: boolean;
+  /** The language of the installer's screens: «urna» answers in it on the server. Without it, it follows the server's system. */
+  language?: 'es' | 'en';
 }
 
 const SAFE_VALUE = /^[\w@%+=:,./-]*$/;
@@ -119,7 +121,7 @@ export function withoutComments(script: string): string {
 }
 
 /** One block that does the whole installation: what runs over SSH, and what gets pasted when creating a server. */
-export function renderScript({ secrets, site, cert, theme, images: chosen = images(), imagesTar, extraEnv = [], keysOnly = false }: ScriptSettings): string {
+export function renderScript({ secrets, site, cert, theme, images: chosen = images(), imagesTar, extraEnv = [], keysOnly = false, language }: ScriptSettings): string {
   if (extraEnv.some((line) => !/^[A-Z_]+=/.test(line) || !SAFE_VALUE.test(line.slice(line.indexOf('=') + 1)))) throw new Error('unsafe extra setting');
   // The recovery key goes as it is: the server encrypts each backup with it. The servers' guide says what that means.
   const settings = [
@@ -134,6 +136,7 @@ export function renderScript({ secrets, site, cert, theme, images: chosen = imag
     ...(imagesTar ? [assign('URNA_IMAGES_TAR', imagesTar)] : []),
     ...(secrets.adminKey ? [assign('URNA_ADMIN_KEY', publicKeyBody(secrets.adminKey.public))] : []),
     ...(keysOnly && secrets.adminKey ? [assign('URNA_SOLO_LLAVES', 'si')] : []),
+    ...(language === 'es' || language === 'en' ? [assign('URNA_IDIOMA', language)] : []),
     ...(extraEnv.length ? [`URNA_EXTRA_ENV='${extraEnv.join('\n')}'`] : []),
   ];
   // The `urna` script does not go here: it comes in the server image, so that each version brings its own.

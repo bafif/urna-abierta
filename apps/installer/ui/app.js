@@ -295,7 +295,7 @@
       text: () => ({ kind: 'text' }),
       local: () => ({ kind: 'local', phones: state.phones === 'phones' }),
     }[state.where]();
-    return { where, theme: state.theme, vision: state.vision, ...(state.custom ? { customTheme: state.custom } : {}) };
+    return { where, theme: state.theme, vision: state.vision, language: state.language, ...(state.custom ? { customTheme: state.custom } : {}) };
   }
 
   async function follow() {

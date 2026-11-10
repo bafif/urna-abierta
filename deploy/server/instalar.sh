@@ -75,6 +75,14 @@ POSTGRES_PASSWORD=$(kept POSTGRES_PASSWORD)
 URNA_FIELD_KEY=$(kept URNA_FIELD_KEY)
 [ -n "$URNA_FIELD_KEY" ] || URNA_FIELD_KEY=$(openssl rand -hex 32)
 
+# The language «urna» answers in: the one of the installer, es or en. Empty, it follows the system's.
+case "${URNA_IDIOMA:-}" in es | en) ;; *) URNA_IDIOMA='' ;; esac
+if [ "$URNA_IDIOMA" = es ]; then
+  backup_unit='Copia de seguridad de Urna Abierta' backup_timer='Una copia cada 6 horas'
+else
+  backup_unit='Urna Abierta backup' backup_timer='A backup every 6 hours'
+fi
+
 umask 077
 cat >"$home/.env" <<EOF
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -87,7 +95,10 @@ URNA_CERT=$URNA_CERT
 URNA_IMAGE_DB=$URNA_IMAGE_DB
 URNA_IMAGE_SERVER=$URNA_IMAGE_SERVER
 URNA_IMAGE_WEB=$URNA_IMAGE_WEB
+# Idioma de «urna»: es o en; vacío, el del sistema. Language of «urna»: es or en; empty, the system's.
+URNA_IDIOMA=$URNA_IDIOMA
 # Fotos en un almacenamiento S3: si quedan vacías, van al disco. Después de cambiarlas, «urna reiniciar».
+# Photos in S3 storage: left empty, they go to disk. After changing them, «urna reiniciar».
 URNA_S3_ENDPOINT=${URNA_S3_ENDPOINT:-}
 URNA_S3_BUCKET=${URNA_S3_BUCKET:-}
 URNA_S3_REGION=${URNA_S3_REGION:-}
@@ -117,7 +128,7 @@ WantedBy=default.target
 EOF
 cat >"$home/.config/systemd/user/urna-copia.service" <<EOF
 [Unit]
-Description=Copia de seguridad de Urna Abierta
+Description=$backup_unit
 
 [Service]
 Type=oneshot
@@ -126,7 +137,7 @@ ExecStart=$home/urna copia
 EOF
 cat >"$home/.config/systemd/user/urna-copia.timer" <<EOF
 [Unit]
-Description=Una copia cada 6 horas
+Description=$backup_timer
 
 [Timer]
 OnCalendar=00/6:30

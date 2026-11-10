@@ -53,7 +53,8 @@ writeFileSync(join(cloudBuild, 'Containerfile'), [
 ].join('\n'));
 podman('build', '-q', '-t', local.cloud, cloudBuild);
 
-const result = await install({ where: { kind: 'text' }, theme: THEME, vision: 'later' }, () => undefined);
+// In Spanish, as the checks below read what «urna» says.
+const result = await install({ where: { kind: 'text' }, theme: THEME, vision: 'later', language: 'es' }, () => undefined);
 const block = result.text ?? '';
 record('el instalador da un bloque, sin dirección todavía, y su llave', block.startsWith('#!/bin/sh\n') && result.address === '' && Boolean(result.recoveryKey), { bytes: block.length });
 

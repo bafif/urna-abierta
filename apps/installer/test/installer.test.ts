@@ -23,6 +23,13 @@ describe('the script that installs a server', () => {
     expect(Buffer.byteLength(script)).toBeLessThan(16 * 1024);
   });
 
+  it('tells the server the language of the screens, which its commands answer in', () => {
+    expect(renderScript({ ...settings, language: 'en' }).split('\n')).toContain('URNA_IDIOMA=en');
+    expect(renderScript({ ...settings, language: 'es' }).split('\n')).toContain('URNA_IDIOMA=es');
+    // Without one, the server follows its own system.
+    expect(renderScript(settings).split('\n').filter((line) => line.startsWith('URNA_IDIOMA=') && line !== 'URNA_IDIOMA=$URNA_IDIOMA')).toEqual([]);
+  });
+
   it('takes the commands of the server from the server image, where its build puts them', () => {
     const script = renderScript(settings);
     expect(script).not.toContain('URNA_SCRIPT');

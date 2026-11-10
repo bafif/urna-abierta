@@ -22,6 +22,8 @@ export interface InstallRequest {
   vision: 'local' | 'later';
   /** A theme from a file of the person's. It travels on its own: it may not fit in the block that installs. */
   customTheme?: object;
+  /** The language of the screens, which the server's commands answer in. */
+  language?: 'es' | 'en';
 }
 
 export interface InstallResult {
@@ -92,10 +94,10 @@ export class CloudFailure extends Error {
 }
 
 /** Creates the server, and if any step fails, deletes what was created, so that trying again starts clean. */
-export async function createInCloud(cloud: Cloud, secrets: Secrets, theme: string, log: (line: string) => void): Promise<string> {
+export async function createInCloud(cloud: Cloud, secrets: Secrets, theme: string, log: (line: string) => void, language?: 'es' | 'en'): Promise<string> {
   try {
     const place = siteFor(await cloud.reserveAddress(log));
-    await cloud.createServer(renderScript({ secrets, site: place.site, cert: place.cert, theme }), log);
+    await cloud.createServer(renderScript({ secrets, site: place.site, cert: place.cert, theme, language }), log);
     return place.url;
   } catch (error) {
     throw new CloudFailure((error as Error).message, await cloud.cleanUp(log));
@@ -112,6 +114,7 @@ export async function install(request: InstallRequest, log: (line: string) => vo
   // Only a preference: if it cannot be kept, it is asked again when reading the first roll.
   remember({ vision: request.vision });
   const { where, theme } = request;
+  const language = request.language === 'es' || request.language === 'en' ? request.language : undefined;
 
   if (where.kind === 'local') {
     const { secrets, url, phonesUrl } = await startLocal(theme, log, where.phones === true);
@@ -128,7 +131,7 @@ export async function install(request: InstallRequest, log: (line: string) => vo
     ...(fingerprint ? { fingerprint } : {}),
   });
   if (where.kind === 'text') {
-    const text = renderScript({ secrets, site: 'auto', cert: 'ip', theme });
+    const text = renderScript({ secrets, site: 'auto', cert: 'ip', theme, language });
     return { address: '', recoveryKey: secrets.recoveryKey, setupCode: secrets.setupCode, setupLink: '', text, access: access('') };
   }
 
@@ -138,7 +141,7 @@ export async function install(request: InstallRequest, log: (line: string) => vo
     const place = siteFor(where.address);
     url = place.url;
     // Whoever came in with a password leaves with a key: the server stops taking passwords.
-    const script = renderScript({ secrets, site: place.site, cert: place.cert, theme, keysOnly: Boolean(where.target.password) });
+    const script = renderScript({ secrets, site: place.site, cert: place.cert, theme, keysOnly: Boolean(where.target.password), language });
     log('connecting');
     await runScript(where.target, script, (line) => {
       if (line.startsWith('urna-abierta: ')) log(`server:${line.slice('urna-abierta: '.length)}`);
@@ -147,7 +150,7 @@ export async function install(request: InstallRequest, log: (line: string) => vo
       log(`fingerprint:${seen}`);
     });
   } else {
-    url = await createInCloud(cloudFor(where), secrets, theme, log);
+    url = await createInCloud(cloudFor(where), secrets, theme, log, language);
   }
   const healthy = await waitForHealth(url, log);
   if (!healthy) log('slow');
