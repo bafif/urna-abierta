@@ -30,7 +30,7 @@
       await session.api('/auth/second-factor/verify', { method: 'POST', body: { code } });
       await session.refresh();
     } catch (error) {
-      problem = error instanceof ApiError && error.status === 429 ? t('welcome.tooMany') : t('second.wrong');
+      problem = error instanceof ApiError && error.status === 429 ? t('welcome.tooMany') : error instanceof ApiError && error.code === 'code_already_used' ? t('second.used') : t('second.wrong');
       code = '';
     }
   }

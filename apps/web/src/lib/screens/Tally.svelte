@@ -86,6 +86,9 @@
         <p class="resultado mal" data-testid="tally-differs">{t('tally.review.differ', { envelopes, votes: totalVotes })}</p>
       {/if}
     {/if}
+    {#if app.electors.length > 0 && totalVotes > app.electors.length}
+      <p class="resultado mal" data-testid="tally-over-roll">{t('tally.review.overRoll', { votes: totalVotes, people: app.electors.length })}</p>
+    {/if}
     {#if correcting}<p class="aviso-suave">{chief ? t('correct.tell', { name: chief }) : t('correct.tell.noName')}</p>{/if}
     {#if failed}<p class="problema" role="alert">{t('save.failedShort')}</p>{/if}
     {#snippet pie()}

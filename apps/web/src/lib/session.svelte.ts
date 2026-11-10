@@ -194,6 +194,16 @@ class Session {
     return null;
   }
 
+  /** Logs this device out on the server too, so that its credential is worth nothing even if someone copied it. */
+  async logout(): Promise<void> {
+    try {
+      await this.api('/auth/logout', { method: 'POST' });
+    } catch {
+      // Without signal it is forgotten here anyway; it stops working after some time unused.
+    }
+    this.forget();
+  }
+
   /** Forgets this device's access, so that another invitation can be used. Saved marks stay. */
   forget(): void {
     localStorage.removeItem(TOKEN_KEY);

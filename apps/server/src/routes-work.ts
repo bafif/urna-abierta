@@ -14,6 +14,18 @@ const LATE_TYPES = ['envelopes.counted', 'tally.submitted', 'tally.photo'];
 /** What only looked at something, besides every «…viewed». Everything else changed something. */
 const SEEN_ACTIONS = ['roll.downloaded', 'roll.review_opened', 'person.exported', 'person.searched', 'results.downloaded', 'semaphore.searched', 'semaphore.sensitive_viewed', 'backup.downloaded'];
 const OPERATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Far more than any traffic light needs, and what bounds reordering them. */
+const MAX_CATEGORIES = 100;
+
+/** When and how a consent was given or taken back: a day that exists and is not to come, and a few words. */
+function consentOf(body: { date?: unknown; means?: unknown } | undefined): { date: string; means: string } | null {
+  const { date, means } = body ?? {};
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) return null;
+  // A day ahead at most, for whoever is already in tomorrow somewhere else.
+  if (new Date(`${date}T00:00:00Z`).getTime() > clock.now().getTime() + 36 * 3_600_000) return null;
+  if (typeof means !== 'string' || !means.trim() || means.length > 200 || /[\u0000-\u001f\u007f]/.test(means)) return null;
+  return { date, means: means.trim() };
+}
 
 type Results = Record<string, number>;
 
@@ -145,6 +157,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       ),
       pool.query(`SELECT table_id, type, payload, received_at FROM operations WHERE table_id = ANY($1) AND type IN ('envelopes.counted', 'tally.submitted', 'tally.photo') AND NOT quarantined ORDER BY seq`, [scope]),
     ]);
+    // The lists of each category, as the election has them now: votes for anything else add up to nothing in the results.
+    const election = await pool.query('SELECT categories FROM elections WHERE id = $1', [request.params.id]);
+    const listsOf = new Map<string, Set<string>>(((election.rows[0]?.categories ?? []) as { id: string; lists?: { id: string }[] }[]).map((category) => [category.id, new Set((category.lists ?? []).map((list) => list.id))]));
     const decided = await pool.query(
       `SELECT d.table_id, d.category, d.decided_at, o.payload->'results' AS results FROM tally_decisions d JOIN operations o ON o.id = d.operation_id WHERE d.table_id = ANY($1)`,
       [scope],
@@ -154,8 +169,12 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
       const decision = decisionOf.get(`${table}:${category}`);
       return Boolean(decision) && !correctedSince(decision, counts.rows.filter((row) => row.table_id === table && row.type === 'tally.submitted' && row.payload.category === category));
     };
-    const needsReview = (table: string) => {
+    const needsReview = (table: string, total: number) => {
       const own = counts.rows.filter((row) => row.table_id === table);
+      // What each category counts for now: the version the chief chose, or else the latest one.
+      const standing = new Map<string, Record<string, number>>();
+      for (const { type, payload } of own) if (type === 'tally.submitted') standing.set(payload.category, payload.results);
+      for (const category of standing.keys()) if (settled(table, category)) standing.set(category, decisionOf.get(`${table}:${category}`).results);
       const envelopes = own.filter((row) => row.type === 'envelopes.counted').at(-1)?.payload;
       const versions = new Map<string, Set<string>>();
       for (const { type, payload } of own) {
@@ -171,12 +190,16 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         photo: own.some((row) => row.type === 'tally.photo'),
         envelopesDiffer: Boolean(envelopes && envelopes.envelopes !== envelopes.marked),
         talliesDiffer: [...versions].some(([category, distinct]) => distinct.size > 1 && !settled(table, category)),
+        // More votes than people in its roll is a mistake somewhere: nothing is refused, but someone has to look.
+        tallyOverRoll: total > 0 && [...standing.values()].some((results) => Object.values(results).reduce((sum, votes) => sum + Number(votes), 0) > total),
+        // A phone that kept categories or lists the election no longer has: what it sent for them is not counted anywhere.
+        tallyUnknown: [...standing].some(([category, results]) => !listsOf.has(category) || Object.keys(results).some((list) => !listsOf.get(category)!.has(list))),
       };
     };
     const sizeOf = new Map(sizes.rows.map((row) => [row.table_id, row.total]));
     const value = {
       tables: tables.rows.map((t) => ({
-        id: t.id, name: t.name, place: t.place, total: sizeOf.get(t.id) ?? 0, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal, ...needsReview(t.id),
+        id: t.id, name: t.name, place: t.place, total: sizeOf.get(t.id) ?? 0, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal, ...needsReview(t.id, sizeOf.get(t.id) ?? 0),
         incidents: incidents.rows.filter((i) => i.table_id === t.id).map((i) => ({ id: i.id, at: i.device_time, kind: i.payload.kind })),
       })),
     };
@@ -494,7 +517,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   /** The order of the list, as the person leaves it. Categories they cannot see keep their place. */
   app.put<{ Body: { ids?: unknown } }>('/api/semaphore/order', { preHandler: manageLight }, async (request, reply) => {
     const { ids } = request.body ?? {};
-    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !OPERATION_ID.test(id))) return reply.code(400).send({ error: 'invalid_request' });
+    if (!Array.isArray(ids) || ids.length > MAX_CATEGORIES || new Set(ids).size !== ids.length || ids.some((id) => typeof id !== 'string' || !OPERATION_ID.test(id))) return reply.code(400).send({ error: 'invalid_request' });
     const positions = (await pool.query('SELECT id, position FROM semaphore_categories WHERE id = ANY($1) ORDER BY position', [ids])).rows.map((row) => row.position);
     for (const [index, id] of ids.entries()) await pool.query('UPDATE semaphore_categories SET position = $2 WHERE id = $1', [id, positions[index] ?? index]);
     return { ok: true };
@@ -517,6 +540,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const { name, color, sensitive } = request.body ?? {};
     if (typeof name !== 'string' || !name.trim() || name.length > 60) return reply.code(400).send({ error: 'invalid_name' });
     if (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color)) return reply.code(400).send({ error: 'invalid_color' });
+    if ((await pool.query('SELECT count(*)::int AS n FROM semaphore_categories')).rows[0].n >= MAX_CATEGORIES) return reply.code(409).send({ error: 'too_many_categories', max: MAX_CATEGORIES });
     const id = randomUUID();
     await pool.query('INSERT INTO semaphore_categories (id, name, color, sensitive, position) VALUES ($1, $2, $3, $4, (SELECT count(*) FROM semaphore_categories))', [id, name.trim(), color, sensitive === true]);
     await audit(pool, request.actor, 'semaphore.category_created', id);
@@ -688,9 +712,9 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   app.put<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent', { preHandler: managePersons }, async (request, reply) => {
-    const { date, means } = request.body ?? {};
-    if (typeof date !== 'string' || typeof means !== 'string') return reply.code(400).send({ error: 'invalid_request' });
-    const saved = await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2 AND erased_at IS NULL RETURNING ref', [request.params.election, request.params.id, JSON.stringify({ date, means })]);
+    const consent = consentOf(request.body);
+    if (!consent) return reply.code(400).send({ error: 'invalid_request' });
+    const saved = await pool.query('UPDATE electors SET consent = $3 WHERE election_id = $1 AND id = $2 AND erased_at IS NULL RETURNING ref', [request.params.election, request.params.id, JSON.stringify(consent)]);
     if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
     await audit(pool, request.actor, 'person.consent', saved.rows[0].ref);
     return { ok: true };
@@ -698,12 +722,13 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   /** Art. 6 and 27: they took their consent back. When and how is kept, and their mark in the traffic light goes now. */
   app.post<{ Params: { election: string; id: string }; Body: { date?: unknown; means?: unknown } }>('/api/persons/:election/:id/consent/withdraw', { preHandler: managePersons }, async (request, reply) => {
-    const { date, means } = request.body ?? {};
-    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || typeof means !== 'string' || !means.trim() || means.length > 200) return reply.code(400).send({ error: 'invalid_request' });
+    const consent = consentOf(request.body);
+    if (!consent) return reply.code(400).send({ error: 'invalid_request' });
+    const { date, means } = consent;
     const saved = await pool.query(
       `UPDATE electors SET consent = consent || jsonb_build_object('withdrawn', jsonb_build_object('date', $3::text, 'means', $4::text))
        WHERE election_id = $1 AND id = $2 AND erased_at IS NULL AND consent IS NOT NULL RETURNING ref`,
-      [request.params.election, request.params.id, date, means.trim()],
+      [request.params.election, request.params.id, date, means],
     );
     if (!saved.rows[0]) return reply.code(404).send({ error: 'not_found' });
     await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [request.params.election, request.params.id]);

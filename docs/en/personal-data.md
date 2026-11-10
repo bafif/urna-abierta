@@ -192,9 +192,12 @@ already had.
 ## Security of the installation
 
 - **Each person gets in with their own single-use link,** which expires after 14 days. There are no passwords to guess or share.
+- **A phone or computer nobody used for 90 days stops getting in,** and needs another invitation. Whoever used a shared computer leaves
+  with **Settings**, **Log out on this device**: from then on, that access is worth nothing even if someone copied it.
 - **The security level** is chosen in **More**, **Security**. In a municipal, provincial or national election, everyone except poll
   watchers confirms with a code from an app such as Google Authenticator or Aegis, and the poll watcher sees only the last 3 digits of
-  each document. While an election of that kind is open, the server applies at least that level and does not let anyone lower it.
+  each document. While an election of that kind is open, the server applies at least that level and does not let anyone lower it. Each
+  code works once: to confirm another device, wait for the next one.
 - **The log cannot be changed from the app,** and the database refuses to edit, delete or empty it. It records downloads of the roll, of
   people's data and of backups, and who searched for or looked at whom, by a random reference, without names or documents.
 - **Backups are encrypted,** and they do not open without the recovery key.

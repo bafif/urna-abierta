@@ -26,7 +26,9 @@ A theme is data: colors for each mode, fonts, shapes and a few recipes. It has n
      before moving on, and it is what your whole party sees when they get in.
    - **With the app already installed:** go to **More**, **Settings**, **Add your own theme**, and choose that file.
 
-Own themes do not come with the app or the installer: they only travel from your computer to your server. From then on, anyone in your party can choose it. With the same `id`, it replaces the previous one.
+Own themes do not come with the app or the installer: they only travel from your computer to your server. From then on, anyone in your party can choose it. With the same `id`, it replaces the previous one. A party can have up to 12 themes
+of its own. Leaving the fonts aside, each theme weighs at most 256 KB, logo included, because it goes to every phone each time the app
+opens; the `idea` is a text of up to 600 letters.
 
 Each phone downloads the fonts once and keeps them, so the theme looks the same with no signal. If you include fonts, make sure their license lets
 you distribute them: they will go to your team's phones.

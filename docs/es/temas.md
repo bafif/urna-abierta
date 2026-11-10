@@ -26,7 +26,9 @@ Un tema son datos: colores para cada modo, letras, formas y unas pocas recetas. 
      de seguir, y es el que va a ver todo tu partido al entrar.
    - **Con la app ya instalada:** entrá a **Más cosas**, **Ajustes**, **Agregar un tema propio**, y elegí ese archivo.
 
-Los temas propios no vienen con la app ni con el instalador: viajan solo de tu computadora a tu servidor. A partir de ahí, cualquiera de tu partido lo puede elegir. Si usás el mismo `id`, reemplaza al anterior.
+Los temas propios no vienen con la app ni con el instalador: viajan solo de tu computadora a tu servidor. A partir de ahí, cualquiera de tu partido lo puede elegir. Si usás el mismo `id`, reemplaza al anterior. Un partido puede tener hasta 12 temas
+propios. Sin contar las letras, cada tema pesa como mucho 256 KB, logo incluido, porque va a cada teléfono cada vez que abre la app; la
+`idea` es un texto de hasta 600 letras.
 
 Cada teléfono baja las letras una vez y las guarda, así que el tema se ve igual sin señal. Si incluís letras, asegurate de que su licencia te
 deje distribuirlas: van a ir a los teléfonos de tu equipo.

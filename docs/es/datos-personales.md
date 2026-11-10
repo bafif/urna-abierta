@@ -190,9 +190,12 @@ tenías.
 
 - **Cada persona entra con un link propio, de un solo uso,** que vence a los 14 días. No hay contraseñas que se puedan adivinar o
   compartir.
+- **Un teléfono o una computadora que nadie usó en 90 días deja de entrar,** y hace falta otra invitación. Quien usó una computadora
+  compartida sale con **Ajustes**, **Salir en este dispositivo**: desde ese momento, ese acceso no sirve aunque alguien lo haya copiado.
 - **El nivel de seguridad** se elige en **Más cosas**, **Seguridad**. En una elección municipal, provincial o nacional, todos menos los
   fiscales confirman con un código de una app como Google Authenticator o Aegis, y el fiscal ve solo los últimos 3 números de cada
-  documento. Mientras una elección de ese tipo esté abierta, el servidor aplica al menos ese nivel y no deja bajarlo.
+  documento. Mientras una elección de ese tipo esté abierta, el servidor aplica al menos ese nivel y no deja bajarlo. Cada código sirve
+  una sola vez: para confirmar otro dispositivo, esperá el siguiente.
 - **El registro no se puede cambiar desde la app,** y la base rechaza editarlo, borrarlo o vaciarlo. Anota descargas del padrón, de datos
   de personas y de copias de seguridad, y quién buscó o miró a quién, por una referencia al azar, sin nombres ni documentos.
 - **Las copias salen cifradas,** y sin la llave de recuperación no se abren.

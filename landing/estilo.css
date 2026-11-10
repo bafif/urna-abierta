@@ -179,10 +179,11 @@ html[data-material="vidrio"] .boton.principal { box-shadow: inset 0 1px 0 rgba(2
 
 /* ---------- Second pass: closer to how the app looks with each theme ---------- */
 
-/* The cover: Aula keeps the original green one; every other theme shows its own panel and phones. */
+/* The cover: every theme, Aula too, shows its own panel and its phones in that theme. The original one, with three
+   themes at once, is only for a page that runs no scripts and so has no theme. */
 .portada-viva { display: none; }
-html[data-tema]:not([data-tema="aula"]) .portada-viva { display: grid; }
-html[data-tema]:not([data-tema="aula"]) .portada-original { display: none; }
+html[data-tema] .portada-viva { display: grid; }
+html[data-tema] .portada-original { display: none; }
 
 /* Feria: the top of the page and every title are full-width colour bands with their shapes, as the app's headers. */
 html[data-cabecera="banda"] header.arriba, html[data-cabecera="banda"] .tapa { background: var(--banda-1); color: var(--sobre-banda-1); box-shadow: 0 0 0 100vmax var(--banda-1); clip-path: inset(0 -100vmax); }
