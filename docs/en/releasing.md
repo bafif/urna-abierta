@@ -8,7 +8,8 @@ A version is released with a tag that starts with `v`, like `v0.1.0`. GitHub Act
 1. **The tests.** Those of every change, plus the installation over SSH on two Ubuntu machines. If any fails, nothing is built.
 2. **The images** of the server and the app, for x86 and ARM, with the version's tag and their attestation. `latest` is not touched
    yet.
-3. **A draft release.**
+3. **A draft release,** a single one for both languages. Its notes say what to download, in Spanish and English
+   (`.github/release-notes.md`), above the list of changes GitHub writes.
 4. **The installers** for Windows, macOS (Apple and Intel) and Linux. Each one is unpacked and started as a person would, and it has to
    show its screens and say its version before it is uploaded to the draft, with its SHA-256 and its attestation.
 5. **Publishing.** First it checks that the images can be pulled without an account, for both architectures, as every server pulls

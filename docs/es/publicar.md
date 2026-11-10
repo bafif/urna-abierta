@@ -8,7 +8,8 @@ Una versión se publica con una etiqueta que empieza con `v`, como `v0.1.0`. Tod
 1. **Las pruebas.** Las de cada cambio, más la instalación por SSH en dos máquinas Ubuntu. Si alguna falla, no se arma nada.
 2. **Las imágenes** del servidor y de la app, para x86 y ARM, con la etiqueta de la versión y su atestación. Todavía no se toca
    `latest`.
-3. **Un release en borrador.**
+3. **Un release en borrador,** uno solo para los dos idiomas. Sus notas dicen qué bajar, en español y en inglés
+   (`.github/release-notes.md`), arriba de la lista de cambios que arma GitHub.
 4. **Los instaladores** de Windows, macOS (Apple e Intel) y Linux. Cada uno se desempaca y se arranca como lo haría una persona, y
    tiene que mostrar sus pantallas y decir su versión antes de subirse al borrador, con su SHA-256 y su atestación.
 5. **La publicación.** Antes, comprueba que las imágenes se puedan bajar sin cuenta, para las dos arquitecturas, como las baja cada

@@ -53,11 +53,15 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
+  # One release for both languages: what to download, in Spanish and in English, above the changes GitHub lists.
   draft:
     needs: images
     runs-on: ubuntu-24.04
     steps:
-      - run: gh release create "$GITHUB_REF_NAME" --draft --generate-notes
+      - uses: actions/checkout@v4
+      - run: |
+          sed -e "s/{tag}/$GITHUB_REF_NAME/g" -e "s#{repo}#$GITHUB_REPOSITORY#g" .github/release-notes.md > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" --draft --generate-notes --notes-file "$RUNNER_TEMP/notes.md"
 
   installer:
     needs: draft

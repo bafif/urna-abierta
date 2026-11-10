@@ -59,3 +59,20 @@ describe('what GitHub runs', () => {
     }
   });
 });
+
+describe('what a release says', () => {
+  const notes = read('.github/release-notes.md');
+
+  it('says what to download in both languages, above the changes GitHub lists', () => {
+    expect(read('.github/workflows/release.yml')).toMatch(/gh release create "\$GITHUB_REF_NAME" --draft --generate-notes --notes-file /);
+    expect(notes).toContain('en español y en inglés');
+    expect(notes).toContain('in Spanish and English');
+  });
+
+  it('points only to guides that exist, in the language of each part', () => {
+    const guides = [...notes.matchAll(/blob\/\{tag\}\/(docs\/(es|en)\/[\w-]+\.md)/g)].map((match) => match[1]!);
+    expect(guides.filter((path) => path.startsWith('docs/es/')).length).toBeGreaterThan(0);
+    expect(guides.filter((path) => path.startsWith('docs/en/')).length).toBeGreaterThan(0);
+    for (const path of guides) expect(() => read(path), path).not.toThrow();
+  });
+});
