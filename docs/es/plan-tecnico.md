@@ -1,6 +1,6 @@
 # Plan técnico
 
-[English](../en/technical-plan.md)
+[English](../en/technical-plan.md) · [Volver al README](../../README.md)
 
 ## Stack
 
@@ -29,7 +29,8 @@ contenedores y disco. La guía de instalación cubre tres opciones, en este orde
 2. **AWS, plan gratuito:** para una sola elección, porque la cuenta se cierra a los 6 meses o al agotar los créditos.
 3. **Google Cloud Free Tier:** cobra la IPv4 (unos USD 3,65 por mes) y solo tiene regiones en Estados Unidos.
 
-Estos planes cambian seguido. Cada guía lleva la fecha en que se verificó y enlaces a las páginas oficiales.
+Estos planes cambian seguido: la [guía de instalación](instalacion.md#qué-servidor-elegir) dice cuándo se verificaron y
+enlaza a las páginas oficiales.
 
 - **El mínimo es 1 GB de RAM con CPU compartida**, en `amd64` y `arm64`, con imágenes ya compiladas.
 - **Se entra por la IP, sin dominio.** Caddy saca un certificado de Let's Encrypt para la IP, que dura 6 días, y lo renueva
@@ -66,7 +67,8 @@ El instalador pide todo lo técnico una sola vez, para que la app arranque direc
    | Pegar un texto | Da un bloque para pegar en el campo de inicio al crear el servidor | Quien no quiere darle una credencial al instalador |
    | Probar en esta computadora | Levanta todo localmente | Quien quiere mirarla antes de decidir |
 
-2. **Cómo leer los padrones.** En esa computadora, que es lo recomendado; con su propia IA, pegando su clave; o después.
+2. **Cómo leer los padrones.** En esa computadora, que es lo recomendado; con su propia IA, pegando su clave (todavía no está disponible);
+   o después.
 3. **Cómo se ve.** Todos los temas, con vista previa en claro y en oscuro.
 4. **Instalar.** Termina con la dirección, una llave de recuperación para las copias de seguridad, y abriendo la app.
 
@@ -88,7 +90,8 @@ Descarto el certificado de código abierto de Certum, porque publica la ciudad y
 para personas solo está disponible en Estados Unidos y Canadá.
 
 Como un instalador sin firmar es fácil de falsificar, cada release publica su SHA-256 y una atestación de GitHub, que lo ata al
-repo y al proceso de compilación. La guía explica cada aviso, con capturas, para que nadie los salte a ciegas. Cómo se publica una versión, en [Publicar una versión](publicar.md).
+repo y al proceso de compilación. La guía explica cada aviso, para que nadie los salte a ciegas. Cómo se publica una versión, en
+[Publicar una versión](publicar.md).
 
 ## Diseño
 
@@ -116,8 +119,9 @@ el texto tiene que llegar a 7:1, pensando en la vista de la gente grande.
 | Tablero | Sin adornos: el número manda, como un tablero de resultados |
 | Mate | El más tranquilo: formas redondas, y quien ya votó se aparta con un tilde |
 
-Todos los temas vienen incluidos, con Aula preseleccionado. Se eligen con vista previa en dos momentos: en el instalador, el que va a ver todo el partido al
-entrar; y la primera vez que alguien abre la app, en el celular o en la computadora, donde puede cambiarlo para sí con un toque.
+Todos los temas vienen incluidos, con Aula preseleccionado. Se eligen con vista previa en dos momentos: en el instalador,
+el que va a ver todo el partido al entrar; y la primera vez que alguien abre la app, en el celular o en la computadora,
+donde puede cambiarlo para sí con un toque.
 
 Las fuentes viajan con la app, porque tiene que funcionar sin señal, y todas tienen licencia OFL.
 
@@ -146,8 +150,7 @@ abrirse, al preparar la mesa y cada 10 minutos, con una escritura aparte. Sin lu
 si una escritura falla igual, la persona vuelve a la lista y la app lo dice. Nunca muestra como guardado lo que no se guardó.
 
 El aviso urgente se guarda y sale primero, solo, sin esperar lo que haya en cola. Si en unos segundos no salió, ofrece
-llamar, WhatsApp y SMS, con la mesa y el tipo de problema, sin
-datos de votantes.
+llamar, WhatsApp y SMS, con la mesa y el tipo de problema, sin datos de votantes.
 
 ### Elecciones de varios días
 
@@ -176,11 +179,11 @@ puede ver.
   que el partido les sume a los fiscales, no llega a ese teléfono, y tampoco activa el segundo paso de alguien que nunca
   lo activó. Para eso hace falta un link de quien maneja el equipo.
 - Las categorías sensibles del semáforo llevan un permiso aparte y se cifran por campo. Ese permiso viene con la tarea del
-  semáforo, que también arma sus categorías: quien hace ese trabajo tiene que ver de qué se trata (11/11/2026). Ninguna otra
+  semáforo, que también arma sus categorías: quien hace ese trabajo tiene que ver de qué se trata. Ninguna otra
   tarea lo tiene, ni coordinación, que tampoco anota. Si el partido edita la tarea y se lo saca, quien no tiene ese permiso
   anota solo una categoría común, que queda debajo de la sensible: nunca la cambia ni la saca, y le contestan lo mismo
-  tenga la persona una sensible o no. El cifrado protege un volcado de la base que salga sin el `.env`. No protege una copia del disco entero ni los backups, que llevan la clave, ni a un
-  servidor en marcha.
+  tenga la persona una sensible o no. El cifrado protege un volcado de la base que salga sin el `.env`. No protege una
+  copia del disco entero ni los backups, que llevan la clave, ni a un servidor en marcha.
 - La búsqueda del semáforo encuentra un documento solo entero: con una parte se podría leer de a una cifra.
 - Al borrar a una persona o purgar una elección, también se reemplaza su id del padrón, que suele ser el DNI. El
   registro nombra a cada persona por una referencia al azar, nunca por ese id, y esa referencia también se cambia al
@@ -235,6 +238,9 @@ que prefiere es español, inglés si no. Siempre hay un selector a la vista, y l
    un servidor con HTTPS.
 5. **Simulacro** con personas reales y datos falsos, incluido restaurar un backup en otro servidor.
 6. **Landing:** un sitio estático, sin analíticas, formularios ni cookies, para publicitar la app y enlazar al instalador.
+
+Las etapas 1 a 4 y la 6 están hechas, salvo lo que todavía no se pudo probar, que está en
+[Lo que falta probar](resultados-etapa-4.md#lo-que-falta-probar). Falta la 5, el simulacro.
 
 ## Mediciones
 

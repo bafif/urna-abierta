@@ -1,6 +1,6 @@
 # Technical plan
 
-[Español](../es/plan-tecnico.md)
+[Español](../es/plan-tecnico.md) · [Back to the README](../../README.en.md)
 
 ## Stack
 
@@ -30,7 +30,8 @@ disk. The installation guide covers three options, in this order:
 3. **Google Cloud Free Tier:** it charges for the IPv4 address (about USD 3.65 a month) and only has regions in the
    United States.
 
-These plans change often. Each guide carries the date it was checked and links to the official pages.
+These plans change often: the [installation guide](installation.md#which-server-to-choose) says when they were checked and
+links to the official pages.
 
 - **The minimum is 1 GB of RAM with a shared CPU**, on `amd64` and `arm64`, with prebuilt images.
 - **People connect through the IP, with no domain.** Caddy gets a Let's Encrypt certificate for the IP, which lasts 6 days,
@@ -66,7 +67,8 @@ The installer asks for everything technical once, so that the app starts directl
    | Paste a text | Gives a block to paste into the startup field when creating the server | Whoever prefers not to give the installer a credential |
    | Try it on this computer | Runs everything locally | Whoever wants to look at it before deciding |
 
-2. **How to read rolls.** On that computer, which is recommended; with their own AI, pasting their key; or later.
+2. **How to read rolls.** On that computer, which is recommended; with their own AI, pasting their key (not available yet); or
+   later.
 3. **How it looks.** All the themes, with a preview in light and dark.
 4. **Install.** It ends with the address, a recovery key for the backups, and opening the app.
 
@@ -88,7 +90,8 @@ I rule out the Certum open source certificate, because it publishes the city and
 for individuals is only available in the United States and Canada.
 
 Since an unsigned installer is easy to fake, each release publishes its SHA-256 and a GitHub attestation, which ties it to the
-repository and the build process. The guide explains each warning, with screenshots, so that nobody skips them blindly. How a version is released, in [Releasing a version](releasing.md).
+repository and the build process. The guide explains each warning, so that nobody skips them blindly. How a version is released, in
+[Releasing a version](releasing.md).
 
 ## Design
 
@@ -116,8 +119,9 @@ thinking of older eyes.
 | Tablero | No ornaments: the number rules, like a results board |
 | Mate | The calmest: round shapes, and whoever voted moves aside with a tick |
 
-All the themes are included, with Aula preselected. They are chosen with a preview at two moments: in the installer, the one the whole party sees when
-joining; and the first time someone opens the app, on a phone or a computer, where they can change it for themselves with one tap.
+All the themes are included, with Aula preselected. They are chosen with a preview at two moments: in the installer, the
+one the whole party sees when joining; and the first time someone opens the app, on a phone or a computer, where they can
+change it for themselves with one tap.
 
 Fonts travel with the app, because it has to work without signal, and all of them are under the OFL.
 
@@ -147,8 +151,7 @@ until space is freed; if a write fails anyway, the person goes back to the list 
 what was not saved.
 
 The urgent alert is saved and goes out first, on its own, without waiting for what is queued. If it does not go out within a
-few seconds, it offers a call, WhatsApp and SMS, with the table and the type
-of problem, and no voter data.
+few seconds, it offers a call, WhatsApp and SMS, with the table and the type of problem, and no voter data.
 
 ### Elections lasting several days
 
@@ -179,11 +182,11 @@ fixed list; roles are editable combinations. The server checks every request and
   person gets later, or what the party adds to poll watchers, does not reach that phone, nor does it turn on the second
   step for someone who never did. That takes a link from whoever manages the team.
 - Sensitive categories of the traffic light need a separate permission and are encrypted per field. That permission comes
-  with the traffic light task, which also sets up its categories: whoever does that work has to see what it is about
-  (11/11/2026). No other task has it, not even coordination, which does not note either. If the party edits the task and
+  with the traffic light task, which also sets up its categories: whoever does that work has to see what it is about.
+  No other task has it, not even coordination, which does not note either. If the party edits the task and
   takes it away, whoever lacks that permission notes only a plain category, which stays under the sensitive one: they never
-  change or clear it, and get the same answer whether the person has one or not. The encryption protects a dump of the database taken without the `.env`. It does not protect a copy of the whole disk or the backups, which carry
-  the key, nor a running server.
+  change or clear it, and get the same answer whether the person has one or not. The encryption protects a dump of the database taken without the `.env`. It does
+  not protect a copy of the whole disk or the backups, which carry the key, nor a running server.
 - The traffic light search finds a document only whole: with part of one, it could be read a digit at a time.
 - Erasing a person or purging an election also replaces their roll id, which is often the DNI. The audit log names each
   person by a random reference, never by that id, and that reference is replaced too on erasing or purging: what the log
@@ -234,11 +237,14 @@ wins. The code is in English.
    view and basic permissions.
 3. **Full election day:** irregularities, daily envelope count, count with photo, chief panel, schedule, several days and
    practice mode.
-4. **Compliance:** traffic light, full permissions, audit, security profiles, legal tools, purge, installer, backups and
-   installer with its four options, backups and server guides. This is also when a real iPhone gets tested, because there is a
+4. **Compliance:** traffic light, full permissions, audit, security profiles, legal tools, purge, installer with its four
+   options, backups and server guides. This is also when a real iPhone gets tested, because there is a
    server with HTTPS by then.
-5. **Dry run** with real people and invented data, including restoring a backup on another server.
+5. **Drill** with real people and invented data, including restoring a backup on another server.
 6. **Landing page:** a static site, with no analytics, forms or cookies, to promote the app and link to the installer.
+
+Stages 1 to 4 and 6 are done, except what could not be tested yet, which is in
+[What is left to test](stage-4-results.md#what-is-left-to-test). Stage 5, the drill, is still to come.
 
 ## Measurements
 
