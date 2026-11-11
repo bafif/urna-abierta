@@ -81,9 +81,9 @@ Está en desarrollo y todavía no se usó en una elección real.
 
 - **Probado:** una elección entera, de punta a punta, en Chrome de Android y en WebKit contra el servidor real; un
   Android en un emulador, sin señal, reiniciado y sin espacio; el servidor con los límites de un plan gratuito; y la
-  instalación por SSH en Ubuntu, con copias, actualizaciones y restaurar en otro servidor.
+  instalación por SSH en Alpine y en Ubuntu, con copias, actualizaciones, restaurar en otro servidor y reiniciar.
 - **Sin probar todavía:** crear servidores en las nubes reales (se probó contra simulaciones de sus API), el
-  certificado para una IP, la instalación en otros Linux que no son Ubuntu, el instalador en Windows y macOS de verdad
+  certificado para una IP, el texto pegado de punta a punta en Alpine, la instalación en otros Linux, el instalador en Windows y macOS de verdad
   (en cada cambio se arma y se arranca en la integración continua), un iPhone real y el simulacro con personas. El
   detalle está en [Qué se probó, y qué falta](docs/es/resultados-etapa-4.md).
 

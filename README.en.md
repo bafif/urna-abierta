@@ -81,9 +81,9 @@ It is in development and has not been used in a real election yet.
 
 - **Tested:** a whole election, end to end, on Android Chrome and on WebKit against the real server; an Android phone
   in an emulator, without signal, restarted and out of space; the server within the limits of a free tier; and the
-  installation over SSH on Ubuntu, with backups, updates and restoring on another server.
+  installation over SSH on Alpine and on Ubuntu, with backups, updates, restoring on another server and rebooting.
 - **Not tested yet:** creating servers on the real clouds (tested against simulations of their APIs), the certificate
-  for an IP, installing on Linux distributions other than Ubuntu, the installer on real Windows and macOS (every change
+  for an IP, the pasted text end to end on Alpine, installing on other Linux distributions, the installer on real Windows and macOS (every change
   builds and starts it in continuous integration), a real iPhone and the drill with people. The details are in
   [What was tested, and what is left](docs/en/stage-4-results.md).
 
