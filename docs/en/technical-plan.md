@@ -107,7 +107,7 @@ The guide is that someone who barely uses a phone can use it alone, for the firs
 ### Themes
 
 A theme is a data file, and a party can create its own: colors for light and dark mode, fonts, shapes, and a few recipes, such as
-how to cross out or what panels are made of. `tools/verificar-contraste.mjs` rejects what cannot be read: text must reach 7:1,
+how to cross out or what panels are made of. `deploy/verificar-contraste.mjs` rejects what cannot be read: text must reach 7:1,
 thinking of older eyes.
 
 | Theme | Idea |

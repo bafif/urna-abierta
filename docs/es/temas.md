@@ -18,7 +18,7 @@ Un tema son datos: colores para cada modo, letras, formas y unas pocas recetas. 
 3. Convertilo, con el repo instalado:
 
    ```sh
-   node tools/tema-a-archivo.mjs mi-tema.js mi-tema.json
+   node deploy/tema-a-archivo.mjs mi-tema.js mi-tema.json
    ```
 
 4. Cargalo:
@@ -53,4 +53,4 @@ servidor al cargarlo:
 | Texto secundario, y texto sobre los botones | 4,5:1 |
 | Botones, acentos y marcas sobre el fondo | 3:1 |
 
-Si algo no alcanza, te dice qué par de colores es. También podés revisar todos juntos con `node tools/verificar-contraste.mjs mi-tema.js`.
+Si algo no alcanza, te dice qué par de colores es. También podés revisar todos juntos con `node deploy/verificar-contraste.mjs mi-tema.js`.

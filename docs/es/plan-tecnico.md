@@ -107,7 +107,7 @@ La guía es que la use, sola y por primera vez, una persona que casi no usa el t
 ### Temas
 
 Un tema es un archivo de datos, y un partido puede crear el suyo: colores para el modo claro y el oscuro, letras, formas, y unas
-pocas recetas, como la forma de tachar o el material de los paneles. `tools/verificar-contraste.mjs` rechaza lo que no se lee:
+pocas recetas, como la forma de tachar o el material de los paneles. `deploy/verificar-contraste.mjs` rechaza lo que no se lee:
 el texto tiene que llegar a 7:1, pensando en la vista de la gente grande.
 
 | Tema | Idea |

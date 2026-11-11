@@ -27,7 +27,7 @@ You need Node 26. The browser tests also need Podman.
 corepack pnpm install
 corepack pnpm test                                   # the unit tests of the whole repository
 corepack pnpm check                                  # the types of every package, its tests included
-node tools/verificar-contraste.mjs                  # that every theme can be read
+node deploy/verificar-contraste.mjs                  # that every theme can be read
 sh deploy/server/prueba-estado.sh                    # what «urna estado» says, in both languages, with fake podman and curl
 node deploy/verificar-documentos.mjs                 # that every document has its pair in the other language, and its links lead somewhere
 ```

@@ -1,5 +1,5 @@
 // Checks that a theme can be read. Anyone creating a theme runs this, and the app can run it too.
-//   node tools/verificar-contraste.mjs [more theme files]
+//   node deploy/verificar-contraste.mjs [more theme files]
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { contrastReport, themeProblemText } from '../packages/domain/src/theme-check.ts';
