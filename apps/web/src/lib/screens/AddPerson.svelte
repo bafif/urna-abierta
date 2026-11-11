@@ -31,7 +31,6 @@
     { id: 'estadistico', title: t('role.estadistico.title'), detail: t('role.estadistico.detail') },
     ...(advanced
       ? [
-          { id: 'semaforo_sensible', title: t('role.semaforo_sensible.title'), detail: t('role.semaforo_sensible.detail') },
           { id: 'coordinacion', title: t('role.coordinacion.title'), detail: t('role.coordinacion.detail') },
           { id: 'sistema', title: t('role.sistema.title'), detail: t('role.sistema.detail') },
         ]

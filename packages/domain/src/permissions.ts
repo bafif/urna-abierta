@@ -23,13 +23,17 @@ export const ROLES = {
   fiscal: ['table.work'],
   /** Helps several poll watchers and receives their alerts. */
   jefe: ['district.watch', 'incident.manage', 'tally.correct', 'team.invite'],
-  /** Notes who votes for the party. Sensitive categories take the role below as well. */
-  semaforo: ['semaphore.read', 'semaphore.write'],
+  /**
+   * Sets up the traffic light and notes who votes for the party, sensitive categories included: whoever does that work
+   * has to see what it is about. Nobody else notes it.
+   */
+  semaforo: ['semaphore.read', 'semaphore.write', 'semaphore.sensitive'],
+  /** Only sensitive categories. Kept so that people who had it keep it; it is no longer offered. */
   semaforo_sensible: ['semaphore.sensitive'],
   /** Sees numbers, never a name. */
   estadistico: ['stats.read'],
-  /** Runs the party's elections. */
-  coordinacion: ['election.manage', 'users.manage', 'team.invite', 'district.watch', 'incident.manage', 'tally.correct', 'semaphore.read', 'semaphore.write', 'stats.read', 'persons.manage', 'audit.read'],
+  /** Runs the party's elections. The traffic light is not part of it: whoever coordinates and does it takes that role too. */
+  coordinacion: ['election.manage', 'users.manage', 'team.invite', 'district.watch', 'incident.manage', 'tally.correct', 'stats.read', 'persons.manage', 'audit.read'],
   /** Runs the system. On purpose, this role alone does not see rolls or political data. */
   sistema: ['users.manage', 'security.manage', 'audit.read'],
 } as const satisfies Record<string, readonly Permission[]>;

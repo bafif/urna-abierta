@@ -461,7 +461,8 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     return { plain, sealed };
   }
 
-  const manageLight = requires(pool, 'election.manage');
+  // Whoever does the traffic light sets it up too: the categories are part of that work, not of running elections.
+  const manageLight = requires(pool, 'semaphore.write');
   /** A sensitive category is only for whoever may see them: nobody else learns its name, nor touches it. */
   async function categoryFor(actor: Actor, id: string): Promise<{ sensitive: boolean } | 'forbidden' | null> {
     if (!OPERATION_ID.test(id)) return null;
@@ -536,7 +537,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
   });
 
   /** It starts empty: each party defines its own categories. */
-  app.post<{ Body: { name?: unknown; color?: unknown; sensitive?: unknown } }>('/api/semaphore/categories', { preHandler: requires(pool, 'election.manage') }, async (request, reply) => {
+  app.post<{ Body: { name?: unknown; color?: unknown; sensitive?: unknown } }>('/api/semaphore/categories', { preHandler: manageLight }, async (request, reply) => {
     const { name, color, sensitive } = request.body ?? {};
     if (typeof name !== 'string' || !name.trim() || name.length > 60) return reply.code(400).send({ error: 'invalid_name' });
     if (typeof color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(color)) return reply.code(400).send({ error: 'invalid_color' });

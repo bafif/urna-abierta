@@ -146,6 +146,7 @@
       </div>
     {/if}
     {#snippet pie()}
+      {#if session.allows('semaphore.write')}<button class="enlace" data-testid="light-categories" onclick={() => nav.go('lightCategories')}>{t('light.categories')}</button>{/if}
       <button class="enlace" onclick={() => nav.go('settings')}>{t('plan.settings')}</button>
     {/snippet}
   </Pantalla>

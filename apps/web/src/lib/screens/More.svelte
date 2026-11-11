@@ -14,7 +14,7 @@
       { screen: 'permissions', title: t('permissions.title'), detail: t('more.permissions.detail'), show: session.allows('users.manage') },
       { screen: 'security', title: t('more.security'), detail: t('more.security.detail'), show: session.allows('security.manage') },
       { screen: 'backups', title: t('more.backups'), detail: t('more.backups.detail'), show: session.allows('security.manage') },
-      { screen: 'lightCategories', title: t('more.light'), detail: t('more.light.detail'), show: session.allows('election.manage') },
+      { screen: 'lightCategories', title: t('more.light'), detail: t('more.light.detail'), show: session.allows('semaphore.write') },
       { screen: 'persons', title: t('more.persons'), detail: t('more.persons.detail'), show: session.allows('persons.manage') },
       { screen: 'audit', title: t('more.audit'), detail: t('more.audit.detail'), show: session.allows('audit.read') },
       { screen: 'settings', title: t('plan.settings'), detail: t('more.settings.detail'), show: true },
