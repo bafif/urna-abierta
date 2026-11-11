@@ -136,3 +136,32 @@ jobs:
         with:
           room: 'true'
       - run: node apps/installer/e2e/servidor.ts
+
+  # The release builds the installers on each system and starts them before publishing; this does the same on every
+  # push, so that one that does not start shows up here and not when a version is tagged (both Mac ones, v0.1.0 and
+  # v0.1.1). The release skips it: its own installer job is this one.
+  executable:
+    name: The installer as a person downloads it (${{ matrix.os }})
+    if: github.ref_type != 'tag'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --filter @urna-abierta/installer...
+      - run: node build.mjs
+        working-directory: apps/installer
+      - name: Start it
+        shell: bash
+        working-directory: apps/installer
+        run: |
+          for asset in dist/urna-abierta-instalador-*; do
+            case "$asset" in *.sha256) ;; *) node smoke.mjs "$asset" ;; esac
+          done

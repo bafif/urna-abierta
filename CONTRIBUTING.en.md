@@ -51,9 +51,10 @@ The end-to-end tests build the containers with Podman and drive a browser or an 
 | `deploy/e2e-lector.sh` | The roll reader, with the `urna-abierta-padrones` repository next to this one |
 
 Every pull request runs on GitHub, each in its own job so that one that fails does not hide the others: the unit tests, the server's with
-the same Postgres, both browser ones and the one for the block to paste. The SSH one takes much longer, so it runs on `main`, once a week
-and before each release: if your change touches `deploy/server/` or the installer, run it yourself and say so in the pull request. The
-reader's needs the other repository and does not run on GitHub.
+the same Postgres, both browser ones, the one for the block to paste and, on Windows, Linux and both Macs, the installer built as it gets
+published, unpacked and started. The SSH one takes much longer, so it runs on `main`, once a week and before each release: if your change
+touches `deploy/server/` or the installer, run it yourself and say so in the pull request. The reader's needs the other repository and does
+not run on GitHub.
 
 ## Languages
 

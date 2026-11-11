@@ -50,10 +50,10 @@ Las pruebas de punta a punta arman los contenedores con Podman y manejan un nave
 | `node apps/installer/e2e/servidor.ts` | La instalación por SSH en dos Ubuntu: la copia cifrada, actualizar, volver de una versión que no arranca, restaurar en otro servidor y reiniciar |
 | `deploy/e2e-lector.sh` | El lector de padrones, con el repo `urna-abierta-padrones` al lado de este |
 
-Cada pull request corre en GitHub, cada una por su lado para que una que falla no tape a las otras: las unitarias, las del servidor con
-la misma Postgres, las dos de navegador y la del bloque para pegar. La de SSH tarda bastante más, así que corre en `main`, una vez por
-semana y antes de cada versión: si tu cambio toca `deploy/server/` o el instalador, corréla vos y contalo en el pull request. La del lector
-necesita el otro repo y no corre en GitHub.
+Cada pull request corre en GitHub, cada una por su lado para que una que falla no tape a las otras: las unitarias, las del servidor con la
+misma Postgres, las dos de navegador, la del bloque para pegar y, en Windows, Linux y las dos Mac, el instalador armado como se publica,
+desempacado y arrancado. La de SSH tarda bastante más, así que corre en `main`, una vez por semana y antes de cada versión: si tu cambio
+toca `deploy/server/` o el instalador, corréla vos y contalo en el pull request. La del lector necesita el otro repo y no corre en GitHub.
 
 ## Los idiomas
 
