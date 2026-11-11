@@ -39,10 +39,9 @@ al que toca. Podés cerrar y seguir otro día: queda dónde estabas.
 |---|---|---|
 | «Cuidar una mesa» | Fiscal | Ve solo el padrón de su mesa. Conviene sumarlos desde la elección, en el paso 6 |
 | «Ayudar a varios fiscales» | Jefe de distrito | Ve sus mesas y recibe sus avisos. Conviene sumarlos desde «Distritos», en el paso 5 |
-| «Anotar quién nos vota» | Semáforo | Anota una categoría por persona |
+| «Anotar quién nos vota» | Semáforo | Arma las categorías del semáforo y anota una por persona, las sensibles incluidas: cada vez que mira una sensible, queda registrado |
 | «Ver los números» | Estadísticas | Ve cuántos votaron, nunca un nombre |
-| «Ver más tareas», «Ver las categorías sensibles» | Semáforo sensible | Ve las categorías sensibles, y cada vez queda registrado |
-| «Ver más tareas», «Coordinar conmigo» | Coordinación | Arma elecciones y equipos, y atiende pedidos de personas |
+| «Ver más tareas», «Coordinar conmigo» | Coordinación | Arma elecciones y equipos, y atiende pedidos de personas. El semáforo no viene con esta tarea: si querés hacerlo vos también, sumate «Anotar quién nos vota» |
 | «Ver más tareas», «Cuidar el sistema» | Sistema | Usuarios, seguridad y copias. No ve el padrón |
 
 Al tocar «Invitar» aparece «Mandale esto a…», con un dibujo para escanear y tres formas de mandar el link: «Mandar por WhatsApp» (si

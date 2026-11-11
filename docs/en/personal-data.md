@@ -19,7 +19,7 @@ data law”. What is loaded, who sees it, where the server is and when it is era
 |---|---|---|
 | Roll: name, document, student number, order number, table and address, if the file has them | The file you upload | Coordination sees everything. The poll watcher sees only their table until the election is closed and, depending on security, the full document or its last 3 digits. Their phone knows each person by a random identifier, never by their document |
 | Who voted and at what time | The poll watchers' phones | The poll watcher of that table, and coordination when handling a request. Everyone else sees only how many |
-| Traffic light: one category per person | Whoever notes down in the traffic light | Whoever has that task. Sensitive categories, only whoever has the separate permission |
+| Traffic light: one category per person | Whoever notes down in the traffic light | Whoever has that task, which also sees the sensitive categories. No other task sees them |
 | Consent: date and how it was given | You enter it | Coordination |
 | Team: name and phone of each person, and their devices | You enter it when adding someone | Coordination and system |
 | Log: who did what and when | The server, by itself | Coordination and system |
@@ -103,7 +103,7 @@ erasure goes into the **Log**, with who did it and when.
 Three things to keep in mind:
 
 - **The page covers a single election.** If the same document is in other rolls, the page names them: handle each one. A sensitive
-  category shows only if whoever downloads the page has the task “See the sensitive categories”; otherwise the page says there is one
+  category shows only if whoever downloads the page has the task “Note who votes for us”; otherwise the page says there is one
   and that someone with that permission has to prepare it.
 - **A correction or an erasure reaches the phones that already prepared the table** the next time they have signal: each one checks every
   5 minutes whether the roll of its table changed, and downloads it again. Uploading the roll again undoes neither corrections nor
@@ -133,7 +133,7 @@ On the same person screen, under “Consent”, you enter the “Date” and “
 The traffic light starts empty: each party defines its categories in **More**, **Traffic light**. When creating one, the box “It is
 sensitive: it says something about their ideas or affiliation…” makes it:
 
-- visible only to whoever has the task “See the sensitive categories”;
+- visible only to whoever has the task “Note who votes for us”;
 - logged as “Looked at sensitive categories” each time someone looks at it;
 - changed or removed only by whoever has that task;
 - stored encrypted in the database, with a key that is not in the database.

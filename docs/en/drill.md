@@ -69,9 +69,9 @@ How each tool is used is in the [personal data](personal-data.md) guide.
 - [ ] In the **Log**, type that person's surname: everything about them has to stay, with how many times their data was seen and changed.
       Download it as a spreadsheet.
 - [ ] Record a consent for someone with a traffic light mark, then **They took their consent back**: their mark has to go right then.
-- [ ] Create a traffic light category marked as sensitive and note someone with it. Someone with “Note who votes for us” must not see it:
-      if they give that person a plain category, or clear it, the sensitive one is still there, and nothing tells them it was. Someone
-      with “See the sensitive categories” sees it, and the log says “Looked at sensitive categories”.
+- [ ] From “Note who votes for us”, create a traffic light category marked as sensitive and note someone with it. Whoever has that
+      task sees it, and the log says “Looked at sensitive categories”. Nobody else must see it: not coordination, not a district
+      chief, not statistics.
 - [ ] Download the roll of a table by preparing it from a phone, and a backup from the app: the log has to say who did it.
 - [ ] Switch security to “Municipal or provincial”. Everyone except poll watchers has to confirm with a code, and the poll watcher has to
       see only the last 3 digits of each document. Then switch back.

@@ -71,9 +71,9 @@ Cómo se usa cada herramienta está en la guía de [datos personales](datos-pers
       sus datos. Bajalo en planilla.
 - [ ] Anotale un consentimiento a alguien con una marca en el semáforo, y después **Retiró su consentimiento**: su marca se tiene que
       borrar en ese momento.
-- [ ] Creá una categoría del semáforo marcada como sensible y anotá a alguien con ella. Alguien con «Anotar quién nos vota» no la tiene
-      que ver: si le pone una categoría común o se la saca, la sensible sigue ahí, sin que nada le avise que estaba. Alguien con «Ver
-      las categorías sensibles» la ve, y el registro dice «Miró categorías sensibles».
+- [ ] Desde «Anotar quién nos vota», creá una categoría del semáforo marcada como sensible y anotá a alguien con ella. Quien tiene
+      esa tarea la ve, y el registro dice «Miró categorías sensibles». Nadie más la tiene que ver: ni coordinación, ni un jefe, ni
+      estadísticas.
 - [ ] Bajá el padrón de una mesa preparándola desde un teléfono, y una copia de seguridad desde la app: el registro tiene que decir quién
       lo hizo.
 - [ ] Pasá la seguridad a «Municipal o provincial». Todos menos los fiscales tienen que confirmar con un código, y el fiscal tiene que ver

@@ -19,7 +19,7 @@ personales». Qué se carga, quién lo ve, dónde está el servidor y cuándo se
 |---|---|---|
 | Padrón: nombre, documento, legajo, número de orden, mesa y domicilio, si el archivo los trae | El archivo que subís | Coordinación ve todo. El fiscal ve solo su mesa hasta que se cierra la elección y, según la seguridad, el documento completo o sus últimos 3 números. Su teléfono conoce a cada persona por un identificador al azar, nunca por su documento |
 | Quién votó y a qué hora | Los teléfonos de los fiscales | El fiscal de esa mesa, y coordinación al atender un pedido. Los demás ven solo cuántos |
-| Semáforo: una categoría por persona | Quien anota en el semáforo | Quien tiene esa tarea. Las categorías sensibles, solo quien tiene el permiso aparte |
+| Semáforo: una categoría por persona | Quien anota en el semáforo | Quien tiene esa tarea, que también ve las categorías sensibles. Ninguna otra tarea las ve |
 | Consentimiento: fecha y cómo se dio | Lo anotás vos | Coordinación |
 | Equipo: nombre y teléfono de cada persona, y sus dispositivos | Lo cargás al sumar a alguien | Coordinación y sistema |
 | Registro: quién hizo qué y cuándo | El servidor, solo | Coordinación y sistema |
@@ -101,7 +101,7 @@ Está en **Más cosas**, **Pedidos de personas**, y lo ve quien tiene la tarea �
 Tres cosas para tener en cuenta:
 
 - **La página cubre una sola elección.** Si el mismo documento está en otros padrones, la página los nombra: atendé cada uno. Una
-  categoría sensible aparece solo si quien baja la página tiene la tarea «Ver las categorías sensibles»; si no, la página dice que hay
+  categoría sensible aparece solo si quien baja la página tiene la tarea «Anotar quién nos vota»; si no, la página dice que hay
   una y que la prepare alguien con ese permiso.
 - **Una corrección o un borrado llega a los teléfonos que ya prepararon la mesa** la próxima vez que tengan señal: cada uno revisa cada
   5 minutos si cambió el padrón de su mesa y lo vuelve a bajar. Volver a subir el padrón no deshace ni lo corregido ni lo borrado.
@@ -130,7 +130,7 @@ En la misma pantalla de la persona, en «Consentimiento», cargás la «Fecha» 
 El semáforo arranca vacío: cada partido define sus categorías en **Más cosas**, **Semáforo**. Al crear una, la casilla «Es sensible: dice
 algo de sus ideas o de su afiliación…» hace que:
 
-- solo la vea quien tiene la tarea «Ver las categorías sensibles»;
+- solo la vea quien tiene la tarea «Anotar quién nos vota»;
 - cada vez que alguien la mira, el registro anote «Miró categorías sensibles»;
 - solo quien tiene esa tarea pueda cambiarla o sacarla;
 - se guarde cifrada en la base, con una clave que no está en la base.

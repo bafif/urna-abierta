@@ -178,9 +178,11 @@ fixed list; roles are editable combinations. The server checks every request and
   manages the team. A phone that came in with a chief's link stays the poll watcher the chief could invite: what that
   person gets later, or what the party adds to poll watchers, does not reach that phone, nor does it turn on the second
   step for someone who never did. That takes a link from whoever manages the team.
-- Sensitive categories of the traffic light need a separate permission and are encrypted per field. Whoever lacks that
-  permission notes only a plain category, which stays under the sensitive one: they never change or clear it, and get the
-  same answer whether the person has one or not. The encryption protects a dump of the database taken without the `.env`. It does not protect a copy of the whole disk or the backups, which carry
+- Sensitive categories of the traffic light need a separate permission and are encrypted per field. That permission comes
+  with the traffic light task, which also sets up its categories: whoever does that work has to see what it is about
+  (11/11/2026). No other task has it, not even coordination, which does not note either. If the party edits the task and
+  takes it away, whoever lacks that permission notes only a plain category, which stays under the sensitive one: they never
+  change or clear it, and get the same answer whether the person has one or not. The encryption protects a dump of the database taken without the `.env`. It does not protect a copy of the whole disk or the backups, which carry
   the key, nor a running server.
 - The traffic light search finds a document only whole: with part of one, it could be read a digit at a time.
 - Erasing a person or purging an election also replaces their roll id, which is often the DNI. The audit log names each

@@ -39,10 +39,9 @@ the next one. You can close it and go on another day: it remembers where you wer
 |---|---|---|
 | “Watch a table” | Poll watcher | Sees only the roll of their table. Better added from the election, in step 6 |
 | “Help several poll watchers” | District chief | Sees their tables and receives their alerts. Better added from “Districts”, in step 5 |
-| “Note who votes for us” | Traffic light | Notes one category per person |
+| “Note who votes for us” | Traffic light | Sets up the traffic light categories and notes one per person, sensitive ones included: each time they look at a sensitive one, it is logged |
 | “See the numbers” | Statistics | Sees how many voted, never a name |
-| “See more tasks”, “See the sensitive categories” | Sensitive traffic light | Sees the sensitive categories, and each time is logged |
-| “See more tasks”, “Coordinate with me” | Coordination | Builds elections and teams, and handles requests from people |
+| “See more tasks”, “Coordinate with me” | Coordination | Builds elections and teams, and handles requests from people. The traffic light does not come with this task: if you want to do it too, add “Note who votes for us” to yourself |
 | “See more tasks”, “Look after the system” | System | Users, security and backups. Does not see the roll |
 
 When you tap “Invite”, “Send this to…” appears, with a code to scan and three ways to send the link: “Send by WhatsApp” (if you entered
