@@ -101,8 +101,35 @@ jobs:
         working-directory: apps/installer/dist
         run: gh release upload "$GITHUB_REF_NAME" urna-abierta-instalador-*
 
+  # The one for Alpine and the other Linux with musl: built and started inside Alpine, with Alpine's Node (the official
+  # Node is built for glibc). Only this job runs in a container; everything else stays on GitHub's machine.
+  installer-musl:
+    needs: draft
+    runs-on: ubuntu-24.04
+    container: node:24-alpine
+    env:
+      URNA_VERSION: ${{ github.ref_name }}
+    steps:
+      - run: apk add --no-cache bash git github-cli
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --filter @urna-abierta/installer...
+      - run: node build.mjs
+        working-directory: apps/installer
+      - name: Start it
+        shell: bash
+        working-directory: apps/installer
+        run: node smoke.mjs dist/urna-abierta-instalador-linux-x64-musl.tar.gz
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: apps/installer/dist/urna-abierta-instalador-*
+      - name: Add it to the release
+        shell: bash
+        working-directory: apps/installer/dist
+        run: gh release upload "$GITHUB_REF_NAME" urna-abierta-instalador-*
+
   publish:
-    needs: installer
+    needs: [installer, installer-musl]
     runs-on: ubuntu-24.04
     env:
       IMAGES: ghcr.io/${{ github.repository_owner }}/urna-abierta

@@ -133,7 +133,8 @@ sin firmar, así que tu computadora te va a avisar. Es esperable:
 | Windows | `urna-abierta-instalador-windows.exe` | Doble clic. Si aparece «Windows protegió tu PC», tocá «Más información» y después «Ejecutar de todas formas» |
 | Mac con chip Apple | `urna-abierta-instalador-mac-apple.zip` | Doble clic en el `.zip`, y después en `urna-abierta-instalador`. La primera vez macOS lo bloquea: andá a Ajustes, Privacidad y seguridad, y tocá «Abrir igual» |
 | Mac con Intel | `urna-abierta-instalador-mac-intel.zip` | Igual que en una Mac con chip Apple |
-| Linux | `urna-abierta-instalador-linux.tar.gz` | Descomprimilo y, en una terminal abierta en esa carpeta, corré `./urna-abierta-instalador`. No hay aviso |
+| Linux (Debian, Ubuntu, Fedora, Arch y casi todos) | `urna-abierta-instalador-linux-x64.tar.gz` | Descomprimilo y, en una terminal abierta en esa carpeta, corré `./urna-abierta-instalador`. No hay aviso |
+| Linux Alpine | `urna-abierta-instalador-linux-x64-musl.tar.gz` | Igual que en los otros Linux. Si no arranca, `apk add libstdc++` |
 
 Para saber qué Mac tenés: menú Apple, «Acerca de esta Mac». Dice «Chip Apple M…» o «Procesador Intel».
 

@@ -12,7 +12,8 @@ Download it only from the [releases page](https://github.com/bafif/urna-abierta/
 | Windows | `urna-abierta-instalador-windows.exe` |
 | macOS with an Apple processor (M1 or later) | `urna-abierta-instalador-mac-apple.zip` |
 | macOS with an Intel processor | `urna-abierta-instalador-mac-intel.zip` |
-| Linux | `urna-abierta-instalador-linux.tar.gz` |
+| Linux (Debian, Ubuntu, Fedora, Arch and almost every other) | `urna-abierta-instalador-linux-x64.tar.gz` |
+| Alpine Linux | `urna-abierta-instalador-linux-x64-musl.tar.gz` |
 
 ## The SHA-256
 
@@ -23,7 +24,7 @@ Compute the one of the file as you downloaded it, the `.zip` or the `.tar.gz` be
 
 - **Windows,** in PowerShell: `Get-FileHash .\urna-abierta-instalador-windows.exe -Algorithm SHA256`
 - **macOS,** in Terminal: `shasum -a 256 urna-abierta-instalador-mac-apple.zip`
-- **Linux:** `sha256sum urna-abierta-instalador-linux.tar.gz`
+- **Linux:** `sha256sum urna-abierta-instalador-linux-x64.tar.gz`
 
 It has to match what GitHub shows, without the `sha256:`. Windows shows it in capitals: that makes no difference. If it does not match, do
 not open it: delete it and download it again from the releases page.
@@ -36,7 +37,7 @@ from this repository's code and its release process, and not on anyone's compute
 You need the [GitHub CLI](https://cli.github.com/), logged in with `gh auth login`. From the file's folder:
 
 ```sh
-gh attestation verify urna-abierta-instalador-linux.tar.gz --repo bafif/urna-abierta
+gh attestation verify urna-abierta-instalador-linux-x64.tar.gz --repo bafif/urna-abierta
 ```
 
 Change the name to your file's. It has to end by saying the verification succeeded (*Verification succeeded*). If it says anything else,
