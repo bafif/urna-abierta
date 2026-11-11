@@ -1,9 +1,9 @@
 // Takes a built installer as a person downloads it, unpacks it, starts it, and checks that its screens answer.
 //   URNA_VERSION=v0.1.0 node smoke.mjs dist/urna-abierta-instalador-linux.tar.gz
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 const asset = process.argv[2];
 const version = process.env.URNA_VERSION ?? 'latest';
@@ -21,6 +21,7 @@ if (asset.endsWith('.zip')) {
   execFileSync('tar', ['-xzf', asset, '-C', folder]);
   program = join(folder, 'urna-abierta-instalador');
 }
+if (!existsSync(program)) fail(`al desempacarlo deja ${readdirSync(folder, { recursive: true }).join(', ') || 'nada'}, y no ${basename(program)}`);
 if (process.platform !== 'win32' && !(statSync(program).mode & 0o100)) fail('al desempacarlo no se puede ejecutar');
 
 const child = spawn(program, [], { env: { ...process.env, URNA_NO_BROWSER: '1', URNA_CONFIG_DIR: folder }, stdio: ['ignore', 'pipe', 'inherit'] });

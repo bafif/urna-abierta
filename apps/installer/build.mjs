@@ -3,8 +3,8 @@
 // Files that it carries inside are declared in src/assets.ts.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { build } from 'esbuild';
 import { assetFiles } from './src/assets.ts';
 
@@ -49,7 +49,16 @@ if (mac) execFileSync('codesign', ['--remove-signature', output]);
 execFileSync('npx', ['postject', output, 'NODE_SEA_BLOB', 'dist/instalador.blob', '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2', ...(mac ? ['--macho-segment-name', 'NODE_SEA'] : [])], { stdio: 'inherit', shell: windows });
 // macOS only runs what carries a signature. An ad-hoc one identifies nobody.
 if (mac) execFileSync('codesign', ['--sign', '-', output]);
-if (mac) execFileSync('ditto', ['-c', '-k', '--keepParent', output, published]);
+if (mac) {
+  // Unzipped, it has to leave the program and nothing around it. With --keepParent on a lone file, ditto did not
+  // (v0.1.0 and v0.1.1): from a folder that holds only the program, it packs what the folder holds.
+  const folder = 'dist/mac';
+  mkdirSync(folder);
+  renameSync(output, join(folder, basename(output)));
+  execFileSync('ditto', ['-c', '-k', '--norsrc', '--noextattr', folder, published]);
+  const inside = execFileSync('zipinfo', ['-1', published], { encoding: 'utf8' }).split('\n').filter((entry) => entry && !entry.endsWith('/'));
+  if (inside.join() !== basename(output)) throw new Error(`${published} lleva ${inside.join(', ')} en vez de ${basename(output)}`);
+}
 if (!windows && !mac) execFileSync('tar', ['-czf', published, '-C', 'dist', basename(output)]);
 // So that anyone can check that what they downloaded is what was published.
 const digest = createHash('sha256').update(readFileSync(published)).digest('hex');
