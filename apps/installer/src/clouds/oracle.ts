@@ -1,4 +1,5 @@
-import { createHash, createSign } from 'node:crypto';
+import { createHash, createSign, randomBytes } from 'node:crypto';
+import { ALPINE, ALPINE_IMAGES, downloadAlpine } from './alpine.ts';
 import { createdResources, sleep, until, type Cloud, type Log } from './common.ts';
 
 export interface OracleCredentials {
@@ -30,10 +31,11 @@ export function signOracle(options: { method: string; url: URL; body?: string; d
 const FREE_ARM = { shape: 'VM.Standard.A1.Flex', shapeConfig: { ocpus: 1, memoryInGBs: 6 } };
 const FREE_X86 = { shape: 'VM.Standard.E2.1.Micro' };
 
-export function oracleCloud(credentials: OracleCredentials, request: typeof fetch = fetch, wait = sleep): Cloud {
+export function oracleCloud(credentials: OracleCredentials, request: typeof fetch = fetch, wait = sleep, download = downloadAlpine): Cloud {
   const { region, tenancy } = credentials;
   const core = `https://iaas.${region}.oraclecloud.com/20160918`;
   const identity = `https://identity.${region}.oraclecloud.com/20160918`;
+  const storage = `https://objectstorage.${region}.oraclecloud.com`;
   let reservedId = '';
   const resources = createdResources();
 
@@ -53,7 +55,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
     await call('DELETE', `${address}${options}`);
     await until(async () => {
       try {
-        return (await call('GET', address)).lifecycleState === 'TERMINATED';
+        return ['TERMINATED', 'DELETED'].includes((await call('GET', address)).lifecycleState);
       } catch (error) {
         if (/: (404|NotAuthorizedOrNotFound) /.test((error as Error).message)) return true;
         throw error;
@@ -61,10 +63,62 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
     }, wait, { tries: 120, every: 5_000, problem: 'oracle_delete_timeout' });
   }
 
-  async function imageFor(shape: string): Promise<string> {
-    const query = new URLSearchParams({ compartmentId: tenancy, operatingSystem: 'Canonical Ubuntu', operatingSystemVersion: '24.04', shape, sortBy: 'TIMECREATED', sortOrder: 'DESC', limit: '1' });
-    const [image] = await call('GET', `${core}/images?${query}`);
-    if (!image) throw new Error('oracle_no_image');
+  /** Deletes something of Object Storage. What is already gone counts as deleted. */
+  async function removeStored(address: string): Promise<void> {
+    try {
+      await call('DELETE', address);
+    } catch (error) {
+      if (!/: (404|BucketNotFound|ObjectNotFound) /.test((error as Error).message)) throw error;
+    }
+  }
+
+  /** The image file goes as it is: Object Storage does not ask for the body in the signature of an upload. */
+  async function upload(address: string, data: Buffer): Promise<void> {
+    const url = new URL(address);
+    const { host: _host, ...sent } = signOracle({ method: 'PUT', url, date: new Date().toUTCString(), credentials });
+    const response = await request(url, { method: 'PUT', headers: { ...sent, 'content-type': 'application/octet-stream' }, body: data });
+    if (!response.ok) {
+      const data: any = await response.json().catch(() => ({}));
+      throw new Error(`oracle_PUT_upload: ${data.code ?? response.status} ${data.message ?? ''}`);
+    }
+  }
+
+  /** Imported images, one per kind of machine, deleted once the machine runs: its boot volume is a copy. */
+  const imported = new Map<string, string>();
+
+  /**
+   * Oracle has no Alpine of its own: Alpine's image file for that kind of machine goes to a bucket of this attempt and
+   * becomes an image of the account. Oracle takes from a few minutes to more than half an hour to import it.
+   */
+  async function imageFor(shape: string, log: Log): Promise<string> {
+    const arm = shape === FREE_ARM.shape;
+    const known = imported.get(shape);
+    if (known) return known;
+    log('image');
+    const file = arm ? ALPINE_IMAGES.oracleArm : ALPINE_IMAGES.oracleX86;
+    const data = await download(file, request);
+    const namespace: string = await call('GET', `${storage}/n/`);
+    const bucket = `urna-abierta-${randomBytes(4).toString('hex')}`;
+    await call('POST', `${storage}/n/${namespace}/b/`, { name: bucket, compartmentId: tenancy });
+    const bucketAddress = `${storage}/n/${namespace}/b/${bucket}`;
+    resources.add(`bucket ${bucket}`, () => removeStored(bucketAddress));
+    const objectAddress = `${bucketAddress}/o/${encodeURIComponent(file.file)}`;
+    resources.add(`object ${bucket}/${file.file}`, () => removeStored(objectAddress));
+    await upload(objectAddress, data);
+    const image = await call('POST', `${core}/images`, {
+      compartmentId: tenancy,
+      displayName: `urna-abierta-alpine-${ALPINE.release}-${arm ? 'arm' : 'x86'}`,
+      launchMode: 'PARAVIRTUALIZED',
+      imageSourceDetails: { sourceType: 'objectStorageTuple', namespaceName: namespace, bucketName: bucket, objectName: file.file, sourceImageType: 'QCOW2', operatingSystem: 'Alpine Linux', operatingSystemVersion: ALPINE.release },
+    });
+    resources.add(`image ${image.id}`, () => remove(`${core}/images/${image.id}`));
+    await until(async () => (await call('GET', `${core}/images/${image.id}`)).lifecycleState === 'AVAILABLE', wait, { tries: 360, every: 10_000, problem: 'oracle_image_timeout' });
+    // An imported image is not marked for every kind of machine: this one has to be.
+    await call('PUT', `${core}/images/${image.id}/shapes/${shape}`, {});
+    // Once imported, the file is not needed.
+    await removeStored(objectAddress).catch(() => undefined);
+    await removeStored(bucketAddress).catch(() => undefined);
+    imported.set(shape, image.id);
     return image.id;
   }
 
@@ -73,7 +127,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
     const zones: { name: string }[] = await call('GET', `${identity}/availabilityDomains?compartmentId=${encodeURIComponent(tenancy)}`);
     let lastProblem = '';
     for (const kind of [FREE_ARM, FREE_X86]) {
-      const imageId = await imageFor(kind.shape);
+      const imageId = await imageFor(kind.shape, log);
       for (const zone of zones) {
         log(`try:${kind.shape}:${zone.name}`);
         try {
@@ -143,6 +197,8 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
       const attachments = await call('GET', `${core}/vnicAttachments?compartmentId=${encodeURIComponent(tenancy)}&instanceId=${encodeURIComponent(instanceId)}`);
       const addresses = await call('GET', `${core}/privateIps?vnicId=${encodeURIComponent(attachments[0].vnicId)}`);
       await call('PUT', `${core}/publicIps/${reservedId}`, { privateIpId: addresses[0].id });
+      // If deleting an image fails, the server stays: it costs cents a month, and the servers' guide says where it is.
+      for (const id of imported.values()) await call('DELETE', `${core}/images/${id}`).catch(() => undefined);
     },
 
     cleanUp: (log: Log) => resources.cleanUp(log),

@@ -23,6 +23,7 @@
     [/^google_.*(Compute Engine API|has not been used|is disabled)/i, 'google_api'],
     [/^google_.*(permission|forbidden)/i, 'google_permission'],
     [/^google_.*(RESOURCE_POOL_EXHAUSTED|quota)/i, 'google_capacity'],
+    [/^alpine_/, 'alpine'],
     [/_did_not_start|_timeout$/, 'slow_cloud'],
     [/^script_failed:.*needs_supported_linux/, 'needs_supported_linux'],
     [/^script_failed:.*(apt|dpkg|lock)/i, 'apt'],

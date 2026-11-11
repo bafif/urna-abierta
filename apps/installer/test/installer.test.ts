@@ -137,6 +137,9 @@ describe('signatures of each cloud', () => {
   });
 });
 
+/** Alpine's image file, without downloading it: the clouds' fakes only see that it is uploaded. */
+const fakeAlpine = async () => Buffer.from('alpine disk');
+
 /** A cloud that answers with what its documentation says, and remembers what it was asked. */
 function fakeCloud(answer: (url: URL, method: string, body: string) => unknown) {
   const calls: { url: URL; method: string; body: string; headers: Headers }[] = [];
@@ -164,7 +167,7 @@ class Failure {
 }
 
 describe('creating a server, against a fake of each cloud', () => {
-  it('AWS: fixed address first, firewall, the newest Ubuntu, and then the address on the machine', async () => {
+  it('AWS: fixed address first, firewall, the newest Alpine from Alpine’s own account, and then the address on the machine', async () => {
     const { request, calls } = fakeCloud((_url, _method, body) => {
       const action = new URLSearchParams(body).get('Action');
       const answers: Record<string, string> = {
@@ -172,7 +175,7 @@ describe('creating a server, against a fake of each cloud', () => {
         DescribeVpcs: '<r><vpcId>vpc-1</vpcId></r>',
         DescribeSubnets: '<r><subnetId>subnet-1</subnetId></r>',
         CreateSecurityGroup: '<r><groupId>sg-1</groupId></r>',
-        DescribeImages: '<r><item><imageId>ami-old</imageId><creationDate>2025-01-01</creationDate></item><item><imageId>ami-new</imageId><creationDate>2026-01-01</creationDate></item></r>',
+        DescribeImages: '<r><item><imageId>ami-old</imageId><creationDate>2025-01-01</creationDate><rootDeviceName>/dev/xvda</rootDeviceName></item><item><imageId>ami-new</imageId><creationDate>2026-01-01</creationDate><rootDeviceName>/dev/xvda</rootDeviceName></item></r>',
         RunInstances: '<r><instanceId>i-1</instanceId></r>',
         DescribeInstances: '<r><instanceState><code>16</code><name>running</name></instanceState></r>',
       };
@@ -185,6 +188,10 @@ describe('creating a server, against a fake of each cloud', () => {
     expect(actions).toEqual(['AllocateAddress', 'DescribeVpcs', 'DescribeSubnets', 'CreateSecurityGroup', 'AuthorizeSecurityGroupIngress', 'DescribeImages', 'RunInstances', 'DescribeInstances', 'AssociateAddress']);
     const run = new URLSearchParams(calls[6]!.body);
     expect(run.get('ImageId')).toBe('ami-new');
+    expect(run.get('BlockDeviceMapping.1.DeviceName')).toBe('/dev/xvda');
+    const images = new URLSearchParams(calls[5]!.body);
+    expect(images.get('Owner.1')).toBe('538276064493');
+    expect(images.get('Filter.1.Value.1')).toMatch(/^alpine-3\.\d+\.\*-x86_64-/);
     expect(Buffer.from(run.get('UserData')!, 'base64').toString()).toContain('echo hola');
     expect(calls[0]!.headers.get('authorization')).toMatch(/^AWS4-HMAC-SHA256 Credential=AK\//);
     expect(calls[0]!.url.host).toBe('ec2.sa-east-1.amazonaws.com');
@@ -200,7 +207,9 @@ describe('creating a server, against a fake of each cloud', () => {
       if (last === 'subnets') return { id: 'subnet-1' };
       if (url.pathname.includes('/subnets/')) return { lifecycleState: 'AVAILABLE' };
       if (last === 'availabilityDomains') return [{ name: 'AD-1' }, { name: 'AD-2' }];
-      if (last === 'images') return [{ id: 'image-1' }];
+      if (url.pathname === '/n/') return '"ns"';
+      if (last === 'images' && method === 'POST') return { id: 'image-1' };
+      if (url.pathname.endsWith('/images/image-1') && method === 'GET') return { lifecycleState: 'AVAILABLE' };
       if (last === 'instances' && method === 'POST') return { id: 'i-1' };
       if (url.pathname.includes('/instances/')) return { lifecycleState: 'RUNNING' };
       if (last === 'vnicAttachments') return [{ vnicId: 'vnic-1' }];
@@ -218,7 +227,7 @@ describe('creating a server, against a fake of each cloud', () => {
       }
       return plain(input, init);
     }) as typeof fetch;
-    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, request, noWait);
+    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, request, noWait, fakeAlpine);
     expect(await cloud.reserveAddress(() => undefined)).toBe('203.0.113.7');
     await cloud.createServer('#!/bin/sh\necho hola\n', () => undefined);
     const launches = calls.filter((call) => call.url.pathname.endsWith('/instances') && call.method === 'POST').map((call) => JSON.parse(call.body));
@@ -226,6 +235,15 @@ describe('creating a server, against a fake of each cloud', () => {
     expect(Buffer.from(launches[1].metadata.user_data, 'base64').toString()).toContain('echo hola');
     const attach = calls.find((call) => call.url.pathname.endsWith('/publicIps/ip-1'))!;
     expect(JSON.parse(attach.body)).toEqual({ privateIpId: 'priv-1' });
+    // The ARM machine was the one that started: only its image was imported, from its bucket, and deleted at the end.
+    const upload = calls.find((call) => call.method === 'PUT' && call.url.host.startsWith('objectstorage.'))!;
+    expect(upload.url.pathname).toMatch(/^\/n\/ns\/b\/urna-abierta-\w+\/o\/alpine-3\.[\d.]+-aarch64-tiny-r0\.qcow2$/);
+    expect(upload.body).toBe('alpine disk');
+    expect(JSON.parse(calls.find((call) => call.method === 'POST' && call.url.pathname.endsWith('/images'))!.body).imageSourceDetails).toMatchObject({ sourceType: 'objectStorageTuple', namespaceName: 'ns', sourceImageType: 'QCOW2' });
+    expect(calls.some((call) => call.method === 'PUT' && call.url.pathname.endsWith('/images/image-1/shapes/VM.Standard.A1.Flex'))).toBe(true);
+    expect(launches.every((item) => item.sourceDetails.imageId === 'image-1')).toBe(true);
+    expect(calls.at(-1)).toMatchObject({ method: 'DELETE' });
+    expect(calls.at(-1)!.url.pathname).toMatch(/\/images\/image-1$/);
     const rules = JSON.parse(calls.find((call) => call.url.pathname.includes('/securityLists/'))!.body).ingressSecurityRules;
     expect(rules.map((rule: any) => (rule.tcpOptions ?? rule.udpOptions).destinationPortRange.min)).toEqual([22, 80, 443, 443]);
   });
@@ -237,12 +255,17 @@ describe('creating a server, against a fake of each cloud', () => {
       if (url.pathname.includes('/addresses/')) return { address: '203.0.113.5' };
       return { selfLink: 'https://compute.googleapis.com/compute/v1/projects/p/operations/op-1' };
     });
-    const cloud = googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, request, noWait);
+    const cloud = googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, request, noWait, fakeAlpine);
     expect(await cloud.reserveAddress(() => undefined)).toBe('203.0.113.5');
     await cloud.createServer('#!/bin/sh\necho hola\n', () => undefined);
     const posts = calls.filter((call) => call.method === 'POST');
-    expect(posts.map((call) => call.url.pathname.split('/').pop())).toEqual(['token', 'addresses', 'firewalls', 'instances']);
-    const instance = JSON.parse(posts[3]!.body);
+    expect(posts.map((call) => call.url.pathname.split('/').pop())).toEqual(['token', 'addresses', 'firewalls', 'b', 'o', 'images', 'instances']);
+    expect(posts[4]!.body).toBe('alpine disk');
+    expect(JSON.parse(posts[5]!.body).rawDisk.source).toMatch(/^https:\/\/storage\.googleapis\.com\/urna-abierta-\w+-\w+\/alpine-3\.[\d.]+-x86_64-tiny-r0\.raw\.tar\.gz$/);
+    const instance = JSON.parse(posts[6]!.body);
+    expect(instance.disks[0].initializeParams.sourceImage).toMatch(/^global\/images\/urna-abierta-/);
+    // Once the machine has its disk, the image, the file and the bucket go.
+    expect(calls.filter((call) => call.method === 'DELETE').map((call) => call.url.pathname.split('/').at(-2))).toEqual(['images', 'o', 'b']);
     expect(instance.networkInterfaces[0].accessConfigs[0].natIP).toBe('203.0.113.5');
     expect(instance.metadata.items[0].value).toContain('echo hola');
     expect(posts[1]!.headers.get('authorization')).toBe('Bearer token-1');
@@ -275,18 +298,27 @@ describe('when creating a server fails, nothing is left charging', () => {
       if (last === 'subnets') return { id: 'subnet-1' };
       if (url.pathname.includes('/subnets/')) return { lifecycleState: 'AVAILABLE' };
       if (last === 'availabilityDomains') return [{ name: 'AD-1' }];
-      if (last === 'images') return [{ id: 'image-1' }];
+      if (url.pathname === '/n/') return '"ns"';
+      if (last === 'images' && method === 'POST') return { id: 'image-1' };
+      if (url.pathname.endsWith('/images/image-1') && method === 'GET') return { lifecycleState: 'AVAILABLE' };
       if (last === 'instances' && method === 'POST') return new Failure(500, { code: 'InternalError', message: 'Out of host capacity.' });
       return {};
     });
-    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, request, noWait);
+    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, request, noWait, fakeAlpine);
     const lines: string[] = [];
     const error = await failure(createInCloud(cloud, secrets, 'aula', (line) => lines.push(line)));
     expect(error).toBeInstanceOf(CloudFailure);
     expect(error.message).toMatch(/^oracle_no_capacity/);
     expect(error.left).toEqual([]);
     expect(lines).toContain('cleanup');
-    const undone = calls.filter((call) => call.method === 'DELETE' || (call.method === 'PUT' && call.url.pathname.includes('/routeTables/') && JSON.parse(call.body).routeRules.length === 0));
+    const network = (call: { url: URL }) => !call.url.pathname.startsWith('/n/') && !call.url.pathname.includes('/images/');
+    const undone = calls.filter((call) => network(call) && (call.method === 'DELETE' || (call.method === 'PUT' && call.url.pathname.includes('/routeTables/') && JSON.parse(call.body).routeRules.length === 0)));
+    // Both images were imported (ARM, then x86 after ARM had no room): each image, file and bucket was deleted.
+    // The file and the bucket go as soon as the image is imported; the cleanup tries again, and gone counts as deleted.
+    const deletedHere = [...new Set(calls.filter((call) => call.method === 'DELETE' && !network(call)).map((call) => call.url.pathname))];
+    expect(deletedHere.filter((path) => /\/o\/alpine-3\.[\d.]+-(aarch64|x86_64)-tiny-r0\.qcow2$/.test(path))).toHaveLength(2);
+    expect(deletedHere.filter((path) => /\/b\/urna-abierta-\w+$/.test(path))).toHaveLength(2);
+    expect(calls.filter((call) => call.method === 'DELETE' && /\/images\/image-1$/.test(call.url.pathname))).toHaveLength(2);
     expect(undone.map((call) => `${call.method} ${call.url.pathname.split('/').slice(-2).join('/')}`)).toEqual([
       'DELETE subnets/subnet-1', 'PUT routeTables/rt-1', 'DELETE internetGateways/igw-1', 'DELETE vcns/vcn-1', 'DELETE publicIps/ip-1',
     ]);
@@ -301,7 +333,7 @@ describe('when creating a server fails, nothing is left charging', () => {
         DescribeVpcs: '<r><vpcId>vpc-1</vpcId></r>',
         DescribeSubnets: '<r><subnetId>subnet-1</subnetId></r>',
         CreateSecurityGroup: '<r><groupId>sg-1</groupId></r>',
-        DescribeImages: '<r><item><imageId>ami-1</imageId><creationDate>2026-01-01</creationDate></item></r>',
+        DescribeImages: '<r><item><imageId>ami-1</imageId><creationDate>2026-01-01</creationDate><rootDeviceName>/dev/xvda</rootDeviceName></item></r>',
         RunInstances: '<r><instanceId>i-1</instanceId></r>',
         DescribeInstances: terminated ? '<r><instanceState><code>48</code><name>terminated</name></instanceState></r>' : '<r><instanceState><code>0</code><name>pending</name></instanceState></r>',
         DeleteSecurityGroup: new Failure(400, '<r><Code>DependencyViolation</Code><Message>in use</Message></r>'),
@@ -325,16 +357,17 @@ describe('when creating a server fails, nothing is left charging', () => {
       const operation = method === 'POST' && url.pathname.endsWith('/instances') ? 'op-instance' : 'op-1';
       return { selfLink: `https://compute.googleapis.com/compute/v1/projects/p/operations/${operation}` };
     });
-    const cloud = googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, request, noWait);
+    const cloud = googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, request, noWait, fakeAlpine);
     const error = await failure(createInCloud(cloud, secrets, 'aula', () => undefined));
     expect(error.message).toMatch(/ZONE_RESOURCE_POOL_EXHAUSTED/);
     expect(error.left).toEqual([]);
     expect(calls.filter((call) => call.method === 'DELETE').map((call) => call.url.pathname.split('/').slice(-2).join('/'))).toEqual([
-      expect.stringMatching(/^instances\/urna-abierta-/), expect.stringMatching(/^firewalls\/urna-abierta-/), expect.stringMatching(/^addresses\/urna-abierta-/),
+      expect.stringMatching(/^instances\/urna-abierta-/), expect.stringMatching(/^images\/urna-abierta-/), expect.stringMatching(/^o\/alpine-/), expect.stringMatching(/^b\/urna-abierta-/),
+      expect.stringMatching(/^firewalls\/urna-abierta-/), expect.stringMatching(/^addresses\/urna-abierta-/),
     ]);
 
     const refused = fakeCloud(() => new Failure(400, { error: 'invalid_grant', error_description: 'Invalid JWT Signature.' }));
-    const login = await failure(createInCloud(googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, refused.request, noWait), secrets, 'aula', () => undefined));
+    const login = await failure(createInCloud(googleCloud({ client_email: 'a@b.iam', private_key: privateKey, project_id: 'p' }, refused.request, noWait, fakeAlpine), secrets, 'aula', () => undefined));
     expect(login.message).toMatch(/^google_login/);
     // Null, not empty: the failure screen says that what was created got deleted only when something was.
     expect(login.left).toBeNull();
@@ -344,7 +377,7 @@ describe('when creating a server fails, nothing is left charging', () => {
   it('wrong keys create nothing, so there is nothing to delete or to report', async () => {
     const refused = fakeCloud(() => new Failure(401, { code: 'NotAuthenticated', message: 'The required information to complete authentication was not provided.' }));
     const lines: string[] = [];
-    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, refused.request, noWait);
+    const cloud = oracleCloud({ region: 'sa-saopaulo-1', tenancy: 'ocid1.tenancy', user: 'ocid1.user', fingerprint: 'aa', privateKey }, refused.request, noWait, fakeAlpine);
     const error = await failure(createInCloud(cloud, secrets, 'aula', (line) => lines.push(line)));
     expect(error.message).toMatch(/NotAuthenticated/);
     expect(error.left).toBeNull();
@@ -373,6 +406,8 @@ describe('what the failure screen says', () => {
     expect(why('google_POST: This API method requires billing to be enabled.')).toBe('google_billing');
     expect(why('google_operation: ZONE_RESOURCE_POOL_EXHAUSTED')).toBe('google_capacity');
     expect(why('aws_server_did_not_start')).toBe('slow_cloud');
+    expect(why('alpine_checksum: alpine-3.24.4-x86_64-tiny-r0.qcow2')).toBe('alpine');
+    expect(why('oracle_image_timeout')).toBe('slow_cloud');
     expect(why('script_failed: urna-abierta: needs_supported_linux')).toBe('needs_supported_linux');
     expect(why('script_failed: E: Could not get lock /var/lib/dpkg/lock-frontend')).toBe('apt');
     expect(why('script_failed: Error: something else | exit')).toBe('script');

@@ -13,6 +13,11 @@ pero todavía no contra las nubes reales. Lo probado de punta a punta es la inst
 ya los contempla, pero todavía no se probó), incluido restaurar una copia
 en otro servidor. Hasta que se pruebe, si la creación automática falla, la opción de pegar un texto hace lo mismo a mano.
 
+**Sistema.** Los servidores que crea el instalador son Alpine Linux, de sus imágenes oficiales para la nube
+([alpinelinux.org/cloud](https://alpinelinux.org/cloud/)). AWS ya las tiene publicadas. Google y Oracle no: el instalador baja la
+imagen, comprueba su SHA-512, la sube a un bucket de tu cuenta y la convierte en una imagen propia. Cuando el servidor arranca, borra
+el bucket y la imagen. En Google eso suma unos minutos; en Oracle, importar la imagen puede llevar media hora o más.
+
 ## Oracle Cloud
 
 Es la recomendada: gratis y sin plazo. Las máquinas son ARM y a veces no hay disponibles: el instalador prueba cada zona, y si no hay,
@@ -48,7 +53,8 @@ el instalador.
 
 1. Creá una cuenta y un proyecto en [console.cloud.google.com](https://console.cloud.google.com/), y activá la facturación.
 2. Activá la **Compute Engine API** en ese proyecto.
-3. **IAM y administración**, **Cuentas de servicio**, **Crear cuenta de servicio**. Dale el rol **Administrador de Compute**.
+3. **IAM y administración**, **Cuentas de servicio**, **Crear cuenta de servicio**. Dale los roles **Administrador de Compute** y **Administrador de almacenamiento**
+   (este último, para subir la imagen de Alpine).
 4. Dentro de la cuenta, **Claves**, **Agregar clave**, **JSON**. Se baja un archivo.
 5. Pegá el contenido de ese archivo en el instalador.
 
@@ -60,7 +66,7 @@ Cuando termines, borrá esa clave.
 
 Elegí **Prefiero pegar un texto**. Al final, el instalador te da un bloque. Creá vos el servidor, en cualquier proveedor:
 
-- **Sistema:** Ubuntu 24.04.
+- **Sistema:** Alpine Linux 3.24. Si tu proveedor no la ofrece, Debian 13.
 - **Tamaño:** alcanza con 1 GB de memoria y 20 GB de disco.
 - **Dirección fija:** IP reservada en Oracle, Elastic IP en AWS, IP estática en Google. Tiene que estar puesta antes de que arranque.
 - **Puertos abiertos:** 80 y 443 en TCP, y 443 en UDP. El 22 solo si vas a entrar a mantenerlo.
@@ -127,7 +133,7 @@ La base queda en el formato de la versión nueva. Una copia hecha después de ac
 Primero subí la copia al servidor. Desde tu computadora, en la carpeta donde la bajaste y con la llave SSH del servidor:
 
 ```sh
-scp -i tu-llave-ssh urna-20270406-063000.tar.gpg ubuntu@203.0.113.24:
+scp -i tu-llave-ssh urna-20270406-063000.tar.gpg alpine@203.0.113.24:
 ```
 
 En Windows ese mismo comando anda en PowerShell; también sirve [WinSCP](https://winscp.net/). La copia queda en la carpeta de tu

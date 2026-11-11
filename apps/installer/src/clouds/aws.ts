@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { ALPINE, ALPINE_AWS_OWNER } from './alpine.ts';
 import { createdResources, sleep, until, type Cloud, type Log } from './common.ts';
 
 export interface AwsCredentials {
@@ -26,8 +27,6 @@ export function signAws(options: { method: string; host: string; path: string; q
 }
 
 const first = (xml: string, tag: string) => new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(xml)?.[1];
-
-const CANONICAL_ACCOUNT = '099720109477';
 
 export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fetch, wait = sleep): Cloud {
   const { region } = credentials;
@@ -82,8 +81,10 @@ export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fe
       await call('AuthorizeSecurityGroupIngress', { GroupId: groupId, ...rules });
 
       log('image');
-      const found = await call('DescribeImages', { 'Owner.1': CANONICAL_ACCOUNT, 'Filter.1.Name': 'name', 'Filter.1.Value.1': 'ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*', 'Filter.2.Name': 'state', 'Filter.2.Value.1': 'available' });
-      const newest = [...found.matchAll(/<imageId>([^<]+)<\/imageId>[\s\S]*?<creationDate>([^<]+)<\/creationDate>/g)].sort((a, b) => b[2]!.localeCompare(a[2]!))[0];
+      // Alpine's own, the newest of its version: Alpine publishes them in every region. «-metal» ones are for
+      // dedicated hardware and do not end in «tiny-r0».
+      const found = await call('DescribeImages', { 'Owner.1': ALPINE_AWS_OWNER, 'Filter.1.Name': 'name', 'Filter.1.Value.1': `alpine-${ALPINE.version}.*-x86_64-*tiny-r0`, 'Filter.2.Name': 'state', 'Filter.2.Value.1': 'available', 'Filter.3.Name': 'architecture', 'Filter.3.Value.1': 'x86_64' });
+      const newest = [...found.matchAll(/<imageId>([^<]+)<\/imageId>[\s\S]*?<creationDate>([^<]+)<\/creationDate>[\s\S]*?<rootDeviceName>([^<]+)<\/rootDeviceName>/g)].sort((a, b) => b[2]!.localeCompare(a[2]!))[0];
       if (!newest) throw new Error('aws_no_image');
 
       log('server');
@@ -95,7 +96,7 @@ export function awsCloud(credentials: AwsCredentials, request: typeof fetch = fe
         UserData: Buffer.from(script).toString('base64'),
         'SecurityGroupId.1': groupId,
         SubnetId: subnetId,
-        'BlockDeviceMapping.1.DeviceName': '/dev/sda1',
+        'BlockDeviceMapping.1.DeviceName': newest[3]!,
         'BlockDeviceMapping.1.Ebs.VolumeSize': '20',
         'TagSpecification.1.ResourceType': 'instance',
         'TagSpecification.1.Tag.1.Key': 'Name',

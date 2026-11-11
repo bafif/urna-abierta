@@ -13,6 +13,12 @@ not yet against the real clouds. What was tested end to end is the SSH installat
 and openSUSE, but that is not tested yet), including restoring a backup on another
 server. Until then, if automatic creation fails, the paste a text option does the same by hand.
 
+**System.** The servers the installer creates run Alpine Linux, from its official cloud images
+([alpinelinux.org/cloud](https://alpinelinux.org/cloud/)). AWS already has them published. Google and Oracle do not: the installer
+downloads the image, checks its SHA-512, uploads it to a bucket in your account and turns it into an image of its own. Once the server
+starts, it deletes the bucket and the image. On Google that adds a few minutes; on Oracle, importing the image can take half an hour
+or more.
+
 ## Oracle Cloud
 
 This is the recommended one: free with no time limit. Machines are ARM and sometimes none are available: the installer tries each zone,
@@ -48,7 +54,8 @@ where the installer creates it.
 
 1. Create an account and a project at [console.cloud.google.com](https://console.cloud.google.com/), and enable billing.
 2. Enable the **Compute Engine API** in that project.
-3. **IAM & Admin**, **Service accounts**, **Create service account**. Give it the **Compute Admin** role.
+3. **IAM & Admin**, **Service accounts**, **Create service account**. Give it the **Compute Admin** and **Storage Admin**
+   roles (the latter, to upload Alpine's image).
 4. In that account, **Keys**, **Add key**, **JSON**. A file gets downloaded.
 5. Paste the contents of that file in the installer.
 
@@ -60,7 +67,7 @@ When you are done, delete that key.
 
 Choose **I prefer to paste a text**. At the end, the installer gives you a block. Create the server yourself, on any provider:
 
-- **System:** Ubuntu 24.04.
+- **System:** Alpine Linux 3.24. If your provider does not offer it, Debian 13.
 - **Size:** 1 GB of memory and 20 GB of disk are enough.
 - **Fixed address:** reserved IP on Oracle, Elastic IP on AWS, static IP on Google. It has to be in place before it starts.
 - **Open ports:** 80 and 443 on TCP, and 443 on UDP. Port 22 only if you are going to get in to maintain it.
@@ -127,7 +134,7 @@ The database stays in the new version's format. A backup made after updating res
 First upload the backup to the server. From your computer, in the folder where you downloaded it and with the server's SSH key:
 
 ```sh
-scp -i your-ssh-key urna-20270406-063000.tar.gpg ubuntu@203.0.113.24:
+scp -i your-ssh-key urna-20270406-063000.tar.gpg alpine@203.0.113.24:
 ```
 
 On Windows the same command works in PowerShell; [WinSCP](https://winscp.net/) also does. The backup lands in your user's folder.
