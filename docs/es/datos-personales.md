@@ -98,7 +98,7 @@ Está en **Más cosas**, **Pedidos de personas**, y lo ve quien tiene la tarea �
    del semáforo. La fila queda anónima, como «Borrado a pedido», para que los totales de la mesa sigan dando. Plazo: 5 días hábiles.
 6. **Contestale por escrito,** con la fecha. El registro de la app guarda que se hizo, pero no qué le contestaste.
 
-Tres cosas para tener en cuenta:
+Para tener en cuenta:
 
 - **La página cubre una sola elección.** Si el mismo documento está en otros padrones, la página los nombra: atendé cada uno. Una
   categoría sensible aparece solo si quien baja la página tiene la tarea «Anotar quién nos vota»; si no, la página dice que hay
@@ -203,7 +203,7 @@ tenías.
 
 ## Límites de esta versión
 
-Esta lista es de noviembre de 2026. Una versión nueva puede resolver alguno: fijate en sus notas.
+Una versión nueva puede resolver alguno: fijate en sus notas.
 
 - Hasta la purga, el identificador interno de una persona borrada sale de su documento con la clave de campos, para reconocerla si se
   vuelve a subir el padrón. Quien tenga esa clave, que viaja en las copias de seguridad, puede probar todos los documentos hasta dar con

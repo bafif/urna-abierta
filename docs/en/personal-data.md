@@ -100,7 +100,7 @@ erasure goes into the **Log**, with who did it and when.
    Deadline: 5 business days.
 6. **Answer them in writing,** with the date. The app's log keeps that it was done, but not what you answered.
 
-Three things to keep in mind:
+Keep in mind:
 
 - **The page covers a single election.** If the same document is in other rolls, the page names them: handle each one. A sensitive
   category shows only if whoever downloads the page has the task “Note who votes for us”; otherwise the page says there is one
@@ -205,7 +205,7 @@ already had.
 
 ## Limits of this version
 
-This list is from November 2026. A new version may solve some of them: check its notes.
+A new version may solve some of them: check its notes.
 
 - Until the purge, the internal identifier of an erased person comes from their document with the field key, so that they are known
   again if the roll is uploaded again. Whoever has that key, which travels in the backups, can try every document until theirs matches.
