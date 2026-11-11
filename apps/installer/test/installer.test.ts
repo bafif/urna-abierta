@@ -209,6 +209,8 @@ describe('creating a server, against a fake of each cloud', () => {
       if (last === 'availabilityDomains') return [{ name: 'AD-1' }, { name: 'AD-2' }];
       if (url.pathname === '/n/') return '"ns"';
       if (last === 'images' && method === 'POST') return { id: 'image-1' };
+      if (last === 'computeGlobalImageCapabilitySchemas') return [{ id: 'global-1', currentVersionName: 'version-1' }];
+      if (last === 'computeImageCapabilitySchemas' && method === 'POST') return { id: 'schema-1' };
       if (url.pathname.endsWith('/images/image-1') && method === 'GET') return { lifecycleState: 'AVAILABLE' };
       if (last === 'instances' && method === 'POST') return { id: 'i-1' };
       if (url.pathname.includes('/instances/')) return { lifecycleState: 'RUNNING' };
@@ -240,7 +242,16 @@ describe('creating a server, against a fake of each cloud', () => {
     expect(upload.url.pathname).toMatch(/^\/n\/ns\/b\/urna-abierta-\w+\/o\/alpine-3\.[\d.]+-aarch64-tiny-r0\.qcow2$/);
     expect(upload.body).toBe('alpine disk');
     expect(JSON.parse(calls.find((call) => call.method === 'POST' && call.url.pathname.endsWith('/images'))!.body).imageSourceDetails).toMatchObject({ sourceType: 'objectStorageTuple', namespaceName: 'ns', sourceImageType: 'QCOW2' });
-    expect(calls.some((call) => call.method === 'PUT' && call.url.pathname.endsWith('/images/image-1/shapes/VM.Standard.A1.Flex'))).toBe(true);
+    // Oracle's ARM machines start only with UEFI: the image says so before it is marked for the machine.
+    const schemaAt = calls.findIndex((call) => call.method === 'POST' && call.url.pathname.endsWith('/computeImageCapabilitySchemas'));
+    const shapeAt = calls.findIndex((call) => call.method === 'PUT' && call.url.pathname.endsWith('/images/image-1/shapes/VM.Standard.A1.Flex'));
+    expect(JSON.parse(calls[schemaAt]!.body)).toEqual({
+      compartmentId: 'ocid1.tenancy', imageId: 'image-1', computeGlobalImageCapabilitySchemaVersionName: 'version-1',
+      schemaData: { 'Compute.Firmware': { descriptorType: 'enumstring', source: 'IMAGE', values: ['UEFI_64'], defaultValue: 'UEFI_64' } },
+    });
+    expect(schemaAt).toBeGreaterThan(-1);
+    expect(shapeAt).toBeGreaterThan(schemaAt);
+    expect(calls.some((call) => call.method === 'DELETE' && call.url.pathname.endsWith('/computeImageCapabilitySchemas/schema-1'))).toBe(true);
     expect(launches.every((item) => item.sourceDetails.imageId === 'image-1')).toBe(true);
     expect(calls.at(-1)).toMatchObject({ method: 'DELETE' });
     expect(calls.at(-1)!.url.pathname).toMatch(/\/images\/image-1$/);
@@ -300,6 +311,8 @@ describe('when creating a server fails, nothing is left charging', () => {
       if (last === 'availabilityDomains') return [{ name: 'AD-1' }];
       if (url.pathname === '/n/') return '"ns"';
       if (last === 'images' && method === 'POST') return { id: 'image-1' };
+      if (last === 'computeGlobalImageCapabilitySchemas') return [{ id: 'global-1', currentVersionName: 'version-1' }];
+      if (last === 'computeImageCapabilitySchemas' && method === 'POST') return { id: 'schema-1' };
       if (url.pathname.endsWith('/images/image-1') && method === 'GET') return { lifecycleState: 'AVAILABLE' };
       if (last === 'instances' && method === 'POST') return new Failure(500, { code: 'InternalError', message: 'Out of host capacity.' });
       return {};
@@ -311,7 +324,7 @@ describe('when creating a server fails, nothing is left charging', () => {
     expect(error.message).toMatch(/^oracle_no_capacity/);
     expect(error.left).toEqual([]);
     expect(lines).toContain('cleanup');
-    const network = (call: { url: URL }) => !call.url.pathname.startsWith('/n/') && !call.url.pathname.includes('/images/');
+    const network = (call: { url: URL }) => !call.url.pathname.startsWith('/n/') && !call.url.pathname.includes('/images/') && !call.url.pathname.includes('/computeImageCapabilitySchemas/');
     const undone = calls.filter((call) => network(call) && (call.method === 'DELETE' || (call.method === 'PUT' && call.url.pathname.includes('/routeTables/') && JSON.parse(call.body).routeRules.length === 0)));
     // Both images were imported (ARM, then x86 after ARM had no room): each image, file and bucket was deleted.
     // The file and the bucket go as soon as the image is imported; the cleanup tries again, and gone counts as deleted.
@@ -319,6 +332,8 @@ describe('when creating a server fails, nothing is left charging', () => {
     expect(deletedHere.filter((path) => /\/o\/alpine-3\.[\d.]+-(aarch64|x86_64)-tiny-r0\.qcow2$/.test(path))).toHaveLength(2);
     expect(deletedHere.filter((path) => /\/b\/urna-abierta-\w+$/.test(path))).toHaveLength(2);
     expect(calls.filter((call) => call.method === 'DELETE' && /\/images\/image-1$/.test(call.url.pathname))).toHaveLength(2);
+    // The ARM one had its capabilities, which are deleted with it.
+    expect(calls.some((call) => call.method === 'DELETE' && call.url.pathname.endsWith('/computeImageCapabilitySchemas/schema-1'))).toBe(true);
     expect(undone.map((call) => `${call.method} ${call.url.pathname.split('/').slice(-2).join('/')}`)).toEqual([
       'DELETE subnets/subnet-1', 'PUT routeTables/rt-1', 'DELETE internetGateways/igw-1', 'DELETE vcns/vcn-1', 'DELETE publicIps/ip-1',
     ]);

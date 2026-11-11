@@ -85,6 +85,8 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
 
   /** Imported images, one per kind of machine, deleted once the machine runs: its boot volume is a copy. */
   const imported = new Map<string, string>();
+  /** And the capabilities given to the ARM one, which Oracle keeps apart from its image. */
+  const schemas = new Map<string, string>();
 
   /**
    * Oracle has no Alpine of its own: Alpine's image file for that kind of machine goes to a bucket of this attempt and
@@ -113,6 +115,19 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
     });
     resources.add(`image ${image.id}`, () => remove(`${core}/images/${image.id}`));
     await until(async () => (await call('GET', `${core}/images/${image.id}`)).lifecycleState === 'AVAILABLE', wait, { tries: 360, every: 10_000, problem: 'oracle_image_timeout' });
+    if (arm) {
+      // Oracle's ARM machines start only with UEFI, and an imported image starts with BIOS until it says otherwise. The
+      // x86 file starts with either (Limine), so that one keeps what Oracle gives.
+      const [global] = await call('GET', `${core}/computeGlobalImageCapabilitySchemas`);
+      const schema = await call('POST', `${core}/computeImageCapabilitySchemas`, {
+        compartmentId: tenancy,
+        imageId: image.id,
+        computeGlobalImageCapabilitySchemaVersionName: global.currentVersionName,
+        schemaData: { 'Compute.Firmware': { descriptorType: 'enumstring', source: 'IMAGE', values: ['UEFI_64'], defaultValue: 'UEFI_64' } },
+      });
+      resources.add(`image schema ${schema.id}`, () => remove(`${core}/computeImageCapabilitySchemas/${schema.id}`));
+      schemas.set(shape, schema.id);
+    }
     // An imported image is not marked for every kind of machine: this one has to be.
     await call('PUT', `${core}/images/${image.id}/shapes/${shape}`, {});
     // Once imported, the file is not needed.
@@ -198,6 +213,7 @@ export function oracleCloud(credentials: OracleCredentials, request: typeof fetc
       const addresses = await call('GET', `${core}/privateIps?vnicId=${encodeURIComponent(attachments[0].vnicId)}`);
       await call('PUT', `${core}/publicIps/${reservedId}`, { privateIpId: addresses[0].id });
       // If deleting an image fails, the server stays: it costs cents a month, and the servers' guide says where it is.
+      for (const id of schemas.values()) await call('DELETE', `${core}/computeImageCapabilitySchemas/${id}`).catch(() => undefined);
       for (const id of imported.values()) await call('DELETE', `${core}/images/${id}`).catch(() => undefined);
     },
 
