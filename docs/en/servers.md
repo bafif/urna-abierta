@@ -9,7 +9,8 @@ this page explains how.
 These plans and their screens change often: when in doubt, each provider's documentation prevails.
 
 **Status.** Automatic server creation was tested against simulations of each API, and the AWS signature against its official suite, but
-not yet against the real clouds. What was tested end to end is the SSH installation on Ubuntu, including restoring a backup on another
+not yet against the real clouds. What was tested end to end is the SSH installation on Ubuntu (the script already covers Debian, Fedora, Arch, Alpine
+and openSUSE, but that is not tested yet), including restoring a backup on another
 server. Until then, if automatic creation fails, the paste a text option does the same by hand.
 
 ## Oracle Cloud

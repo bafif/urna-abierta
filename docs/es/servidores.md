@@ -9,7 +9,8 @@ explica cómo.
 Estos planes y sus pantallas cambian seguido: ante cualquier duda, manda la documentación de cada proveedor.
 
 **Estado.** La creación automática de servidores se probó contra simulaciones de cada API, y la firma de AWS contra su suite oficial,
-pero todavía no contra las nubes reales. Lo probado de punta a punta es la instalación por SSH en un Ubuntu, incluido restaurar una copia
+pero todavía no contra las nubes reales. Lo probado de punta a punta es la instalación por SSH en un Ubuntu (en Debian, Fedora, Arch, Alpine y openSUSE el script
+ya los contempla, pero todavía no se probó), incluido restaurar una copia
 en otro servidor. Hasta que se pruebe, si la creación automática falla, la opción de pegar un texto hace lo mismo a mano.
 
 ## Oracle Cloud

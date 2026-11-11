@@ -11,7 +11,7 @@
 | Server | TypeScript on Node, with Fastify |
 | Database | Postgres, with a versioned SQL schema |
 | Tally sheet photos | Server disk, or S3-compatible storage, where they arrive encrypted (see [servers](servers.md)) |
-| Installation | A rootless Podman pod with app, Postgres and Caddy (automatic TLS), which a script leaves running on Ubuntu or Debian |
+| Installation | A rootless Podman pod with app, Postgres and Caddy (automatic TLS), which a script leaves running on Debian, Ubuntu, Kali, Fedora, Arch, Alpine or openSUSE, with systemd or OpenRC |
 | Installer | A single executable for Windows, macOS and Linux, published on GitHub Releases. It is Node with its files inside: it opens its screens in the browser, shares the themes with the app, and could be tested end to end |
 | Scanner | A roll reader in Python for scanned PDFs, which runs on the computer with local text recognition |
 

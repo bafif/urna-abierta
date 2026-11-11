@@ -11,7 +11,7 @@
 | Servidor | TypeScript en Node, con Fastify |
 | Base de datos | Postgres, con esquema SQL versionado |
 | Fotos de actas | Disco del servidor, o un almacenamiento compatible con S3, adonde llegan cifradas (ver [servidores](servidores.md)) |
-| Instalación | Un pod de Podman sin root con app, Postgres y Caddy (TLS automático), que un script deja andando en un Ubuntu o Debian |
+| Instalación | Un pod de Podman sin root con app, Postgres y Caddy (TLS automático), que un script deja andando en Debian, Ubuntu, Kali, Fedora, Arch, Alpine u openSUSE, con systemd u OpenRC |
 | Instalador | Un solo ejecutable para Windows, macOS y Linux, publicado en GitHub Releases. Es Node con sus archivos adentro: abre sus pantallas en el navegador, comparte los temas con la app, y se pudo probar de punta a punta |
 | Escáner | Lector de padrones en Python para los PDF escaneados, que corre en la computadora con reconocimiento de texto local |
 

@@ -41,7 +41,7 @@ Te hace tres preguntas y hace el resto.
 | Opción | Qué necesitás |
 |---|---|
 | Crear un servidor nuevo | Una cuenta en Oracle Cloud, AWS o Google Cloud. [Acá está cómo crearla](servidores.md) |
-| Ya tengo un servidor | Ubuntu o Debian, su dirección y una llave SSH de un usuario con `sudo` sin contraseña, o la contraseña de root: sirve solo para entrar la primera vez, y después el servidor deja de aceptar contraseñas |
+| Ya tengo un servidor | Un Linux conocido (Debian, Ubuntu, Kali, Fedora, Arch, Alpine u openSUSE), su dirección y una llave SSH de un usuario con `sudo` sin contraseña, o la contraseña de root: sirve solo para entrar la primera vez, y después el servidor deja de aceptar contraseñas |
 | Pegar un texto | Pegar un bloque al crear el servidor, sin darle ninguna credencial al instalador |
 | Probar en esta computadora | Podman o Docker abierto. Para mirarla o hacer un simulacro: [con teléfonos](#probar-con-teléfonos-sin-servidor) |
 

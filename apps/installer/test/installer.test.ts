@@ -373,7 +373,7 @@ describe('what the failure screen says', () => {
     expect(why('google_POST: This API method requires billing to be enabled.')).toBe('google_billing');
     expect(why('google_operation: ZONE_RESOURCE_POOL_EXHAUSTED')).toBe('google_capacity');
     expect(why('aws_server_did_not_start')).toBe('slow_cloud');
-    expect(why('script_failed: urna-abierta: needs_debian')).toBe('needs_debian');
+    expect(why('script_failed: urna-abierta: needs_supported_linux')).toBe('needs_supported_linux');
     expect(why('script_failed: E: Could not get lock /var/lib/dpkg/lock-frontend')).toBe('apt');
     expect(why('script_failed: Error: something else | exit')).toBe('script');
     expect(why('All configured authentication methods failed')).toBe('ssh');
@@ -392,7 +392,7 @@ describe('what the failure screen says', () => {
     }
     const steps = [...readFileSync(new URL('../../../deploy/server/instalar.sh', import.meta.url), 'utf8').matchAll(/\bsay '(\w+)'|\bsay "(\w+) /g)].map((match) => match[1] ?? match[2]);
     expect(steps.length).toBeGreaterThan(5);
-    for (const step of steps.filter((each) => each !== 'needs_debian')) {
+    for (const step of steps.filter((each) => each !== 'needs_supported_linux')) {
       expect(es.has(`server.${step}`), `server.${step} en castellano`).toBe(true);
       expect(en.has(`server.${step}`), `server.${step} in English`).toBe(true);
     }

@@ -142,7 +142,7 @@ export function renderScript({ secrets, site, cert, theme, images: chosen = imag
   // The `urna` script does not go here: it comes in the server image, so that each version brings its own.
   return [
     '#!/bin/sh',
-    '# Urna Abierta: installs everything on an Ubuntu or Debian server.',
+    '# Urna Abierta: installs everything on a Linux server (Debian, Ubuntu, Fedora, Arch, Alpine, openSUSE).',
     ...settings,
     withoutComments(assetText('instalar.sh')).trimEnd(),
     '',
