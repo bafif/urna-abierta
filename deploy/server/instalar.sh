@@ -47,9 +47,10 @@ case "$pm" in
     # Podman is in the community repository, which some images leave commented out.
     grep -q '^[^#].*/community' /etc/apk/repositories || sed -i 's|^#\(.*/community\)$|\1|' /etc/apk/repositories
     apk update -q
-    # shadow: useradd; shadow-subids: the ranges of ids rootless Podman needs; runuser: what `urna` uses as root.
+    # shadow: useradd; shadow-subids: the ranges of ids rootless Podman needs; runuser: what `urna` uses as root;
+    # busybox-openrc: the service of crond, which makes the backups; nano: the editor the servers' guide names.
     apk add -q podman slirp4netns passt gnupg curl openssl sudo shadow shadow-subids runuser util-linux-misc \
-      iptables >/dev/null
+      iptables busybox-openrc nano >/dev/null
     ;;
   zypper) zypper --non-interactive --quiet install podman slirp4netns passt gpg2 curl openssl sudo shadow util-linux >/dev/null ;;
 esac
@@ -236,14 +237,18 @@ if [ -d "/run/user/$uid" ] && run_as_urna systemctl --user daemon-reload 2>/dev/
   run_as_urna systemctl --user enable --now urna-abierta.service >/dev/null 2>&1 || true
 fi
 # Without systemd (OpenRC): a service of the system starts it at boot as urna, and cron makes the backups at the same
-# hours as the timer (00/6:30). /run/user is lost at each boot: the service makes it again.
+# hours as the timer (00/6:30). /run/user is lost at each boot, and nothing else makes it without systemd: the service
+# makes it again, parent first, which checkpath does not.
 if [ -n "$openrc" ]; then
   cat >/etc/init.d/urna-abierta <<EOF
 #!/sbin/openrc-run
 description="Urna Abierta"
-depend() { need net cgroups; after firewall iptables; }
+depend() { need net cgroups; after firewall iptables sysctl; }
 start() {
   ebegin "Urna Abierta"
+  checkpath -d -m 0755 /run/user
+  # The ports 80 and 443 for a user that is not root, also where nothing applies sysctl.d at boot.
+  sysctl -q -w net.ipv4.ip_unprivileged_port_start=80 >/dev/null 2>&1 || true
   checkpath -d -m 0700 -o urna:urna /run/user/$uid
   runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$uid HOME=$home URNA_HOME=$home $home/urna arrancar sin-esperar
   eend \$?
@@ -256,10 +261,22 @@ stop() {
 EOF
   chmod 755 /etc/init.d/urna-abierta
   rc-update add urna-abierta default >/dev/null 2>&1 || true
+  # Started through OpenRC, so that it counts as running and is stopped well when the machine shuts down.
+  rc-service urna-abierta start >/dev/null 2>&1 || true
   printf '30 0,6,12,18 * * * XDG_RUNTIME_DIR=/run/user/%s HOME=%s URNA_HOME=%s %s/urna copia\n' "$uid" "$home" "$home" "$home" |
     crontab -u urna -
   rc-update add crond default >/dev/null 2>&1 || true
   rc-service crond start >/dev/null 2>&1 || true
+fi
+# Alpine applies no fixes by itself, as Ubuntu does: every day, at the hour of its periodic tasks, the fixes of this
+# Alpine version, Podman's included. Never a new version of Alpine, which changes more than fixes. The last run stays in
+# the log.
+if [ "$pm" = apk ] && [ -d /etc/periodic/daily ]; then
+  cat >/etc/periodic/daily/urna-abierta-parches <<'EOF'
+#!/bin/sh
+{ date; apk update -q && apk upgrade -q --no-interactive; echo "rc=$?"; } >/var/log/urna-abierta-parches.log 2>&1
+EOF
+  chmod 755 /etc/periodic/daily/urna-abierta-parches
 fi
 # Starts what systemd did not, waits for it to answer and makes the first backup. A slow certificate, as while the
 # cloud's firewall keeps 80 and 443 closed, stops nothing: everything keeps running, and «urna estado» says what is missing.

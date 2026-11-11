@@ -9,9 +9,10 @@ this page explains how.
 These plans and their screens change often: when in doubt, each provider's documentation prevails.
 
 **Status.** Automatic server creation was tested against simulations of each API, and the AWS signature against its official suite, but
-not yet against the real clouds. What was tested end to end is the SSH installation on Ubuntu (the script already covers Debian, Fedora, Arch, Alpine
-and openSUSE, but that is not tested yet), including restoring a backup on another
-server. Until then, if automatic creation fails, the paste a text option does the same by hand.
+not yet against the real clouds. What was tested end to end is the SSH installation on Alpine and on Ubuntu (the script already covers Debian, Fedora,
+Arch and openSUSE, but that is not tested yet), including restoring a backup on another server and rebooting. Alpine's
+cloud images were tested on virtual machines: they start with BIOS and with UEFI, the ARM one too, and run the pasted
+text as root. Until then, if automatic creation fails, the paste a text option does the same by hand.
 
 **System.** The servers the installer creates run Alpine Linux, from its official cloud images
 ([alpinelinux.org/cloud](https://alpinelinux.org/cloud/)). AWS already has them published. Google and Oracle do not: the installer
@@ -106,6 +107,7 @@ sudo urna estado      # says whether everything is fine and what to do if not
 sudo urna copia       # makes an encrypted backup now
 sudo urna actualizar  # makes a backup and moves to the latest version
 sudo urna reiniciar   # creates the containers again with what /opt/urna-abierta/.env says, keeping the data
+sudo urna alpine      # on Alpine: makes a backup and moves to its new version
 ```
 
 What was running comes back by itself after a reboot.
@@ -128,6 +130,16 @@ version had already changed the database, the previous one does not start until 
 again, and not the backup it makes when going back, which that version cannot open.
 
 The database stays in the new version's format. A backup made after updating restores on that version or a newer one.
+
+### The system
+
+On Alpine, the server applies the fixes of its Alpine version once a day, Podman's included. How the last run went stays in
+`/var/log/urna-abierta-parches.log`. Alpine releases a new version every six months, and from then on the previous one stops getting
+Podman fixes: `sudo urna estado` says when it is out. `sudo urna alpine` makes a backup and moves the server to the new version. Then
+restart it with `sudo reboot`, and what was running comes back by itself. As with updating Urna Abierta, do it on a day with no
+election going on. If it stops halfway, run it again and it goes on from there.
+
+On other Linux systems, the system is updated the usual way for that Linux.
 
 ### Restoring a backup
 

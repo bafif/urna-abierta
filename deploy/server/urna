@@ -9,6 +9,7 @@
 #   urna actualizar [versión]          makes a backup and moves to the newest version, or to the one given
 #   urna reiniciar           creates the containers again with what .env says, keeping the data
 #   urna direccion <ip o dominio>      changes the address of the site
+#   urna alpine              moves the system to the newest version of Alpine, after a backup (as root)
 #
 # It answers in Spanish or in English: «urna --idioma en estado» chooses for one run (see language below).
 set -eu
@@ -43,13 +44,46 @@ t() { if [ "$lang" = es ]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi;
 # The backup to restore is opened first, from the folder the command was run in, and as root when it runs as root:
 # it may be where the user `urna` cannot read, like the home of whoever connected. It goes on as standard input.
 if [ "${1:-}" = restaurar ] && [ $# -eq 3 ] && [ "$2" != - ]; then
-  [ -f "$2" ] || { t "No encuentro el archivo $2. Fijate la ruta, o pasala completa, como /home/ubuntu/copia.tar.gpg." "There is no file $2. Check the path, or give the full one, like /home/ubuntu/copia.tar.gpg." >&2; exit 1; }
+  [ -f "$2" ] || { t "No encuentro el archivo $2. Fijate la ruta, o pasala completa, como /home/alpine/copia.tar.gpg." "There is no file $2. Check the path, or give the full one, like /home/alpine/copia.tar.gpg." >&2; exit 1; }
   [ -r "$2" ] || { t "No puedo leer $2. Probá con sudo." "$2 cannot be read. Try with sudo." >&2; exit 1; }
   exec <"$2"
   set -- restaurar - "$3"
 fi
 # Whoever calls this may be in a folder that this user cannot enter.
 cd /
+
+# The newest stable version of Alpine, as 3.24, or nothing if it cannot be asked.
+newest_alpine() {
+  curl -fsS --max-time 8 "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/$(apk --print-arch)/latest-releases.yaml" 2>/dev/null |
+    sed -n 's/^ *branch: *v\([0-9][0-9.]*\)$/\1/p' | head -n 1
+}
+# Alpine fixes each version only until the next one comes out (Podman's repository, only until then): moving to the
+# next is done as root, after a backup, and never by itself, as it changes more than fixes. If it stops halfway, running
+# it again goes on from there. The new kernel is used after a reboot.
+if [ "${1:-}" = alpine ]; then
+  [ -f /etc/alpine-release ] || { t 'Este servidor no es Alpine: su sistema se actualiza como siempre.' 'This server is not Alpine: its system is updated the usual way.' >&2; exit 2; }
+  [ "$(id -u)" = 0 ] || { t 'Corré «sudo urna alpine».' 'Run “sudo urna alpine”.' >&2; exit 2; }
+  branch=$(sed -n 's|^[^#]*/alpine/v\([0-9][0-9.]*\)/main/*$|\1|p' /etc/apk/repositories | head -n 1)
+  [ -n "$branch" ] || { t 'Los repositorios de este Alpine no siguen una versión fija: no los toco.' 'The repositories of this Alpine follow no fixed version: I leave them as they are.' >&2; exit 2; }
+  target=$(newest_alpine)
+  [ -n "$target" ] || { t 'No pude averiguar cuál es la última versión de Alpine. No cambié nada.' 'Could not find out the newest version of Alpine. Nothing changed.' >&2; exit 1; }
+  if [ "$branch" = "$target" ] && [ "$(cut -d. -f1,2 /etc/alpine-release)" = "$target" ]; then
+    t "Ya está en Alpine $target, la última." "It is already on Alpine $target, the newest."
+    exit 0
+  fi
+  if [ "$branch" != "$target" ]; then
+    "$0" copia || { t 'No pude hacer la copia de antes. No cambié nada.' 'Could not make the backup first. Nothing changed.' >&2; exit 1; }
+    cp /etc/apk/repositories "/etc/apk/repositories.v$branch"
+    sed -i "s|/v$branch/|/v$target/|g" /etc/apk/repositories
+  fi
+  t "Pasando a Alpine $target…" "Moving to Alpine $target…"
+  if ! { apk update -q && apk upgrade -q --available --no-interactive; }; then
+    t "No terminó: arriba está lo que dijo apk. Corré de nuevo «sudo urna alpine» y sigue desde ahí. Los repositorios de antes quedaron en /etc/apk/repositories.v$branch." "It did not finish: what apk said is above. Run “sudo urna alpine” again and it goes on from there. The repositories from before are in /etc/apk/repositories.v$branch." >&2
+    exit 1
+  fi
+  t "Listo: Alpine $target. Reiniciá el servidor cuando no haya una elección en curso, con «sudo reboot»: Urna Abierta vuelve sola." "Done: Alpine $target. Restart the server when no election is going on, with “sudo reboot”: Urna Abierta comes back by itself."
+  exit 0
+fi
 
 # As root, it runs as the user that owns the containers, and remembers it to say how to look at them.
 if [ "$(id -u)" = 0 ] && [ "${URNA_RUN_AS_ROOT:-}" != si ]; then
@@ -397,6 +431,14 @@ photos_status() {
   fi
 }
 
+# systemd says it with timedatectl; Alpine keeps the clock with chrony. Without either, nothing to check.
+clock_synchronized() {
+  if command -v timedatectl >/dev/null 2>&1; then
+    [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]
+  elif command -v chronyc >/dev/null 2>&1; then
+    chronyc -n tracking 2>/dev/null | grep -q '^Leap status *: Normal'
+  fi
+}
 status() {
   problems=0
   # ok, aviso (worth knowing, but in order), espera (not confirmed yet) or anything else for a failure.
@@ -437,7 +479,14 @@ status() {
   else
     check "$(t 'copias en el bucket' 'backups in the bucket')" mal "$(t "ninguna de las últimas 7 horas llegó a $URNA_S3_BUCKET. Corré «urna copia» y fijate qué dice" "none from the last 7 hours reached $URNA_S3_BUCKET. Run “urna copia” and see what it says")"
   fi
-  if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo yes)" = yes ]; then check "$(t 'la hora está sincronizada' 'the clock is synchronized')" ok; else check "$(t hora clock)" mal "$(t 'este servidor no sincroniza la hora' 'this server does not synchronize its clock')"; fi
+  if [ -f /etc/alpine-release ]; then
+    alpine=$(cut -d. -f1,2 /etc/alpine-release)
+    newer=$(newest_alpine)
+    if [ -n "$newer" ] && [ "$newer" != "$alpine" ]; then
+      check "$(t "salió Alpine $newer, y la $alpine deja de recibir arreglos de Podman. Pasá con «sudo urna alpine» un día sin elección" "Alpine $newer is out, and $alpine stops getting Podman fixes. Move with “sudo urna alpine” on a day with no election")" aviso
+    fi
+  fi
+  if clock_synchronized; then check "$(t 'la hora está sincronizada' 'the clock is synchronized')" ok; else check "$(t hora clock)" mal "$(t 'este servidor no sincroniza la hora' 'this server does not synchronize its clock')"; fi
   if [ -n "$ends" ]; then check "$(t "certificado hasta: $ends" "certificate until: $ends")" ok; else check "$(t certificado certificate)" mal "$(t "todavía no hay, y sin él nadie entra. Let's Encrypt lo da cuando llega a este servidor por los puertos 80 y 443: abrí TCP 80 y 443, y UDP 443, en el firewall de la nube. Llega solo, aunque si los puertos estuvieron cerrados mucho tiempo puede tardar horas: «urna reiniciar» lo pide de nuevo enseguida" "there is none yet, and without it nobody gets in. Let's Encrypt issues it when it reaches this server on ports 80 and 443: open TCP 80 and 443, and UDP 443, in the cloud firewall. It arrives by itself, although if the ports were closed for a long time it can take hours: “urna reiniciar” asks for it again right away")"; fi
   [ "$problems" = 0 ] && t 'Todo en orden.' 'All in order.'
   return "$problems"
@@ -454,6 +503,7 @@ urna restaurar <archivo> <llave>   reemplaza los datos por los de una copia
 urna actualizar [versión]          hace una copia y pasa a la última versión, o a la que se pida
 urna reiniciar           vuelve a crear los contenedores con lo que dice .env, sin tocar los datos
 urna direccion <ip o dominio>      cambia la dirección del sitio
+urna alpine              pasa el sistema a la última versión de Alpine, después de una copia (como root)
 
 Con --idioma en o --idioma es antes del comando, contesta en ese idioma.
 EOF
@@ -467,6 +517,7 @@ urna restaurar <file> <key>        replaces the data with a backup
 urna actualizar [version]          makes a backup and moves to the newest version, or to the one given
 urna reiniciar           creates the containers again with what .env says, keeping the data
 urna direccion <ip or domain>      changes the address of the site
+urna alpine              moves the system to the newest version of Alpine, after a backup (as root)
 
 With --idioma es or --idioma en before the command, it answers in that language.
 EOF
@@ -476,8 +527,8 @@ EOF
 case "${1:-estado}" in
   arrancar)
     start
-    # Its systemd unit only starts the pod: a wait tied to the unit would make systemd stop every container when
-    # the certificate takes long, as it does while the ports are closed. Whoever installs waits with a second «arrancar».
+    # Its service (systemd or OpenRC) only starts the pod: a wait tied to it would make systemd stop every container,
+    # or hold OpenRC's boot, when the certificate takes long, as it does while the ports are closed. Whoever installs waits with a second «arrancar».
     [ "${2:-}" = sin-esperar ] && exit 0
     answered=0
     wait_healthy || answered=$?

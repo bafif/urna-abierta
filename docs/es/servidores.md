@@ -9,9 +9,10 @@ explica cómo.
 Estos planes y sus pantallas cambian seguido: ante cualquier duda, manda la documentación de cada proveedor.
 
 **Estado.** La creación automática de servidores se probó contra simulaciones de cada API, y la firma de AWS contra su suite oficial,
-pero todavía no contra las nubes reales. Lo probado de punta a punta es la instalación por SSH en un Ubuntu (en Debian, Fedora, Arch, Alpine y openSUSE el script
-ya los contempla, pero todavía no se probó), incluido restaurar una copia
-en otro servidor. Hasta que se pruebe, si la creación automática falla, la opción de pegar un texto hace lo mismo a mano.
+pero todavía no contra las nubes reales. Lo probado de punta a punta es la instalación por SSH en Alpine y en Ubuntu (en Debian, Fedora, Arch y openSUSE el
+script ya los contempla, pero todavía no se probó), incluido restaurar una copia en otro servidor y reiniciar. Las imágenes
+de Alpine para la nube se probaron en máquinas virtuales: arrancan con BIOS y con UEFI, también la de ARM, y corren el
+texto pegado como root. Hasta que se pruebe, si la creación automática falla, la opción de pegar un texto hace lo mismo a mano.
 
 **Sistema.** Los servidores que crea el instalador son Alpine Linux, de sus imágenes oficiales para la nube
 ([alpinelinux.org/cloud](https://alpinelinux.org/cloud/)). AWS ya las tiene publicadas. Google y Oracle no: el instalador baja la
@@ -105,6 +106,7 @@ sudo urna estado      # dice si está todo bien y qué hacer si no
 sudo urna copia       # hace una copia cifrada ahora
 sudo urna actualizar  # hace una copia y pasa a la última versión
 sudo urna reiniciar   # vuelve a crear los contenedores con lo que dice /opt/urna-abierta/.env, sin borrar datos
+sudo urna alpine      # en Alpine: hace una copia y pasa a su versión nueva
 ```
 
 Lo que estaba andando vuelve solo después de un reinicio.
@@ -127,6 +129,16 @@ nueva llegó a cambiar la base, la anterior no arranca hasta restaurar esa copia
 hace al volver, que esa versión no puede abrir.
 
 La base queda en el formato de la versión nueva. Una copia hecha después de actualizar se restaura en esa versión o en una más nueva.
+
+### El sistema
+
+En Alpine, el servidor aplica una vez por día los arreglos de su versión de Alpine, los de Podman incluidos. Cómo salió la última
+vez queda en `/var/log/urna-abierta-parches.log`. Alpine saca una versión nueva cada seis meses, y desde ese momento la anterior deja
+de recibir arreglos de Podman: `sudo urna estado` avisa cuando sale. `sudo urna alpine` hace una copia y pasa el servidor a la versión
+nueva. Después reinicialo con `sudo reboot`, y lo que estaba andando vuelve solo. Como al actualizar Urna Abierta, hacelo un día sin
+elección en curso. Si se corta a mitad de camino, correlo de nuevo y sigue desde ahí.
+
+En otros Linux, el sistema se actualiza como siempre en ese Linux.
 
 ### Restaurar una copia
 

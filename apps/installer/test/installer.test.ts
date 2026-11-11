@@ -56,11 +56,17 @@ describe('the script that installs a server', () => {
     expect(caddyfile).toMatch(/^\tdefault_sni \{\$URNA_SNI:localhost\}$/m);
   });
 
-  it('starts through systemd without waiting for the certificate, and waits and makes the first backup apart', () => {
+  it('starts through systemd or OpenRC without waiting for the certificate, and waits and makes the first backup apart', () => {
     const installer = readFileSync(new URL('../../../deploy/server/instalar.sh', import.meta.url), 'utf8');
     const urna = readFileSync(new URL('../../../deploy/server/urna', import.meta.url), 'utf8');
     // A wait inside the unit would make systemd stop every container when the certificate is slow.
     expect(installer).toContain('ExecStart=$home/urna arrancar sin-esperar\n');
+    // OpenRC (Alpine) the same, and through OpenRC also the first time, so that it is stopped well at shutdown.
+    expect(installer).toMatch(/^  runuser -u urna -- env XDG_RUNTIME_DIR=\/run\/user\/\$uid HOME=\$home URNA_HOME=\$home \$home\/urna arrancar sin-esperar$/m);
+    expect(installer).toMatch(/^  rc-service urna-abierta start /m);
+    // Alpine applies no fixes by itself: every day, those of its own version, never a new one.
+    expect(installer).toContain('apk update -q && apk upgrade -q --no-interactive;');
+    expect(installer).not.toMatch(/apk upgrade[^\n]*--available/);
     expect(urna).toContain('[ "${2:-}" = sin-esperar ] && exit 0');
     // Slow is not broken: the installer says it is still waiting, and only a server that stops right away fails it.
     expect(installer).toMatch(/run_as_urna "\$home\/urna" arrancar \|\| answered=\$\?\ncase "\$answered" in\n  0\) say "ready \$URNA_SITE" ;;\n  3\) say "still_waiting \$URNA_SITE" ;;\n  \*\) exit 1 ;;\n/);

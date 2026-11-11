@@ -39,7 +39,7 @@ It asks three questions and does the rest.
 | Option | What you need |
 |---|---|
 | Create a new server | An account on Oracle Cloud, AWS or Google Cloud. [This is how to create it](servers.md) |
-| I already have a server | A well-known Linux (Debian, Ubuntu, Kali, Fedora, Arch, Alpine or openSUSE), its address and an SSH key of a user with passwordless `sudo`, or root's password: it is only for getting in the first time, and then the server stops taking passwords |
+| I already have a server | A well-known Linux (Debian, Ubuntu, Kali, Fedora, Arch, Alpine or openSUSE), its address and an SSH key of a user with passwordless `sudo` or `doas`, or root's password: it is only for getting in the first time, and then the server stops taking passwords |
 | Paste a text | Paste a block when creating the server, without giving the installer any credential |
 | Try it on this computer | Podman or Docker running. To look at it or run a drill: [with phones](#trying-it-with-phones-without-a-server) |
 
