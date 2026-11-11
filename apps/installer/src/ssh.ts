@@ -64,11 +64,17 @@ function connect(target: SshTarget, seen?: (fingerprint: string) => void): Promi
   });
 }
 
+/**
+ * How a user that is not root acts as root without a password: sudo, or doas where there is no sudo, as Alpine's cloud
+ * images leave their user. Inside sh, whatever shell the user logs in with.
+ */
+const asRoot = (command: string) => `sh -c 'if command -v sudo >/dev/null 2>&1; then exec sudo -n ${command}; else exec doas -n ${command}; fi'`;
+
 /** Whether it can get in and act as root, before asking the person anything else. */
 export async function checkSsh(target: SshTarget): Promise<'ok' | 'no_sudo'> {
   const client = await connect(target);
   try {
-    const whoami = await run(client, target.user === 'root' ? 'id -u' : 'sudo -n id -u');
+    const whoami = await run(client, target.user === 'root' ? 'id -u' : asRoot('id -u'));
     return whoami.code === 0 && whoami.output.trim() === '0' ? 'ok' : 'no_sudo';
   } finally {
     client.end();
@@ -100,7 +106,7 @@ function run(client: Client, command: string, input?: string, onLine?: (line: st
 export async function runScript(target: SshTarget, script: string, onLine: (line: string) => void, onFingerprint?: (fingerprint: string) => void): Promise<void> {
   const client = await connect(target, onFingerprint);
   try {
-    const { code, output } = await run(client, target.user === 'root' ? 'sh -s' : 'sudo -n sh -s', script, onLine);
+    const { code, output } = await run(client, target.user === 'root' ? 'sh -s' : asRoot('sh -s'), script, onLine);
     if (code !== 0) throw new Error(`script_failed: ${output.split('\n').slice(-6).join(' | ')}`);
   } finally {
     client.end();
