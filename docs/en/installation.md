@@ -132,7 +132,8 @@ unsigned, so your computer will warn you. That is expected:
 | Windows | `urna-abierta-instalador-windows.exe` | Double-click. If “Windows protected your PC” shows up, tap “More info”, then “Run anyway” |
 | Mac with an Apple chip | `urna-abierta-instalador-mac-apple.zip` | Double-click the `.zip`, then `urna-abierta-instalador`. The first time macOS blocks it: go to Settings, Privacy & Security, and tap “Open Anyway” |
 | Mac with Intel | `urna-abierta-instalador-mac-intel.zip` | Same as on a Mac with an Apple chip |
-| Linux | `urna-abierta-instalador-linux.tar.gz` | Unpack it and, in a terminal open in that folder, run `./urna-abierta-instalador`. No warning |
+| Linux (Debian, Ubuntu, Fedora, Arch and almost every other) | `urna-abierta-instalador-linux-x64.tar.gz` | Unpack it and, in a terminal open in that folder, run `./urna-abierta-instalador`. No warning |
+| Alpine Linux | `urna-abierta-instalador-linux-x64-musl.tar.gz` | As on the other Linux. If it does not start, `apk add libstdc++` |
 
 To know which Mac you have: Apple menu, “About This Mac”. It says “Chip Apple M…” or “Processor Intel”.
 

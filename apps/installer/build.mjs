@@ -9,11 +9,14 @@ import { build } from 'esbuild';
 import { assetFiles } from './src/assets.ts';
 
 const version = process.env.URNA_VERSION ?? 'latest';
-const platform = `${process.platform}-${process.arch}`;
+// Alpine and the other Linux with musl instead of glibc: the Node that runs this is built for musl, and so is the
+// installer that comes out. The one built with glibc runs on any Linux with glibc 2.28 or newer.
+const musl = process.platform === 'linux' && !process.report.getReport().header.glibcVersionRuntime;
+const platform = `${process.platform}-${process.arch}${musl ? '-musl' : ''}`;
 const windows = process.platform === 'win32';
 const mac = process.platform === 'darwin';
 /** Names a person recognizes on the releases page. */
-const FRIENDLY = { 'win32-x64': 'windows', 'darwin-arm64': 'mac-apple', 'darwin-x64': 'mac-intel', 'linux-x64': 'linux', 'linux-arm64': 'linux-arm' };
+const FRIENDLY = { 'win32-x64': 'windows', 'darwin-arm64': 'mac-apple', 'darwin-x64': 'mac-intel', 'linux-x64': 'linux-x64', 'linux-x64-musl': 'linux-x64-musl', 'linux-arm64': 'linux-arm64' };
 const name = `urna-abierta-instalador-${FRIENDLY[platform] ?? platform}`;
 // Browsers drop the permission to run a bare file, and archives keep it. Windows does not need it.
 const published = `dist/${name}${windows ? '.exe' : mac ? '.zip' : '.tar.gz'}`;

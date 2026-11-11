@@ -1,5 +1,5 @@
 // Takes a built installer as a person downloads it, unpacks it, starts it, and checks that its screens answer.
-//   URNA_VERSION=v0.1.0 node smoke.mjs dist/urna-abierta-instalador-linux.tar.gz
+//   URNA_VERSION=v0.1.0 node smoke.mjs dist/urna-abierta-instalador-linux-x64.tar.gz
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';

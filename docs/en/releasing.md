@@ -10,13 +10,14 @@ A version is released with a tag that starts with `v`, like `v0.1.0`. GitHub Act
    yet.
 3. **A draft release,** a single one for both languages. Its notes say what to download, in Spanish and English
    (`.github/release-notes.md`), above the list of changes GitHub writes.
-4. **The installers** for Windows, macOS (Apple and Intel) and Linux. Each one is unpacked and started as a person would, and it has to
+4. **The installers** for Windows, macOS (Apple and Intel) and Linux (glibc and musl). Each one is unpacked and started as a person would, and it has to
    show its screens and say its version before it is uploaded to the draft, with its SHA-256 and its attestation.
 5. **Publishing.** First it checks that the images can be pulled without an account, for both architectures, as every server pulls
    them. Only then does `latest` point to this version, and the release stops being a draft.
 
 The published files have names a person recognizes: `urna-abierta-instalador-windows.exe`, `urna-abierta-instalador-mac-apple.zip`,
-`urna-abierta-instalador-mac-intel.zip` and `urna-abierta-instalador-linux.tar.gz`. The macOS and Linux ones are compressed because that
+`urna-abierta-instalador-mac-intel.zip`, `urna-abierta-instalador-linux-x64.tar.gz` (any Linux with glibc 2.28 or newer) and
+`urna-abierta-instalador-linux-x64-musl.tar.gz` (Alpine, built in an Alpine container). The macOS and Linux ones are compressed because that
 way they keep the permission to run, which the browser drops when it downloads a bare file.
 
 ## The first time: making the images public

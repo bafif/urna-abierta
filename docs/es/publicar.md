@@ -10,13 +10,14 @@ Una versión se publica con una etiqueta que empieza con `v`, como `v0.1.0`. Tod
    `latest`.
 3. **Un release en borrador,** uno solo para los dos idiomas. Sus notas dicen qué bajar, en español y en inglés
    (`.github/release-notes.md`), arriba de la lista de cambios que arma GitHub.
-4. **Los instaladores** de Windows, macOS (Apple e Intel) y Linux. Cada uno se desempaca y se arranca como lo haría una persona, y
+4. **Los instaladores** de Windows, macOS (Apple e Intel) y Linux (glibc y musl). Cada uno se desempaca y se arranca como lo haría una persona, y
    tiene que mostrar sus pantallas y decir su versión antes de subirse al borrador, con su SHA-256 y su atestación.
 5. **La publicación.** Antes, comprueba que las imágenes se puedan bajar sin cuenta, para las dos arquitecturas, como las baja cada
    servidor. Recién entonces `latest` pasa a apuntar a esta versión y el release deja de ser borrador.
 
 Los archivos que se publican tienen nombres que una persona reconoce: `urna-abierta-instalador-windows.exe`,
-`urna-abierta-instalador-mac-apple.zip`, `urna-abierta-instalador-mac-intel.zip` y `urna-abierta-instalador-linux.tar.gz`. Los de macOS
+`urna-abierta-instalador-mac-apple.zip`, `urna-abierta-instalador-mac-intel.zip`, `urna-abierta-instalador-linux-x64.tar.gz` (cualquier Linux con glibc 2.28 o más nueva) y
+`urna-abierta-instalador-linux-x64-musl.tar.gz` (Alpine, armado en un contenedor de Alpine). Los de macOS
 y Linux van comprimidos porque así conservan el permiso de ejecutarse, que el navegador pierde al bajar un archivo suelto.
 
 ## La primera vez: hacer públicas las imágenes
