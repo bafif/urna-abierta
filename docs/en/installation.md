@@ -18,8 +18,6 @@ deploy/serve.sh
 It gives you a link for each role: poll watcher, district chief, coordination, traffic light and statistics. Each link works once. To
 see it as on a phone, turn on device mode with F12, or follow the [test on an Android emulator](phone-tests.md).
 
-To see the design proposal, just open `design/index.html` in a browser.
-
 ## The installer
 
 It is downloaded from the GitHub releases page, for Windows, macOS or Linux: [Downloading and opening it](#downloading-and-opening-it)
@@ -107,7 +105,7 @@ is fine.
 
 ## Which server to choose
 
-I checked this on 4 November 2026. These plans change often, so confirm it on their page before deciding.
+Prices checked in November 2026. These plans change often, so confirm it on their page before deciding.
 
 | Provider | Cost | Keep in mind |
 |---|---|---|

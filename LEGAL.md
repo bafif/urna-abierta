@@ -63,11 +63,12 @@ El semáforo arranca vacío: cada partido define sus categorías.
 
 ## Inteligencia artificial externa
 
-El escáner de padrones lee por defecto en tu computadora, y por ahora es la única opción. Si más adelante elegís usar una IA externa, los datos del padrón pasan por esa empresa, con
-tu cuenta y bajo sus términos, y algunos planes gratuitos entrenan con lo que reciben. Ningún padrón pasa por una cuenta o un servidor del
-proyecto.
+El escáner de padrones lee por defecto en tu computadora, y por ahora es la única opción. Si más adelante elegís usar una IA
+externa, los datos del padrón pasan por esa empresa, con tu cuenta y bajo sus términos, y algunos planes gratuitos entrenan
+con lo que reciben. Ningún padrón pasa por una cuenta o un servidor del proyecto.
 
 ## Terceros
 
 Los nombres de proveedores de nube se mencionan solo para orientar: el proyecto no tiene relación con ellos. Sus condiciones las aceptás
-vos, con tu cuenta. Las fuentes tipográficas tienen licencia SIL OFL, incluida junto a cada una en `design/fuentes/`.
+vos, con tu cuenta. Las fuentes tipográficas tienen licencia SIL OFL, incluida junto a cada una en
+`apps/web/src/lib/fuentes/` y `landing/fuentes/`.

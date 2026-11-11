@@ -248,6 +248,6 @@ Do not tell anyone to go on anyway. That warning may be someone in the middle, a
 
 ## Limits of this version
 
-This list is from November 2026. A new version may solve some of them: check its notes.
+A new version may solve some of them: check its notes.
 
 - An urgent alert beeps and vibrates only with “See how it goes” on screen: from another screen, such as a table's detail, it does not.

@@ -1,6 +1,9 @@
 # Stage 1 results
 
-[Español](../es/resultados-etapa-1.md)
+[Español](../es/resultados-etapa-1.md) · [What was tested later](stage-4-results.md) · [Back to the README](../../README.en.md)
+
+Stage 1 tested the risks before building the app: sync, a phone with no signal or no space, a 1 GB server and reading
+scanned rolls. What was measured with the complete app is in [What was tested, and what is left](stage-4-results.md).
 
 ## Sync and app
 
@@ -30,10 +33,9 @@ With real Chrome 124, inside an Android 15 emulator, and the signal cut with air
 | Crossing out with 350 people, CPU 6 times slower | 24 ms median, 78 ms at worst |
 | Crossing out with 5000 people, CPU 6 times slower | 28 ms median, 183 ms at worst |
 
-**What this test found:** on a phone with no space, writing to the database breaks it. The screen showed the person crossed out
-without having saved it, and after freeing space the database came back empty: the roll and whatever had not been sent were
-lost. Without writes, however, nothing is lost. That is why the app now checks for space with a separate write, and stops
-crossing out until there is room.
+**What this test decided:** on a phone with no space, writing to the database breaks it, and once space is freed the database
+comes back empty, without the roll or whatever had not been sent. Without writes, nothing is lost. That is why the app checks
+for space with a separate write, stops crossing out until there is room, and never shows as saved what was not saved.
 
 **Limits:** an emulator is not an old phone. Without Google services the app could not be installed, and without installing,
 Chrome did not protect the storage; even so, it deleted nothing in this test. A full day of battery was not tested either.
@@ -80,7 +82,6 @@ really present in only one roll, so this is a ceiling on the error of both files
 - **To review:** the scanner flags between 13% and 14% of rows, mostly for doubtful file numbers.
 - **Still to improve:** names match exactly in 88.6%. Most differences are a single letter, between thin letters such as
   `i`, `l` and `t`.
-- **First use:** the model downloads from `modelscope.cn` and weighs 47 MB. The download sends no data, but it should ship
-  with the scanner so that nothing depends on that site.
+- **The model** weighs 47 MB. The packaged reader carries it inside, so that reading does not depend on the site it comes from.
 
 A manual check is still missing: this comparison cannot see an error repeated identically in both scans.

@@ -1,6 +1,6 @@
 # Testing on a phone, from a computer
 
-[Español](../es/pruebas-en-telefonos.md)
+[Español](../es/pruebas-en-telefonos.md) · [Back to the installation](installation.md)
 
 Nothing has to be published. The test app uses invented people and never sends a report by itself.
 
@@ -45,7 +45,7 @@ That is why the iPhone gets tested with a server with HTTPS, where opening the l
 risk is limited: a three-day election, with the table prepared the day before, does not reach those 7 days. If it still
 loses data, what was sent remains on the server and the poll watcher prepares the table again.
 
-At that point, these are the steps:
+The steps of that test:
 
 | When | What to do | What must happen |
 |---|---|---|

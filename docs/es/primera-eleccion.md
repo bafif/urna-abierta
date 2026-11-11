@@ -243,6 +243,6 @@ No le digas a nadie que siga igual. Ese aviso puede ser alguien en el medio, y l
 
 ## Límites de esta versión
 
-Esta lista es de noviembre de 2026. Una versión nueva puede resolver alguno: fijate en sus notas.
+Una versión nueva puede resolver alguno: fijate en sus notas.
 
 - Un aviso urgente suena y vibra solo con «Ver cómo va» en pantalla: desde otra pantalla, como el detalle de una mesa, no.

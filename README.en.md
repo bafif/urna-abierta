@@ -1,107 +1,119 @@
-<p align="center">
-  <img src="docs/assets/portada-en.png" alt="Urna Abierta: three screens of the poll watcher app, in three different themes" width="100%">
-</p>
+<div align="center">
 
-<p align="center">
-  <strong>The free app to organize your party's poll watchers, in any election.</strong><br>
-  Your data on your server. Works without signal. Anyone can use it, from the very first time.
-</p>
+<img src="landing/img/marca.svg" alt="" width="72">
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-1E5A44" alt="License AGPL-3.0"></a>
-  <img src="https://img.shields.io/badge/status-in%20development-D42F06" alt="Status: in development">
-  <img src="https://img.shields.io/badge/telemetry-none-14233A" alt="No telemetry">
-  <a href="README.md"><img src="https://img.shields.io/badge/leer%20en-espa%C3%B1ol-555" alt="Leer en español"></a>
-</p>
+# Urna Abierta
 
----
+**The free app to organize your party's poll watchers, in any election.**<br>
+[Español](README.md) · [Website](https://bafif.github.io/urna-abierta/en/) · [Install](#install) ·
+[Your first election](docs/en/first-election.md)
 
-## Why it exists
+</div>
 
-Elections are also won at the tables: someone has to be there, know who voted, report when something goes wrong and watch the
-count until the end. Today, doing that well takes a structure only big parties have, and that is an advantage that should not
-exist.
+Each party installs it on its own server. Poll watchers join with a link, cross out voters even without signal, report
+when something goes wrong and enter the count with a photo of the tally sheet; the district chief sees first the tables
+that need them. A free app, a server of your own and a little setup time are enough: it does not take the structure of
+a big party.
 
-I am building Urna Abierta to break the monopoly of old political machines over election monitoring: so that a student group or a
-small party only needs a free app, its own server and a little setup time. It is a personal project of mine, and it does not
-belong to any party or group.
+<p align="center"><img src="docs/assets/portada-en.png" width="100%" alt="Urna Abierta: three screens of the poll
+watcher app, in three different themes"></p>
 
-## Made for someone who has never opened it
+## Why Urna Abierta
 
-No menus: one question per screen, one main button and a plan that tells you what comes next. Each person
-sees only their work.
+- **Your data, on your server.** Each party uses its own. The project hosts nothing and receives nothing: there is no
+  central server and no telemetry.
+- **Works without signal.** Everything is saved on the phone first and sent by itself when signal returns. If an urgent
+  alert does not go out, the app offers to call the chief or write to them over WhatsApp or SMS.
+- **Clear to someone who never opened it.** One question per screen, one main button and a plan that says what comes
+  next. Each person sees only their work, in the theme and language they choose.
+- **Designed not to pay for a server.** It aims at free tiers: with 1 GB of memory and a quarter of a processor, it
+  handled 200 tables in a [lab test](docs/en/stage-4-results.md).
+- **Reads your rolls.** An Excel or CSV spreadsheet uploads directly. A scanned PDF goes first through the
+  [roll reader](https://github.com/bafif/urna-abierta-padrones), which reads it on your computer without sending it to
+  anyone.
+- **With Argentine law in mind.** Permissions per task, a log nobody can change and tools to handle people's requests
+  and erase the data at the end. Complying with the law is still up to the party.
 
-| Who | What they do |
+## Who does what
+
+| Task | What they do |
 |---|---|
 | **Poll watcher** | Joins with a link, crosses out voters even without signal, counts envelopes each night and enters the count |
-| **District chief** | Sees first the tables that need them, and calls with one tap |
-| **Administration** | Sets up the party and the team once, and creates an election whenever needed |
-| **Traffic light and statistics** | With separate permissions: one notes one person at a time, the other sees only numbers, never names |
+| **District chief** | Sees first the tables that need them, and calls their poll watcher with one tap |
+| **Coordination** | Sets up the party and the team once, and creates an election whenever needed |
+| **Traffic light** | Sets up the party's categories and places each person in one; every look at a sensitive one is logged |
+| **Statistics** | Sees how many voted, never a name |
 
-<p align="center">
-  <img src="docs/assets/temas.png" alt="The same screen in five themes: Aula, Vidrio, Feria, Tablero and Mate" width="100%">
-</p>
+## Install
 
-With themes for every taste, in light and dark mode: you choose with a preview when installing, and each person can change it the first
-time they open it. You can also add your own, with your party's colors. You can go through
-[the design proposal](design/index.html) by opening it in your browser.
+**There is no published version yet.** Once there is, the installer for Windows, macOS or Linux is downloaded from the
+releases page: it asks three questions, creates your server and leaves everything set up.
 
-## What makes it different
+Meanwhile, it can be tried from the source code, with Node 24 and Podman:
 
-- **Your data is yours.** Each party uses its own server. The project hosts nothing and receives nothing: no central server, no
-  telemetry.
-- **Works without signal.** Many classrooms have no connection. Everything is saved on the phone first and sent when it returns.
-- **Designed not to pay for a server.** It aims at free tiers: I measured it within the limits of those machines, 1 GB of memory and a
-  quarter of a processor, and it worked with 200 tables, in a [lab test](docs/en/stage-4-results.md).
-- **Reads your rolls.** It reads a scanned PDF with a model that runs on your computer, without sending the roll to anyone.
-- **With Argentine law in mind.** It brings permissions, a log nobody can change and tools to handle requests from people and erase the data at the end.
+```sh
+git clone https://github.com/bafif/urna-abierta && cd urna-abierta
+corepack pnpm install
+deploy/serve.sh        # the app with invented people: one link for each task
+deploy/instalador.sh   # or the installer, to try it on this computer
+```
 
-## Installation
+[Installation](docs/en/installation.md) has the details: each installer option, how to load the roll and which server
+to choose.
 
-You download an installer for Windows, macOS or Linux that asks you three questions, creates your server and leaves everything set up.
+## How to use it
 
-**There is no published version yet.** Meanwhile it can run from the source code, with invented people or with the installer itself:
-**[how to install it](docs/en/installation.md)**. Before using it in an election, run a [drill](docs/en/drill.md).
+1. **Install it.** The installer asks where it will live (a new server on Oracle, AWS or Google, one you already have,
+   a text to paste when creating it, or this computer), how to read the rolls and how it looks. At the end it gives you
+   the address and a recovery key for the backups.
+2. **Set up the party and the team.** The app greets you with a wizard. You add each person with their task and send
+   them their link over WhatsApp or however you like.
+3. **Create the election.** Days, lists, roll, tables and poll watchers, one step per screen.
+4. **On election day,** poll watchers cross out voters and the panel shows first the tables that need something. At
+   the end the count is entered, the election is closed and the personal data is erased.
+
+The whole journey, and what to do when something fails, is in [Your first election](docs/en/first-election.md). Before
+using it in a real election, run a [drill](docs/en/drill.md).
 
 ## Status
 
-The first real test is a university election, in April 2027.
+It is in development and has not been used in a real election yet.
 
-- [x] Poll watcher view without signal, and sync without losses
-- [x] Local reading of scanned rolls
-- [x] Server measured on a small machine
-- [x] Design proposal and theme system
-- [x] Login, real rolls, tables and permissions
-- [x] Irregularities, envelope count, vote count and chief panel
-- [x] Traffic light, audit, personal data and backups
-- [x] Installer, tested over SSH on Ubuntu and restoring a backup on another server
-- [ ] Creating servers on the real clouds: tested against simulations of their APIs
-- [ ] Test on a real iPhone
-- [ ] Drill with real people
+- **Tested:** a whole election, end to end, on Android Chrome and on WebKit against the real server; an Android phone
+  in an emulator, without signal, restarted and out of space; the server within the limits of a free tier; and the
+  installation over SSH on Ubuntu, with backups, updates and restoring on another server.
+- **Not tested yet:** creating servers on the real clouds (tested against simulations of their APIs), the certificate
+  for an IP, installing on Linux distributions other than Ubuntu, the installer on real Windows and macOS (every change
+  builds and starts it in continuous integration), a real iPhone and the drill with people. The details are in
+  [What was tested, and what is left](docs/en/stage-4-results.md).
 
-## Documentation
+## More documentation
 
-| | |
-|---|---|
-| [Installation](docs/en/installation.md) | The installer, and how to try it |
-| [Creating a server](docs/en/servers.md) | Oracle, AWS and Google, step by step, and how to maintain it |
-| [Your first election](docs/en/first-election.md) | Step by step after installing, and what to do when something fails |
-| [Drill](docs/en/drill.md) | What to test with real people before an election |
-| [Your own theme](docs/en/themes.md) | Your party's colors, as long as they can be read |
-| [Technical plan](docs/en/technical-plan.md) | Architecture, sync, permissions and roll format |
-| [Measurements](docs/en/stage-4-results.md) | What was tested and what it showed, with the [initial risks](docs/en/stage-1-results.md) |
-| [Legal](LEGAL.en.md) | License, responsibilities and personal data |
-| [Personal data](docs/en/personal-data.md) | What the law asks, how to register the database and how to handle each request with the app |
-| [Roll scanner](https://github.com/bafif/urna-abierta-padrones) | The repository that converts rolls to the open format |
+- [Installation](docs/en/installation.md): the installer, each option, loading the roll and which server to choose.
+- [Creating a server](docs/en/servers.md): Oracle, AWS and Google step by step, backups, updating and restoring.
+- [Your first election](docs/en/first-election.md): from installing to erasing the data, and what to do when something
+  fails.
+- [Drill](docs/en/drill.md): what to test with real people before an election.
+- [Personal data](docs/en/personal-data.md): what the law asks, how to register the database and how to handle each
+  request.
+- [Legal information](LEGAL.en.md): license, responsibilities and personal data.
+- [Your own theme](docs/en/themes.md): your party's colors, as long as they can be read.
+- [Verify the download](docs/en/verify-download.md): the installer's SHA-256 and attestation.
+- [Testing on a phone](docs/en/phone-tests.md): Android on an emulator, and the pending iPhone test.
+- [Technical plan](docs/en/technical-plan.md): architecture, sync, permissions, roll format and stages.
+- [What was tested, and what is left](docs/en/stage-4-results.md), with the [initial risks](docs/en/stage-1-results.md).
+- [Releasing a version](docs/en/releasing.md): what GitHub Actions does with each version.
+- [How to contribute](CONTRIBUTING.en.md): the tests, the languages and how the work is done.
+- [Security](SECURITY.en.md): how to report a flaw, privately.
+- [Roll reader](https://github.com/bafif/urna-abierta-padrones): the repository that converts rolls to the open format.
 
 ## Author
 
-Made by me, **Bautista D. Fiori**. If you want to use it in your election or join in, write to me. To contribute code, read
-[how to contribute](CONTRIBUTING.en.md); if you found a security flaw, tell me privately, as [SECURITY.en.md](SECURITY.en.md) says.
-
-[LinkedIn](https://www.linkedin.com/in/b-d-fiori/) · [GitHub](https://github.com/bafif)
+Made by me, **Bautista D. Fiori**, as a personal project: it does not belong to any party or group. If you want to use
+it in your election or join in, write to me: [LinkedIn](https://www.linkedin.com/in/b-d-fiori/) ·
+[GitHub](https://github.com/bafif).
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE). You may use, modify and share it; if you offer a modified version over a network, you must also offer
-its source.
+[AGPL-3.0-or-later](LICENSE). You may use, modify and share it; if you offer a modified version over a network, you must
+also offer its source.

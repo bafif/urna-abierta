@@ -1,6 +1,6 @@
 // Turns a theme written like the ones in temas.js into one file with everything inside: colors, logo
 // and fonts. It is what the installer takes, or the app in Más cosas > Ajustes > Agregar un tema propio.
-//   node design/tema-a-archivo.mjs mi-tema.js salida.json
+//   node tools/tema-a-archivo.mjs mi-tema.js salida.json
 //
 // A font of your own is declared in the theme:
 //   archivosFuentes: [{ familia: 'Mi Letra', peso: '400', archivo: 'mi-letra.woff2' }]
@@ -13,7 +13,7 @@ import { themeProblems, themeProblemText } from '../packages/domain/src/theme-ch
 
 const [source, output] = process.argv.slice(2);
 if (!source || !output) {
-  console.error('Uso: node design/tema-a-archivo.mjs <tema.js> <salida.json>');
+  console.error('Uso: node tools/tema-a-archivo.mjs <tema.js> <salida.json>');
   process.exit(2);
 }
 

@@ -18,7 +18,7 @@ A theme is data: colors for each mode, fonts, shapes and a few recipes. It has n
 3. Convert it, with the repository installed:
 
    ```sh
-   node design/tema-a-archivo.mjs my-theme.js my-theme.json
+   node tools/tema-a-archivo.mjs my-theme.js my-theme.json
    ```
 
 4. Load it:
@@ -53,5 +53,4 @@ the server checks again when loading it:
 | Secondary text, and text on buttons | 4.5:1 |
 | Buttons, accents and marks on the background | 3:1 |
 
-If something falls short, it tells you which pair of colors. You can also check them all with `node design/verificar-contraste.mjs my-theme.js`,
-and see them in `design/index.html`.
+If something falls short, it tells you which pair of colors. You can also check them all with `node tools/verificar-contraste.mjs my-theme.js`.

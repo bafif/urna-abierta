@@ -37,7 +37,7 @@ label.boton { text-align: center; }
 .pie .enlace { display: block; width: 100%; text-align: center; }
 [data-pie-banda='true'] .pie .enlace { color: var(--sobre-pie, var(--acento)); }
 
-/* The form fields the proposal did not need. */
+/* Text areas and selects in forms. */
 .campo textarea, .campo select { width: 100%; min-height: 62px; padding: 12px 14px; font: inherit; font-size: 20px; color: inherit; background: var(--superficie); border: 2.5px solid var(--acento); border-radius: var(--radio); }
 .campo textarea { min-height: 130px; resize: vertical; }
 .campo + .campo { margin-top: 4px; }
