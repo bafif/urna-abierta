@@ -40,14 +40,14 @@ podman run -d --name urna-prueba-db -p 5432:5432 -e POSTGRES_USER=urna -e POSTGR
 TEST_DATABASE_URL=postgres://urna:prueba@localhost:5432/urna corepack pnpm test
 ```
 
-The end-to-end tests build the containers with Podman and drive a browser or an Ubuntu machine:
+The end-to-end tests build the containers with Podman and drive a browser or an Alpine machine:
 
 | Command | What it tests |
 |---|---|
 | `deploy/e2e.sh` | The whole app, against a real Postgres, server and Caddy |
 | `deploy/e2e-instalador.sh` | The installer, screen by screen, up to the first account |
-| `node apps/installer/e2e/texto.ts` | The block to paste, exactly as the installer gives it, run by cloud-init as root on an Ubuntu's first boot, until the app answers at its address with a certificate and `urna estado` says everything is fine |
-| `node apps/installer/e2e/servidor.ts` | The installation over SSH on two Ubuntu machines: the encrypted backup, updating, going back from a version that does not start, restoring on another server and rebooting |
+| `node apps/installer/e2e/texto.ts` | The block to paste, exactly as the installer gives it, run by tiny-cloud as root on an Alpine's first boot, as on Alpine's cloud images, until the app answers at its address with a certificate and `urna estado` says everything is fine |
+| `node apps/installer/e2e/servidor.ts` | The installation over SSH on two Alpine machines, with OpenRC and `doas`: the encrypted backup, updating, going back from a version that does not start, restoring on another server and rebooting |
 | `deploy/e2e-lector.sh` | The roll reader, with the `urna-abierta-padrones` repository next to this one |
 
 Every pull request runs on GitHub, each in its own job so that one that fails does not hide the others: the unit tests, the server's with

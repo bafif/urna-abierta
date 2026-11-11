@@ -40,14 +40,14 @@ podman run -d --name urna-prueba-db -p 5432:5432 -e POSTGRES_USER=urna -e POSTGR
 TEST_DATABASE_URL=postgres://urna:prueba@localhost:5432/urna corepack pnpm test
 ```
 
-Las pruebas de punta a punta arman los contenedores con Podman y manejan un navegador o una máquina Ubuntu:
+Las pruebas de punta a punta arman los contenedores con Podman y manejan un navegador o una máquina Alpine:
 
 | Comando | Qué prueba |
 |---|---|
 | `deploy/e2e.sh` | La app entera, contra Postgres, el servidor y Caddy de verdad |
 | `deploy/e2e-instalador.sh` | El instalador, pantalla por pantalla, hasta la primera cuenta |
-| `node apps/installer/e2e/texto.ts` | El bloque para pegar, tal como lo da el instalador, corrido por cloud-init como root en el primer arranque de un Ubuntu, hasta que la app responde en su dirección con certificado y `urna estado` dice que está todo bien |
-| `node apps/installer/e2e/servidor.ts` | La instalación por SSH en dos Ubuntu: la copia cifrada, actualizar, volver de una versión que no arranca, restaurar en otro servidor y reiniciar |
+| `node apps/installer/e2e/texto.ts` | El bloque para pegar, tal como lo da el instalador, corrido por tiny-cloud como root en el primer arranque de un Alpine, como en las imágenes de Alpine para la nube, hasta que la app responde en su dirección con certificado y `urna estado` dice que está todo bien |
+| `node apps/installer/e2e/servidor.ts` | La instalación por SSH en dos Alpine, con OpenRC y `doas`: la copia cifrada, actualizar, volver de una versión que no arranca, restaurar en otro servidor y reiniciar |
 | `deploy/e2e-lector.sh` | El lector de padrones, con el repo `urna-abierta-padrones` al lado de este |
 
 Cada pull request corre en GitHub, cada una por su lado para que una que falla no tape a las otras: las unitarias, las del servidor con la

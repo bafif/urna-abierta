@@ -5,7 +5,7 @@
 Una versión se publica con una etiqueta que empieza con `v`, como `v0.1.0`. Todo lo demás lo hace GitHub Actions
 (`.github/workflows/release.yml`), en este orden, y cada paso espera al anterior:
 
-1. **Las pruebas.** Las de cada cambio, más la instalación por SSH en dos máquinas Ubuntu. Si alguna falla, no se arma nada.
+1. **Las pruebas.** Las de cada cambio, más la instalación por SSH en dos máquinas Alpine. Si alguna falla, no se arma nada.
 2. **Las imágenes** del servidor y de la app, para x86 y ARM, con la etiqueta de la versión y su atestación. Todavía no se toca
    `latest`.
 3. **Un release en borrador,** uno solo para los dos idiomas. Sus notas dicen qué bajar, en español y en inglés

@@ -1,5 +1,5 @@
 /**
- * The real installation, over SSH, on two Ubuntu machines in containers, with invented data:
+ * The real installation, over SSH, on two Alpine machines in containers, with invented data:
  * installs on the first, uses the app through its API, makes an encrypted backup that also goes to
  * a bucket, updates it to a next version, goes back from one that changes the database and does not
  * start, restores the backup on the second and checks that
@@ -11,7 +11,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EMPTY_SHA256, amzDate, s3Client, signS3 } from '../../server/src/s3.ts';
@@ -46,9 +46,13 @@ function opensshPublic(pem: string): string {
 
 async function machine(name: string, sshPort: number, webPort: number): Promise<{ target: SshTarget; name: string; web: number }> {
   podman('rm', '-f', name);
-  podman('run', '-d', '--name', name, '--hostname', name, '--network', network, '--privileged', '--systemd=always', '--device', '/dev/fuse', '-p', `127.0.0.1:${sshPort}:22`, '-p', `127.0.0.1:${webPort}:443`, IMAGE);
-  podman('exec', '-i', name, 'sh', '-c', `echo '${opensshPublic(publicKey)}' > /home/ubuntu/.ssh/authorized_keys; chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys; chmod 600 /home/ubuntu/.ssh/authorized_keys`);
-  const target: SshTarget = { host: '127.0.0.1', port: sshPort, user: 'ubuntu', privateKey };
+  attempt('volume', 'rm', '-f', `${name}-datos`);
+  // OpenRC is its init, as on the clouds; stopping it gives the services time to stop the pod. /run is a tmpfs, and
+  // the home of the containers a disk of its own, as on a machine: Podman mounts the pod's first container from there
+  // to there, which a container's own disk does not allow.
+  podman('run', '-d', '--name', name, '--hostname', name, '--network', network, '--privileged', '--stop-timeout', '60', '--tmpfs', '/run', '-v', `${name}-datos:/opt/urna-abierta`, '--device', '/dev/fuse', '-p', `127.0.0.1:${sshPort}:22`, '-p', `127.0.0.1:${webPort}:443`, IMAGE);
+  podman('exec', '-i', name, 'sh', '-c', `echo '${opensshPublic(publicKey)}' > /home/alpine/.ssh/authorized_keys; chown alpine:alpine /home/alpine/.ssh/authorized_keys; chmod 600 /home/alpine/.ssh/authorized_keys`);
+  const target: SshTarget = { host: '127.0.0.1', port: sshPort, user: 'alpine', privateKey };
   for (let attempt = 0; ; attempt += 1) {
     try {
       if ((await checkSsh(target)) === 'ok') break;
@@ -129,6 +133,7 @@ function craftedBackup(key: string, fieldKey: string): string {
 
 function cleanup(): void {
   for (const each of [`${name}-1`, `${name}-2`, `${name}-minio`]) attempt('rm', '-f', each);
+  for (const each of [`${name}-1`, `${name}-2`]) attempt('volume', 'rm', '-f', `${each}-datos`);
   attempt('network', 'rm', network);
 }
 
@@ -172,7 +177,7 @@ for (let attempt = 0; ; attempt += 1) {
 const first = await machine(`${name}-1`, port, port + 2);
 const secrets = newSecrets();
 const said = await installOn(first, secrets, { variables: s3Settings });
-record('instala por SSH en un Ubuntu', said.at(-1)?.startsWith('ready ') === true, said);
+record('instala por SSH en un Alpine, con doas', said.at(-1)?.startsWith('ready ') === true, said);
 const madeThere = podman('exec', first.name, 'cat', '/opt/urna-abierta/.env');
 record('la clave de la base y la de los campos se hacen en el servidor, y el código de instalación queda solo como resumen', /^POSTGRES_PASSWORD=[0-9a-f]{48}$/m.test(madeThere) && /^URNA_FIELD_KEY=[0-9a-f]{64}$/m.test(madeThere) && /^URNA_SETUP_CODE_HASH=[0-9a-f]{64}$/m.test(madeThere) && !madeThere.includes(secrets.setupCode));
 
@@ -274,25 +279,25 @@ record('con esa copia vuelve a andar la versión anterior, con sus datos y sus s
 // uploaded the usual way, to the home of the user that connects, which the user `urna` cannot read.
 const second = await machine(`${name}-2`, port + 1, port + 3);
 await installOn(second, newSecrets());
-podman('cp', copy, `${second.name}:/home/ubuntu/copia.tar.gpg`);
-podman('exec', second.name, 'sh', '-c', 'chown ubuntu:ubuntu /home/ubuntu/copia.tar.gpg && chmod 600 /home/ubuntu/copia.tar.gpg && chmod 750 /home/ubuntu');
-const asUbuntu = (...args: string[]) => attempt('exec', '--user', 'ubuntu', '-w', '/home/ubuntu', second.name, 'sudo', 'urna', 'restaurar', ...args);
-const notThere = asUbuntu('no-esta.tar.gpg', secrets.recoveryKey);
-const notBackup = asUbuntu('/etc/hostname', secrets.recoveryKey);
-const wrongKey = asUbuntu('copia.tar.gpg', 'LLAVE-EQUIVOCADA');
+podman('cp', copy, `${second.name}:/home/alpine/copia.tar.gpg`);
+podman('exec', second.name, 'sh', '-c', 'chown alpine:alpine /home/alpine/copia.tar.gpg && chmod 600 /home/alpine/copia.tar.gpg && chmod 750 /home/alpine');
+const asAlpine = (...args: string[]) => attempt('exec', '--user', 'alpine', '-w', '/home/alpine', second.name, 'doas', 'urna', 'restaurar', ...args);
+const notThere = asAlpine('no-esta.tar.gpg', secrets.recoveryKey);
+const notBackup = asAlpine('/etc/hostname', secrets.recoveryKey);
+const wrongKey = asAlpine('copia.tar.gpg', 'LLAVE-EQUIVOCADA');
 record('dice si el archivo no está, si no es una copia, o si la llave es otra', !notThere.ok && notThere.said.includes('No encuentro el archivo') && !notBackup.ok && notBackup.said.includes('no es una copia de Urna Abierta') && !wrongKey.ok && wrongKey.said.includes('Esa llave no abre esta copia'), [notThere.said, notBackup.said, wrongKey.said]);
 // A backup someone hands over, with the right key, made to write outside the photos: the commands of the server and
 // one of its services, and a field key that runs a command once .env is read. Nothing of it may land.
 const fingerprint = () => podman('exec', second.name, 'sh', '-c', 'cd /opt/urna-abierta && sha256sum urna .env .config/systemd/user/urna-copia.service && ls fotos | wc -l');
 const beforeCrafted = fingerprint();
 const crafted = ['x$(touch /tmp/marca-trucha-env)', 'ab'.repeat(32)].map((fieldKey, index) => {
-  podman('cp', craftedBackup(secrets.recoveryKey, fieldKey), `${second.name}:/home/ubuntu/trucha-${index}.tar.gpg`);
-  podman('exec', second.name, 'sh', '-c', `chown ubuntu:ubuntu /home/ubuntu/trucha-${index}.tar.gpg && chmod 600 /home/ubuntu/trucha-${index}.tar.gpg`);
-  return asUbuntu(`trucha-${index}.tar.gpg`, secrets.recoveryKey);
+  podman('cp', craftedBackup(secrets.recoveryKey, fieldKey), `${second.name}:/home/alpine/trucha-${index}.tar.gpg`);
+  podman('exec', second.name, 'sh', '-c', `chown alpine:alpine /home/alpine/trucha-${index}.tar.gpg && chmod 600 /home/alpine/trucha-${index}.tar.gpg`);
+  return asAlpine(`trucha-${index}.tar.gpg`, secrets.recoveryKey);
 });
 const marked = attempt('exec', second.name, 'sh', '-c', 'ls /tmp/marca-trucha* /opt/urna-abierta/marca-trucha* 2>/dev/null').said.trim();
 record('no restaura una copia que escribiría fuera de las fotos, y deja todo como estaba', crafted.every((each) => !each.ok && each.said.includes('no restauré nada')) && crafted[1]!.said.includes('fuera de la carpeta de las fotos') && fingerprint() === beforeCrafted && marked === '' && api(second, 'GET', '/health').ok === true, crafted.map((each) => each.said.trim()));
-const restored = asUbuntu('copia.tar.gpg', secrets.recoveryKey);
+const restored = asAlpine('copia.tar.gpg', secrets.recoveryKey);
 record('restaura la copia desde la carpeta de quien entra, con su ruta corta', restored.ok && restored.said.includes('Copia restaurada') && restored.said.includes('URNA_S3_'), restored.said.split('\n'));
 const elections = api(second, 'GET', '/elections', { token }).elections;
 record('en el otro servidor está todo, y las mismas sesiones siguen valiendo', elections?.[0]?.name === 'Simulacro' && elections[0].people === 30 && elections[0].tables === 3, elections?.[0]);
@@ -316,4 +321,8 @@ for (let attempt = 0; attempt < 60 && !back; attempt += 1) {
 }
 record('después de reiniciar la máquina vuelve sola', back && attempt('exec', first.name, 'urna', 'estado').said.includes('versión: nueva'));
 
-finish(cleanup);
+// The images it saved weigh gigabytes, and /tmp is often memory.
+finish(() => {
+  cleanup();
+  rmSync(work, { recursive: true, force: true });
+});

@@ -5,7 +5,7 @@
 A version is released with a tag that starts with `v`, like `v0.1.0`. GitHub Actions does everything else
 (`.github/workflows/release.yml`), in this order, and each step waits for the previous one:
 
-1. **The tests.** Those of every change, plus the installation over SSH on two Ubuntu machines. If any fails, nothing is built.
+1. **The tests.** Those of every change, plus the installation over SSH on two Alpine machines. If any fails, nothing is built.
 2. **The images** of the server and the app, for x86 and ARM, with the version's tag and their attestation. `latest` is not touched
    yet.
 3. **A draft release,** a single one for both languages. Its notes say what to download, in Spanish and English

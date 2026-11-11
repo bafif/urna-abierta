@@ -1,5 +1,5 @@
 /**
- * What the installations on Ubuntu machines in containers share: Podman, the images of this checkout,
+ * What the installations on Alpine machines in containers share: Podman, the images of this checkout,
  * and the list of what passed. servidor.ts installs over SSH and texto.ts pastes the block as user data.
  */
 import { execFileSync } from 'node:child_process';
@@ -27,7 +27,7 @@ export function record(step: string, ok: boolean, detail?: unknown): void {
   console.log(`${ok ? 'ok   ' : 'FALLA'} ${step}${detail === undefined ? '' : ` ${JSON.stringify(detail)}`}`);
 }
 
-/** The server and web images of this checkout, and the machine: Ubuntu with systemd and SSH. */
+/** The server and web images of this checkout, and the machine: Alpine with OpenRC and SSH. */
 export function buildImages({ server, web, machine }: { server: string; web: string; machine: string }): void {
   execFileSync('bash', ['-c', `podman build -q -t ${server} -f deploy/server.Containerfile . >/dev/null && podman build -q -t ${web} -f deploy/web.Containerfile . >/dev/null && podman build -q -t ${machine} -f deploy/maquina-prueba.Containerfile deploy >/dev/null`], { cwd: root, stdio: 'inherit' });
 }
