@@ -1,4 +1,5 @@
-# Prepares an Ubuntu or Debian machine and starts Urna Abierta. Runs as root, once.
+# Prepares a Linux machine and starts Urna Abierta. Runs as root, once. Debian, Ubuntu, Kali and the like (apt),
+# Fedora and the like (dnf), Arch (pacman), Alpine (apk) and openSUSE (zypper); systemd or OpenRC.
 # The installer puts the settings before this, so that it fits in one block. The `urna` script comes in the server image.
 set -eu
 
@@ -8,8 +9,13 @@ cd /
 # Each step says a key, and the installer shows it in the person's language. Words, so that a log still reads.
 say() { printf 'urna-abierta: %s\n' "$*"; }
 
-if ! command -v apt-get >/dev/null 2>&1; then
-  say 'needs_debian' >&2
+if command -v apt-get >/dev/null 2>&1; then pm=apt
+elif command -v dnf >/dev/null 2>&1; then pm=dnf
+elif command -v pacman >/dev/null 2>&1; then pm=pacman
+elif command -v apk >/dev/null 2>&1; then pm=apk
+elif command -v zypper >/dev/null 2>&1; then pm=zypper
+else
+  say 'needs_supported_linux' >&2
   exit 1
 fi
 
@@ -20,22 +26,50 @@ case "$0" in
   *) if command -v cloud-init >/dev/null 2>&1; then say 'waiting_system'; timeout 900 cloud-init status --wait >/dev/null 2>&1 || true; fi ;;
 esac
 say 'packages'
-export DEBIAN_FRONTEND=noninteractive
-apt_get() { apt-get -o DPkg::Lock::Timeout=600 "$@"; }
-# Updating the lists has its own lock, which the timeout above may not cover.
-tries=1
-until apt_get update -qq; do
-  [ "$tries" -lt 10 ] || exit 1
-  tries=$((tries + 1))
-  sleep 20
-done
-# sudo: a minimal Debian may come without it, and the way in for later (urna-admin) needs it.
-apt_get install -y -qq podman uidmap slirp4netns passt gnupg curl openssl dbus-user-session sudo >/dev/null
+case "$pm" in
+  apt)
+    export DEBIAN_FRONTEND=noninteractive
+    apt_get() { apt-get -o DPkg::Lock::Timeout=600 "$@"; }
+    # Updating the lists has its own lock, which the timeout above may not cover.
+    tries=1
+    until apt_get update -qq; do
+      [ "$tries" -lt 10 ] || exit 1
+      tries=$((tries + 1))
+      sleep 20
+    done
+    # sudo: a minimal Debian may come without it, and the way in for later (urna-admin) needs it.
+    apt_get install -y -qq podman uidmap slirp4netns passt gnupg curl openssl dbus-user-session sudo >/dev/null
+    ;;
+  dnf) dnf install -y -q podman shadow-utils slirp4netns passt gnupg2 curl openssl sudo util-linux >/dev/null ;;
+  # The whole system up to date first: Arch does not support installing over old package lists.
+  pacman) pacman -Syu --noconfirm --needed podman slirp4netns passt gnupg curl openssl sudo shadow util-linux >/dev/null ;;
+  apk)
+    # Podman is in the community repository, which some images leave commented out.
+    grep -q '^[^#].*/community' /etc/apk/repositories || sed -i 's|^#\(.*/community\)$|\1|' /etc/apk/repositories
+    apk update -q
+    # shadow: useradd; shadow-subids: the ranges of ids rootless Podman needs; runuser: what `urna` uses as root.
+    apk add -q podman slirp4netns passt gnupg curl openssl sudo shadow shadow-subids runuser util-linux-misc \
+      iptables >/dev/null
+    ;;
+  zypper) zypper --non-interactive --quiet install podman slirp4netns passt gpg2 curl openssl sudo shadow util-linux >/dev/null ;;
+esac
+
+# OpenRC (Alpine): rootless Podman needs the unified cgroups, which OpenRC mounts with its cgroups service.
+openrc=
+if command -v rc-service >/dev/null 2>&1 && [ ! -d /run/systemd/system ]; then
+  openrc=si
+  if ! grep -q '^rc_cgroup_mode="unified"' /etc/rc.conf 2>/dev/null; then
+    sed -i 's/^#*rc_cgroup_mode=.*/rc_cgroup_mode="unified"/' /etc/rc.conf
+    grep -q '^rc_cgroup_mode=' /etc/rc.conf || echo 'rc_cgroup_mode="unified"' >>/etc/rc.conf
+  fi
+  rc-update add cgroups boot >/dev/null 2>&1 || true
+  rc-service cgroups start >/dev/null 2>&1 || true
+fi
 
 # Small free machines: a little swap avoids killing the database under a peak.
-if [ "$(swapon --show | wc -l)" = 0 ] && [ "$(awk '/MemTotal/ {print $2}' /proc/meminfo)" -lt 2000000 ] && [ -z "${URNA_NO_SWAP:-}" ]; then
+if [ "$(tail -n +2 /proc/swaps | wc -l)" = 0 ] && [ "$(awk '/MemTotal/ {print $2}' /proc/meminfo)" -lt 2000000 ] && [ -z "${URNA_NO_SWAP:-}" ]; then
   say 'swap'
-  fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile && echo '/swapfile none swap sw 0 0' >>/etc/fstab || say 'swap_failed'
+  { fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024 2>/dev/null; } && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile && echo '/swapfile none swap sw 0 0' >>/etc/fstab || say 'swap_failed'
 fi
 
 # Oracle's Ubuntu images come with a firewall that only lets SSH in.
@@ -44,12 +78,22 @@ if command -v iptables >/dev/null 2>&1 && iptables -S INPUT 2>/dev/null | grep -
   iptables -I INPUT 1 -p tcp -m multiport --dports 80,443 -j ACCEPT
   iptables -I INPUT 1 -p udp --dport 443 -j ACCEPT
   command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1 || true
+  [ -n "$openrc" ] && rc-service iptables save >/dev/null 2>&1 && rc-update add iptables default >/dev/null 2>&1 || true
+fi
+
+# Fedora and openSUSE come with firewalld, which lets in only SSH.
+if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+  say 'firewall'
+  firewall-cmd -q --permanent --add-service=http --add-service=https --add-port=443/udp && firewall-cmd -q --reload || true
 fi
 
 if ! id urna >/dev/null 2>&1; then
   useradd --create-home --home-dir "$home" --shell /bin/sh urna
 fi
 uid=$(id -u urna)
+# Rootless Podman needs ranges of ids; some useradd do not give them.
+grep -q '^urna:' /etc/subuid 2>/dev/null || echo "urna:$((100000 + uid * 65536)):65536" >>/etc/subuid
+grep -q '^urna:' /etc/subgid 2>/dev/null || echo "urna:$((100000 + uid * 65536)):65536" >>/etc/subgid
 echo 'net.ipv4.ip_unprivileged_port_start=80' >/etc/sysctl.d/90-urna-abierta.conf
 sysctl -q --system >/dev/null 2>&1 || sysctl -q -w net.ipv4.ip_unprivileged_port_start=80 >/dev/null 2>&1 || true
 loginctl enable-linger urna 2>/dev/null || true
@@ -168,7 +212,9 @@ ln -sf "$home/urna" /usr/local/bin/urna
 
 # A way in for later, to update the server or restore a copy, with the key of the access file the installer gave.
 if [ -n "${URNA_ADMIN_KEY:-}" ]; then
-  id urna-admin >/dev/null 2>&1 || useradd -m -s /bin/bash urna-admin
+  shell=/bin/bash
+  [ -x "$shell" ] || shell=/bin/sh
+  id urna-admin >/dev/null 2>&1 || useradd -m -s "$shell" urna-admin
   install -d -m 700 -o urna-admin -g urna-admin /home/urna-admin/.ssh
   printf 'ssh-ed25519 %s urna-abierta\n' "$URNA_ADMIN_KEY" >/home/urna-admin/.ssh/authorized_keys
   chown urna-admin:urna-admin /home/urna-admin/.ssh/authorized_keys
@@ -180,7 +226,7 @@ fi
 # cloud, and the first value sshd reads is the one it keeps.
 if [ "${URNA_SOLO_LLAVES:-}" = si ] && [ -n "${URNA_ADMIN_KEY:-}" ] && [ -d /etc/ssh/sshd_config.d ]; then
   printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' >/etc/ssh/sshd_config.d/10-urna-abierta.conf
-  systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+  systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || rc-service sshd reload 2>/dev/null || true
 fi
 
 say 'starting'
@@ -188,6 +234,32 @@ say 'starting'
 if [ -d "/run/user/$uid" ] && run_as_urna systemctl --user daemon-reload 2>/dev/null; then
   run_as_urna systemctl --user enable --now urna-copia.timer >/dev/null 2>&1 || true
   run_as_urna systemctl --user enable --now urna-abierta.service >/dev/null 2>&1 || true
+fi
+# Without systemd (OpenRC): a service of the system starts it at boot as urna, and cron makes the backups at the same
+# hours as the timer (00/6:30). /run/user is lost at each boot: the service makes it again.
+if [ -n "$openrc" ]; then
+  cat >/etc/init.d/urna-abierta <<EOF
+#!/sbin/openrc-run
+description="Urna Abierta"
+depend() { need net cgroups; after firewall iptables; }
+start() {
+  ebegin "Urna Abierta"
+  checkpath -d -m 0700 -o urna:urna /run/user/$uid
+  runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$uid HOME=$home URNA_HOME=$home $home/urna arrancar sin-esperar
+  eend \$?
+}
+stop() {
+  ebegin "Urna Abierta"
+  runuser -u urna -- env XDG_RUNTIME_DIR=/run/user/$uid HOME=$home URNA_HOME=$home $home/urna frenar
+  eend \$?
+}
+EOF
+  chmod 755 /etc/init.d/urna-abierta
+  rc-update add urna-abierta default >/dev/null 2>&1 || true
+  printf '30 0,6,12,18 * * * XDG_RUNTIME_DIR=/run/user/%s HOME=%s URNA_HOME=%s %s/urna copia\n' "$uid" "$home" "$home" "$home" |
+    crontab -u urna -
+  rc-update add crond default >/dev/null 2>&1 || true
+  rc-service crond start >/dev/null 2>&1 || true
 fi
 # Starts what systemd did not, waits for it to answer and makes the first backup. A slow certificate, as while the
 # cloud's firewall keeps 80 and 443 closed, stops nothing: everything keeps running, and «urna estado» says what is missing.
