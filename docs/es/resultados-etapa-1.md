@@ -1,6 +1,10 @@
 # Resultados de la etapa 1
 
-[English](../en/stage-1-results.md)
+[English](../en/stage-1-results.md) · [Qué se probó después](resultados-etapa-4.md) · [Volver al README](../../README.md)
+
+La etapa 1 probó los riesgos antes de construir la app: la sincronización, un teléfono sin señal ni espacio, un servidor de
+1 GB y la lectura de padrones escaneados. Lo medido con la app completa está en
+[Qué se probó, y qué falta](resultados-etapa-4.md).
 
 ## Sincronización y app
 
@@ -31,10 +35,9 @@ Con Chrome 124 de verdad, dentro de un emulador de Android 15, y la señal corta
 | Tachar con 350 personas, CPU 6 veces más lenta | 24 ms de mediana, 78 ms en el peor caso |
 | Tachar con 5000 personas, CPU 6 veces más lenta | 28 ms de mediana, 183 ms en el peor caso |
 
-**Lo que encontré gracias a esta prueba:** en un teléfono sin espacio, escribir en la base la rompe. La pantalla mostraba a la
-persona tachada sin haberla guardado, y al liberar espacio la base volvía vacía: se perdía el padrón y lo que no se había
-enviado. Si no se escribe, en cambio, no se pierde nada. Por eso la app ahora comprueba el espacio con una escritura aparte, y
-deja de tachar mientras no haya lugar.
+**Lo que decidió esta prueba:** en un teléfono sin espacio, escribir en la base la rompe, y al liberar espacio la base vuelve
+vacía, sin el padrón ni lo que no se había enviado. Si no se escribe, no se pierde nada. Por eso la app comprueba el espacio
+con una escritura aparte, deja de tachar mientras no haya lugar y nunca muestra como guardado lo que no se guardó.
 
 **Límites:** un emulador no es un teléfono viejo. Sin los servicios de Google no se pudo instalar la app, y sin instalar, Chrome
 no protegió el almacenamiento; aun así, no borró nada en esta prueba. Tampoco se probó una jornada entera de batería.
@@ -81,7 +84,6 @@ quienes de verdad están en un solo padrón, así que es un techo de error para 
 - **A revisar:** el escáner marca entre 13 % y 14 % de las filas, sobre todo por legajos dudosos.
 - **Lo que falta mejorar:** los nombres coinciden exactos en 88,6 %. La mayoría de las diferencias es una sola letra, entre
   letras finas como `i`, `l` y `t`.
-- **Primer uso:** el modelo baja de `modelscope.cn` y pesa 47 MB. La descarga no envía datos, pero conviene distribuirlo
-  junto con el escáner para que nada dependa de ese sitio.
+- **El modelo** pesa 47 MB. El lector empaquetado lo trae adentro, para que leer no dependa del sitio de donde se baja.
 
 Falta una verificación manual: esta comparación no ve un error que se repita igual en los dos escaneos.
