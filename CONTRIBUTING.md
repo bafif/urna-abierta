@@ -27,7 +27,7 @@ Hace falta Node 24. Las pruebas del navegador necesitan además Podman.
 corepack pnpm install
 corepack pnpm test                                   # las pruebas unitarias de todo el repo
 corepack pnpm check                                  # los tipos de cada paquete, con sus pruebas
-node design/verificar-contraste.mjs                  # que todos los temas se puedan leer
+node tools/verificar-contraste.mjs                  # que todos los temas se puedan leer
 sh deploy/server/prueba-estado.sh                    # lo que dice «urna estado», en los dos idiomas, con podman y curl de mentira
 node deploy/verificar-documentos.mjs                 # que cada documento tenga su par en el otro idioma y sus enlaces lleguen
 ```

@@ -95,8 +95,7 @@ repository and the build process. The guide explains each warning, so that nobod
 
 ## Design
 
-The guide is that someone who barely uses a phone can use it alone, for the first time. The proposal can be seen in
-`design/index.html`.
+The guide is that someone who barely uses a phone can use it alone, for the first time.
 
 - **One screen, one question, one main button.** There are no menus.
 - **A default plan.** The home screen is a line of stations: what happened, where you are and what comes next. Each role has its
@@ -108,7 +107,7 @@ The guide is that someone who barely uses a phone can use it alone, for the firs
 ### Themes
 
 A theme is a data file, and a party can create its own: colors for light and dark mode, fonts, shapes, and a few recipes, such as
-how to cross out or what panels are made of. `design/verificar-contraste.mjs` rejects what cannot be read: text must reach 7:1,
+how to cross out or what panels are made of. `tools/verificar-contraste.mjs` rejects what cannot be read: text must reach 7:1,
 thinking of older eyes.
 
 | Theme | Idea |

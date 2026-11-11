@@ -104,7 +104,6 @@ Está en desarrollo y todavía no se usó en una elección real.
 - [Publicar una versión](docs/es/publicar.md): qué hace GitHub Actions con cada versión.
 - [Cómo contribuir](CONTRIBUTING.md): las pruebas, los idiomas y cómo se trabaja.
 - [Seguridad](SECURITY.md): cómo avisar de una falla, en privado.
-- [Propuesta de diseño](design/index.html): las pantallas de cada tarea, para abrir en el navegador.
 - [Lector de padrones](https://github.com/bafif/urna-abierta-padrones): el repo que convierte padrones al formato
   abierto.
 

@@ -41,7 +41,7 @@ jobs:
       - if: ${{ !cancelled() }}
         run: pnpm --filter @urna-abierta/installer exec vitest run
       - if: ${{ !cancelled() }}
-        run: node design/verificar-contraste.mjs
+        run: node tools/verificar-contraste.mjs
       - if: ${{ !cancelled() }}
         run: sh deploy/server/prueba-estado.sh
       # Every document in Spanish and in English, with links that lead somewhere.

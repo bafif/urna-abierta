@@ -18,8 +18,6 @@ deploy/serve.sh
 Te da un link para cada rol: fiscal, jefe de distrito, coordinación, semáforo y estadísticas. Cada link sirve una vez. Para verla como
 en un teléfono, activá el modo de dispositivo con F12, o seguí la [prueba en un emulador de Android](pruebas-en-telefonos.md).
 
-Para ver la propuesta de diseño alcanza con abrir `design/index.html` en el navegador.
-
 ## El instalador
 
 Se baja de la página de releases de GitHub, para Windows, macOS o Linux: [Bajarlo y abrirlo](#bajarlo-y-abrirlo) dice cuál. Se abre en tu
@@ -107,7 +105,7 @@ que está bien.
 
 ## Qué servidor elegir
 
-Lo verifiqué el 4/11/2026. Estos planes cambian seguido, así que confirmalo en su página antes de decidir. La
+Precios consultados en noviembre de 2026. Estos planes cambian seguido, así que confirmalo en su página antes de decidir. La
 [guía de servidores](servidores.md) explica cada uno, paso a paso.
 
 | Proveedor | Costo | A tener en cuenta |

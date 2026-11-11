@@ -105,7 +105,6 @@ It is in development and has not been used in a real election yet.
 - [Releasing a version](docs/en/releasing.md): what GitHub Actions does with each version.
 - [How to contribute](CONTRIBUTING.en.md): the tests, the languages and how the work is done.
 - [Security](SECURITY.en.md): how to report a flaw, privately.
-- [Design proposal](design/index.html): the screens of each task, to open in a browser.
 - [Roll reader](https://github.com/bafif/urna-abierta-padrones): the repository that converts rolls to the open format.
 
 ## Author
