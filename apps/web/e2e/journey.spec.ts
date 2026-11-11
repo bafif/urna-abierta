@@ -403,13 +403,11 @@ test('the traffic light starts empty, and the numbers never show a name', async 
   const demo = await seed(request, { size: 10 });
   // Categories belong to the party, which every run shares: a name of its own each time.
   const category = `Puede ser ${info.project.name} ${Date.now().toString(36)}`;
+  // Coordinating does not include the traffic light: whoever does it sets it up.
   await page.goto(`/#invitacion=${demo.links.coordinacion}`);
   await useThis(page);
   await button(page, 'Más cosas').click();
-  await page.getByRole('button', { name: /^Semáforo/ }).click();
-  await page.getByTestId('category-new').fill(category);
-  await button(page, 'Agregar categoría').click();
-  await expect(page.getByText(category)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Semáforo/ })).toHaveCount(0);
 
   const other = await browser.newContext({ ...info.project.use, baseURL: info.project.use.baseURL });
   const light = await other.newPage();
@@ -419,6 +417,12 @@ test('the traffic light starts empty, and the numbers never show a name', async 
     await route.continue();
   });
   await enter(light, demo.links.semaforo!);
+  await pickNewest(light, light.getByRole('searchbox'));
+  await light.getByTestId('light-categories').click();
+  await light.getByTestId('category-new').fill(category);
+  await button(light, 'Agregar categoría').click();
+  await expect(light.getByText(category)).toBeVisible();
+  await light.getByRole('button', { name: 'Volver' }).click();
   await pickNewest(light, light.getByRole('searchbox'));
   await light.getByRole('searchbox').fill('99000001');
   await light.getByTestId('light-person').first().click();

@@ -188,6 +188,10 @@ record('dentro del pod, la base pide su clave: un contenedor vecino, como el de 
 
 api(first, 'PUT', '/party', { token, body: { name: 'Agrupación Ejemplo', theme: 'mate' } });
 const { id: election } = api(first, 'POST', '/elections', { token, body: { name: 'Simulacro', kind: 'estudiantil', days: ['2027-04-06'], categories: [] } });
+// Coordinating does not include the traffic light: whoever coordinates and does it takes that task, sensitive categories
+// included.
+const me = api(first, 'GET', '/me', { token });
+api(first, 'POST', `/users/${me.user.id}/roles`, { token, body: { role: 'semaforo' } });
 const category = api(first, 'POST', '/semaphore/categories', { token, body: { name: 'Milita', color: '#D93A3A', sensitive: true } });
 const roll = join(work, 'padron.csv');
 writeFileSync(roll, `nombre,dni\n${Array.from({ length: 30 }, (_, i) => `Inventada ${i},${90000000 + i}`).join('\n')}\n`);
@@ -195,9 +199,6 @@ podman('cp', roll, `${first.name}:/tmp/padron.csv`);
 podman('exec', first.name, 'curl', '-sk', '-X', 'POST', '-H', `authorization: Bearer ${token}`, '-H', 'content-type: text/csv', '--data-binary', '@/tmp/padron.csv', `https://localhost/api/elections/${election}/roll`);
 const proposed = api(first, 'POST', `/elections/${election}/tables/propose`, { token, body: { size: 10 } });
 const people = api(first, 'GET', `/elections/${election}/people?q=90000001`, { token }).people;
-// A sensitive category needs its own permission, which not even whoever coordinates has by default.
-const me = api(first, 'GET', '/me', { token });
-api(first, 'POST', `/users/${me.user.id}/roles`, { token, body: { role: 'semaforo_sensible' } });
 const noted = api(first, 'PUT', `/elections/${election}/people/${encodeURIComponent(people[0].id)}/semaphore`, { token, body: { category: category.id } });
 record('se puede cargar una elección de verdad', proposed.created === 3 && people.length > 0 && noted.ok === true, { mesas: proposed.created });
 

@@ -31,6 +31,9 @@ describe.skipIf(!url)('against a real Postgres', () => {
   const redeem = async (invitation: string) => (await app.inject({ method: 'POST', url: '/api/auth/redeem', payload: { token: invitation } })).json().token as string;
   const call = (who: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, payload?: object) =>
     app.inject({ method, url: path, payload, headers: { authorization: `Bearer ${tokens[who]}` } });
+  // The traffic light sees the sensitive categories, unless the party edits it so that it does not. Then nothing may tell
+  // whoever does it who has one.
+  const lightWithoutSensitive = () => call('coordinacion', 'PUT', '/api/roles/semaforo', { permissions: ['semaphore.read', 'semaphore.write'] });
   const push = (who: string, tableId: string, operations: unknown[]) => call(who, 'POST', '/api/sync/push', { table: tableId, operations });
 
   async function pullAll(who: string, tableId: string): Promise<Operation[]> {
@@ -890,24 +893,26 @@ describe.skipIf(!url)('against a real Postgres', () => {
     });
 
     it('a traffic light category turns sensitive sealing the marks it has, only the permission undoes it, and it goes only once empty', async () => {
-      const { id } = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Simpatiza', color: '#1E9E5A' })).json();
+      const { id } = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Simpatiza', color: '#1E9E5A' })).json();
       const elector = (await pool.query('SELECT id FROM electors WHERE election_id = $1 LIMIT 1', [demo.election])).rows[0].id;
       await pool.query('INSERT INTO semaphore_marks (election_id, elector_id, category_id) VALUES ($1, $2, $3)', [demo.election, elector, id]);
       const mark = async () => (await pool.query('SELECT category_id, sealed FROM semaphore_marks WHERE election_id = $1 AND elector_id = $2', [demo.election, elector])).rows[0];
-      expect((await call('coordinacion', 'GET', `/api/semaphore/categories/${id}`)).json().people).toBe(1);
-      expect((await call('coordinacion', 'PUT', `/api/semaphore/categories/${id}`, { name: 'Afiliada', sensitive: true })).statusCode).toBe(200);
+      expect((await call('semaforo', 'GET', `/api/semaphore/categories/${id}`)).json().people).toBe(1);
+      expect((await call('semaforo', 'PUT', `/api/semaphore/categories/${id}`, { name: 'Afiliada', sensitive: true })).statusCode).toBe(200);
       expect(await mark()).toMatchObject({ category_id: null, sealed: expect.any(String) });
+      expect((await call('semaforo', 'GET', '/api/semaphore/categories')).json()).toMatchObject({ hidden: 0 });
+      await lightWithoutSensitive();
       const light = (await call('semaforo', 'GET', '/api/semaphore/categories')).json();
       expect(light.hidden).toBe(1);
       expect(light.categories.map((category: { id: string }) => category.id)).not.toContain(id);
-      expect((await call('coordinacion', 'PUT', `/api/semaphore/categories/${id}`, { sensitive: false })).statusCode).toBe(403);
-      const { user } = (await call('coordinacion', 'GET', '/api/me')).json();
+      expect((await call('semaforo', 'PUT', `/api/semaphore/categories/${id}`, { sensitive: false })).statusCode).toBe(403);
+      const { user } = (await call('semaforo', 'GET', '/api/me')).json();
       await call('coordinacion', 'POST', `/api/users/${user.id}/roles`, { role: 'semaforo_sensible' });
-      expect((await call('coordinacion', 'DELETE', `/api/semaphore/categories/${id}`)).json()).toMatchObject({ error: 'in_use', people: 1 });
-      expect((await call('coordinacion', 'PUT', `/api/semaphore/categories/${id}`, { sensitive: false })).statusCode).toBe(200);
+      expect((await call('semaforo', 'DELETE', `/api/semaphore/categories/${id}`)).json()).toMatchObject({ error: 'in_use', people: 1 });
+      expect((await call('semaforo', 'PUT', `/api/semaphore/categories/${id}`, { sensitive: false })).statusCode).toBe(200);
       expect(await mark()).toMatchObject({ category_id: id, sealed: null });
       await pool.query('DELETE FROM semaphore_marks WHERE election_id = $1', [demo.election]);
-      expect((await call('coordinacion', 'DELETE', `/api/semaphore/categories/${id}`)).statusCode).toBe(200);
+      expect((await call('semaforo', 'DELETE', `/api/semaphore/categories/${id}`)).statusCode).toBe(200);
     });
 
     it('a photo is only accepted if it matches its hash, and only its table can see it', async () => {
@@ -1293,7 +1298,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
       // The same photo again changes nothing, and is not one more.
       expect((await put()).statusCode).toBe(200);
 
-      const order = (ids: string[]) => call('coordinacion', 'PUT', '/api/semaphore/order', { ids });
+      const order = (ids: string[]) => call('semaforo', 'PUT', '/api/semaphore/order', { ids });
       expect((await order(Array.from({ length: 101 }, () => randomUUID()))).statusCode).toBe(400);
       const one = randomUUID();
       expect((await order([one, one])).statusCode).toBe(400);
@@ -1422,8 +1427,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
 
     it('poll watchers see the traffic light of their table only if the party allows it, and never a sensitive category', async () => {
       const color = '#E8A317';
-      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color })).json().id;
-      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color, sensitive: true })).json().id;
+      const open = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color })).json().id;
+      const closed = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Milita', color, sensitive: true })).json().id;
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
       // Whoever notes the light names people by the id the phones know them by.
@@ -1507,10 +1512,15 @@ describe.skipIf(!url)('against a real Postgres', () => {
   });
 
   describe('traffic light and personal data', () => {
-    it('starts empty, and a sensitive category needs its own permission', async () => {
+    it('starts empty, and once the party takes sensitive categories away from the traffic light they need their own permission', async () => {
       expect((await call('semaforo', 'GET', '/api/semaphore/categories')).json().categories).toEqual([]);
-      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
-      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      // Coordinating does not include the traffic light: whoever coordinates and does it takes that task too.
+      expect((await call('coordinacion', 'GET', '/api/semaphore/categories')).statusCode).toBe(403);
+      expect((await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).statusCode).toBe(403);
+      const open = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const closed = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      expect((await call('semaforo', 'GET', '/api/semaphore/categories')).json().categories).toHaveLength(2);
+      await lightWithoutSensitive();
       expect((await call('semaforo', 'GET', '/api/semaphore/categories')).json().categories).toHaveLength(1);
       const person = (await call('semaforo', 'GET', `/api/elections/${demo.election}/people?q=a`)).json();
       expect(person.people).toEqual([]);
@@ -1529,8 +1539,9 @@ describe.skipIf(!url)('against a real Postgres', () => {
     });
 
     it('a sensitive mark cannot be seen through an export, nor replaced or cleared, without its own permission', async () => {
-      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
-      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const open = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const closed = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      await lightWithoutSensitive();
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       const idOf = (name: string) => users.find((u: { name: string }) => u.name === name).id;
       await call('coordinacion', 'POST', `/api/users/${idOf('Juli')}/roles`, { role: 'semaforo_sensible' });
@@ -1571,7 +1582,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
       // Ids as the rolls bring them: the whole document inside.
       await pool.query(`UPDATE electors SET id = 'd-' || document WHERE table_id = $1`, [table]);
       const documents: string[] = (await pool.query('SELECT document FROM electors WHERE table_id = $1', [table])).rows.map((row) => row.document);
-      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const open = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
       const search = async () => (await call('semaforo', 'GET', `/api/elections/${demo.election}/people?q=ez`)).json().people as { id: string; category: string | null }[];
       const people = await search();
       expect(people.length).toBeGreaterThan(1);
@@ -1603,8 +1614,9 @@ describe.skipIf(!url)('against a real Postgres', () => {
     });
 
     it('whoever cannot see sensitive marks cannot tell who has one by how a change is answered, nor touch it', async () => {
-      const open = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
-      const closed = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const open = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Puede ser', color: '#E8A317' })).json().id;
+      const closed = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      await lightWithoutSensitive();
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
       tokens.otro = await redeem((await call('coordinacion', 'POST', '/api/users', { name: 'Otro semáforo', role: 'semaforo' })).json().invitation);
@@ -1685,7 +1697,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await push('coordinacion', mesa, [voted(dnis[0]!, 1), voted(dnis[1]!, 2)])).statusCode).toBe(200);
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
-      const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const sensitive = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
       const publicIds = (await pool.query('SELECT public_id FROM electors WHERE election_id = $1', [id])).rows.map((row) => row.public_id as string);
       for (const person of publicIds) expect((await call('semaforo', 'PUT', `/api/elections/${id}/people/${person}/semaphore`, { category: sensitive })).statusCode).toBe(200);
       const base = `/api/persons/${id}/d-${dnis[0]}`;
@@ -1721,7 +1733,7 @@ describe.skipIf(!url)('against a real Postgres', () => {
     it('after an erasure, and after the purge, nothing in the audit log leads back to the table and order of anyone', async () => {
       const users = (await call('coordinacion', 'GET', '/api/users')).json().users;
       await call('coordinacion', 'POST', `/api/users/${users.find((u: { name: string }) => u.name === 'Juli').id}/roles`, { role: 'semaforo_sensible' });
-      const sensitive = (await call('coordinacion', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
+      const sensitive = (await call('semaforo', 'POST', '/api/semaphore/categories', { name: 'Milita', color: '#D93A3A', sensitive: true })).json().id;
       const two = (await pool.query('SELECT id, public_id FROM electors WHERE table_id = $1 ORDER BY order_number LIMIT 2', [table])).rows as { id: string; public_id: string }[];
       const erased = two[0]!.id;
       for (const person of two) expect((await call('semaforo', 'PUT', `/api/elections/${demo.election}/people/${person.public_id}/semaphore`, { category: sensitive })).statusCode).toBe(200);

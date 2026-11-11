@@ -304,9 +304,15 @@ describe('permissions', () => {
     expect(ROLES.estadistico).toEqual(['stats.read']);
   });
 
-  it('sensitive categories need their own role', () => {
-    expect(rolesCan(['semaforo', 'coordinacion'], 'semaphore.sensitive')).toBe(false);
-    expect(rolesCan(['semaforo', 'semaforo_sensible'], 'semaphore.sensitive')).toBe(true);
+  it('whoever does the traffic light sees its sensitive categories, and nobody notes it without seeing them', () => {
+    expect(rolesCan(['semaforo'], 'semaphore.sensitive')).toBe(true);
+    for (const role of ['fiscal', 'jefe', 'estadistico', 'coordinacion', 'sistema'] as const) {
+      expect(rolesCan([role], 'semaphore.sensitive')).toBe(false);
+      expect(rolesCan([role], 'semaphore.write')).toBe(false);
+    }
+    for (const role of Object.keys(ROLES) as (keyof typeof ROLES)[]) {
+      if (rolesCan([role], 'semaphore.write')) expect(rolesCan([role], 'semaphore.sensitive')).toBe(true);
+    }
   });
 
   it('picks what someone with several roles sees first', () => {
