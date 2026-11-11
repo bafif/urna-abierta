@@ -80,8 +80,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
-      - run: corepack enable
+          node-version: 26
+      - run: npm install -g corepack@0.36.0 && corepack enable
       - run: pnpm install --frozen-lockfile --filter @urna-abierta/installer...
       - run: node build.mjs
         working-directory: apps/installer
@@ -106,13 +106,13 @@ jobs:
   installer-musl:
     needs: draft
     runs-on: ubuntu-24.04
-    container: node:24-alpine
+    container: node:26-alpine
     env:
       URNA_VERSION: ${{ github.ref_name }}
     steps:
       - run: apk add --no-cache bash git github-cli
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: corepack enable
+      - run: npm install -g corepack@0.36.0 && corepack enable
       - run: pnpm install --frozen-lockfile --filter @urna-abierta/installer...
       - run: node build.mjs
         working-directory: apps/installer

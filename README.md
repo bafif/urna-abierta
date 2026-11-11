@@ -49,7 +49,7 @@ fiscales, en tres temas distintos"></p>
 **Todavía no hay una versión publicada.** Cuando la haya, el instalador para Windows, macOS o Linux se baja de la página
 de releases: hace tres preguntas, crea tu servidor y deja todo configurado.
 
-Mientras tanto, se prueba desde el código, con Node 24 y Podman:
+Mientras tanto, se prueba desde el código, con Node 26 y Podman:
 
 ```sh
 git clone https://github.com/bafif/urna-abierta && cd urna-abierta

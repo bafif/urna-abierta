@@ -1,14 +1,14 @@
 name: Setup
-description: Node 24, the pnpm that package.json names, and the workspace installed. pnpm's store is kept between runs, by the lockfile.
+description: Node 26, the pnpm that package.json names, and the workspace installed. pnpm's store is kept between runs, by the lockfile.
 
 runs:
   using: composite
   steps:
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        node-version: 24
+        node-version: 26
     - shell: bash
-      run: corepack enable
+      run: npm install -g corepack@0.36.0 && corepack enable
     - id: store
       shell: bash
       env:

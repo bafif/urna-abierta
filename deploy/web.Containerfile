@@ -1,6 +1,6 @@
-FROM --platform=$BUILDPLATFORM docker.io/library/node:24-alpine AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/node:26-alpine AS build
 WORKDIR /app
-RUN corepack enable
+RUN npm install -g corepack@0.36.0 && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/domain/package.json packages/domain/
 COPY apps/web/package.json apps/web/

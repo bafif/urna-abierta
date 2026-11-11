@@ -6,7 +6,7 @@
 
 ## Probarla con personas inventadas
 
-Hace falta Node 24 y Podman.
+Hace falta Node 26 y Podman.
 
 ```sh
 git clone https://github.com/bafif/urna-abierta
@@ -23,7 +23,7 @@ en un teléfono, activá el modo de dispositivo con F12, o seguí la [prueba en 
 Se baja de la página de releases de GitHub, para Windows, macOS o Linux: [Bajarlo y abrirlo](#bajarlo-y-abrirlo) dice cuál. Se abre en tu
 navegador y solo se ve desde tu computadora.
 
-Mientras no haya una versión publicada, se corre desde el código, en la carpeta del repo, con Node 24 y Podman:
+Mientras no haya una versión publicada, se corre desde el código, en la carpeta del repo, con Node 26 y Podman:
 
 ```sh
 deploy/instalador.sh

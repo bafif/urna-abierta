@@ -21,7 +21,7 @@ accepted. If you forgot it, on your branch: `git rebase --signoff main` and then
 
 ## Tests
 
-You need Node 24. The browser tests also need Podman.
+You need Node 26. The browser tests also need Podman.
 
 ```sh
 corepack pnpm install

@@ -21,7 +21,7 @@ la olvidaste, en tu rama: `git rebase --signoff main` y después `git push --for
 
 ## Las pruebas
 
-Hace falta Node 24. Las pruebas del navegador necesitan además Podman.
+Hace falta Node 26. Las pruebas del navegador necesitan además Podman.
 
 ```sh
 corepack pnpm install

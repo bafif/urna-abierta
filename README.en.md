@@ -49,7 +49,7 @@ watcher app, in three different themes"></p>
 **There is no published version yet.** Once there is, the installer for Windows, macOS or Linux is downloaded from the
 releases page: it asks three questions, creates your server and leaves everything set up.
 
-Meanwhile, it can be tried from the source code, with Node 24 and Podman:
+Meanwhile, it can be tried from the source code, with Node 26 and Podman:
 
 ```sh
 git clone https://github.com/bafif/urna-abierta && cd urna-abierta

@@ -6,7 +6,7 @@
 
 ## Try it with invented people
 
-You need Node 24 and Podman.
+You need Node 26 and Podman.
 
 ```sh
 git clone https://github.com/bafif/urna-abierta
@@ -23,7 +23,7 @@ see it as on a phone, turn on device mode with F12, or follow the [test on an An
 It is downloaded from the GitHub releases page, for Windows, macOS or Linux: [Downloading and opening it](#downloading-and-opening-it)
 says which one. It opens in your browser and can only be seen from your computer.
 
-Until a version is published, run it from the source, in the repository's folder, with Node 24 and Podman:
+Until a version is published, run it from the source, in the repository's folder, with Node 26 and Podman:
 
 ```sh
 deploy/instalador.sh
