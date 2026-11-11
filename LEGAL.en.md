@@ -64,10 +64,11 @@ The traffic light starts empty: each party defines its categories.
 
 ## External artificial intelligence
 
-The roll scanner reads on your computer by default, and for now that is the only option. If you later choose an external AI, the data of the roll goes through that company, with your
-account and under its terms, and some free plans train on what they receive. No roll goes through an account or a server of the project.
+The roll scanner reads on your computer by default, and for now that is the only option. If you later choose an external
+AI, the data of the roll goes through that company, with your account and under its terms, and some free plans train on
+what they receive. No roll goes through an account or a server of the project.
 
 ## Third parties
 
 Cloud providers are named only for guidance: the project has no relationship with them. You accept their terms, with your account. The fonts
-are under the SIL OFL, included next to each one in `design/fuentes/`.
+are under the SIL OFL, included next to each one in `apps/web/src/lib/fuentes/` and `landing/fuentes/`.

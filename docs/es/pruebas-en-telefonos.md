@@ -1,6 +1,6 @@
 # Prueba en un teléfono, desde la PC
 
-[English](../en/phone-tests.md)
+[English](../en/phone-tests.md) · [Volver a la instalación](instalacion.md)
 
 No hace falta publicar nada. La app de prueba usa personas inventadas y no manda ningún informe sola.
 
@@ -45,7 +45,7 @@ Por eso el iPhone se prueba con un servidor con HTTPS, donde alcanza con abrir e
 el riesgo es acotado: una elección de tres días, con la mesa preparada el día anterior, no llega a esos 7 días.
 Si aun así pierde datos, lo enviado sigue en el servidor y el fiscal vuelve a preparar la mesa.
 
-En ese momento, los pasos son estos:
+Los pasos de esa prueba:
 
 | Cuándo | Qué hacer | Qué tiene que pasar |
 |---|---|---|
