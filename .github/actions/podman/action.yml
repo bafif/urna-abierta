@@ -3,7 +3,7 @@ description: Podman without root, as the end to end tests run on a person's comp
 
 inputs:
   room:
-    description: Clears what GitHub's machine brings for other languages, for the tests that build Ubuntu machines.
+    description: Clears what GitHub's machine brings for other languages, for the tests that build Alpine machines.
     default: 'false'
 
 runs:
@@ -13,11 +13,18 @@ runs:
       run: |
         # Ubuntu 24.04 can stop a user without root from making the namespaces that rootless Podman needs.
         sudo sysctl -q -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        # The test machines are Alpine, whose Podman gives a pod its network with pasta. Ubuntu's AppArmor profile for
+        # passt, made for this machine's own, also takes the one inside them and refuses it the network namespace it
+        # opens. GitHub's machine is thrown away after the job.
+        sudo aa-status 2>/dev/null | grep -E 'passt|pasta' || true
+        for profile in /etc/apparmor.d/usr.bin.passt /etc/apparmor.d/usr.bin.pasta; do
+          if [ -f "$profile" ]; then sudo apparmor_parser -R "$profile" || true; fi
+        done
         # The ids that the containers get. The test machines need the usual 65536: their users run Podman inside.
         if ! grep -q "^$(id -un):" /etc/subuid || ! grep -q "^$(id -un):" /etc/subgid; then
           sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$(id -un)"
         fi
-        # A systemd session for this user, as on a computer: the test machines run systemd, which needs cgroups of its own.
+        # A systemd session for this user, as on a computer: rootless Podman takes the cgroups of its containers from it.
         uid=$(id -u)
         sudo loginctl enable-linger "$(id -un)"
         for _ in $(seq 1 30); do [ -d "/run/user/$uid" ] && break; sleep 1; done
