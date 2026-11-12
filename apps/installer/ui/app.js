@@ -147,7 +147,7 @@
     },
     ssh: () => ({
       eyebrow: t('step1'), title: t('ssh.title'), text: t('ssh.text'),
-      body: `<div class="campos"><div class="doble">${field('address', t('ssh.address'))}${field('sshUser', t('ssh.user'), { value: 'ubuntu' })}</div>${field('privateKey', t('ssh.key'), { big: true })}
+      body: `<div class="campos"><div class="doble">${field('address', t('ssh.address'))}${field('sshUser', t('ssh.user'), { value: 'alpine' })}</div>${field('privateKey', t('ssh.key'), { big: true })}
         <div class="doble">${field('sshPassword', t('ssh.password'), { type: 'password' })}${field('sshPort', t('ssh.port'), { value: '22' })}</div><p class="aclara">${t('ssh.password.text')}</p></div>`,
       next: [state.busy ? 'ssh.checking' : 'next', 'sshNext'], back: 'where',
     }),
@@ -284,7 +284,7 @@
   const sshTarget = () => ({
     host: (state.form.address ?? '').trim().replace(/^https?:\/\//, ''),
     port: Number(state.form.sshPort) || 22,
-    user: (state.form.sshUser ?? 'ubuntu').trim(),
+    user: (state.form.sshUser ?? 'alpine').trim(),
     privateKey: state.form.privateKey ?? '',
     ...(state.form.sshPassword ? { password: state.form.sshPassword } : {}),
   });
