@@ -1,39 +1,39 @@
 /**
- * Lets the chief know a new alert came in while the app is open: the phone vibrates and beeps, and the count goes
- * on the app's icon and in the tab's title. Alerts already there when the panel opened make no noise: they are on
- * screen. With the app closed none of this can happen.
+ * Lets whoever looks after tables know a new alert came in while the app is open, on any screen: the phone vibrates
+ * and beeps, and the count goes on the app's icon and in the tab's title. Alerts already there the first time an
+ * election is read make no noise: the count says them. With the app closed none of this can happen.
  */
 const TITLE = 'Urna Abierta';
+/** How often the app asks, on any screen. The district panel asks for itself more often while an alert is open. */
+export const ALERT_POLL_MS = 15_000;
 
 export class AlertWatch {
   /** The alerts seen so far in each election. */
   private readonly seen = new Map<string, Set<string>>();
-  /** Each time the panel comes on screen it takes a new turn: what an earlier one reads after it left does not count. */
-  private turn = 0;
+  /** How many are open now in each election. */
+  private readonly open = new Map<string, number>();
 
-  /** The panel is on screen: what it reads with this turn shows on the icon and the title. */
-  watch(): number {
-    this.turn += 1;
-    return this.turn;
-  }
-
-  /** The alerts open now in an election. */
-  update(turn: number, election: string, open: string[]): void {
-    if (turn !== this.turn) return;
+  /** The alerts open now in an election, from the panel or from the poll. */
+  update(election: string, open: string[]): void {
     const known = this.seen.get(election);
     const fresh = known ? open.filter((id) => !known.has(id)) : [];
     this.seen.set(election, new Set([...(known ?? []), ...open]));
-    document.title = open.length > 0 ? `(${open.length}) ${TITLE}` : TITLE;
-    badge(open.length);
+    this.open.set(election, open.length);
+    this.show();
     if (fresh.length > 0) ring();
   }
 
-  /** When the panel is not on screen, nothing keeps the count up to date: neither the title nor the icon keep it. */
-  leave(turn: number): void {
-    if (turn !== this.turn) return;
-    this.turn += 1;
-    document.title = TITLE;
-    badge(0);
+  /** Whoever was looking left (the session ended, or it no longer watches tables): nothing stays on the icon. */
+  stop(): void {
+    this.seen.clear();
+    this.open.clear();
+    this.show();
+  }
+
+  private show(): void {
+    const count = [...this.open.values()].reduce((sum, value) => sum + value, 0);
+    document.title = count > 0 ? `(${count}) ${TITLE}` : TITLE;
+    badge(count);
   }
 }
 
@@ -60,3 +60,37 @@ function ring(): void {
 }
 
 export const alertWatch = new AlertWatch();
+
+/**
+ * Asks for the open alerts every so often, also with the app in the background, so that the icon and the title keep
+ * up. Without signal it waits for the next turn. Returns what stops it.
+ */
+export function pollAlerts(read: () => Promise<{ id: string; open: string[] }[]>, watch: AlertWatch = alertWatch): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  let asking = false;
+  const tick = async () => {
+    if (asking) return;
+    asking = true;
+    clearTimeout(timer);
+    try {
+      const elections = await read();
+      if (!stopped) for (const election of elections) watch.update(election.id, election.open);
+    } catch {
+      // No signal, or the server is busy: the next turn asks again.
+    }
+    asking = false;
+    if (!stopped) timer = setTimeout(tick, ALERT_POLL_MS);
+  };
+  const back = () => {
+    if (document.visibilityState === 'visible') void tick();
+  };
+  void tick();
+  document.addEventListener('visibilitychange', back);
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+    document.removeEventListener('visibilitychange', back);
+    watch.stop();
+  };
+}

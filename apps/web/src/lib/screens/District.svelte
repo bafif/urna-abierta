@@ -57,8 +57,6 @@
   let late = $state(0);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let gone = false;
-  /** What a refresh brings after this panel left does not reach the icon or the title. */
-  let turn = 0;
 
   async function load() {
     try {
@@ -69,7 +67,7 @@
       if (election) {
         tables = (await session.api<{ tables: Table[] }>(`/district/${election.id}`)).tables;
         if (election.status === 'cerrada') late = (await session.api<{ items: unknown[] }>(`/elections/${election.id}/late`)).items.length;
-        alertWatch.update(turn, election.id, tables.flatMap((table) => table.incidents.map((incident) => incident.id)));
+        alertWatch.update(election.id, tables.flatMap((table) => table.incidents.map((incident) => incident.id)));
       }
       offline = false;
     } catch {
@@ -78,7 +76,7 @@
     loaded = true;
   }
 
-  /** Also while the app is in the background, so that the icon and the title keep up. */
+  /** Also while the app is in the background, so that the panel is up to date when it comes back. */
   function again() {
     clearTimeout(timer);
     if (gone) return;
@@ -93,7 +91,6 @@
   }
 
   onMount(() => {
-    turn = alertWatch.watch();
     void load().then(again);
     document.addEventListener('visibilitychange', back);
   });
@@ -101,7 +98,6 @@
     gone = true;
     clearTimeout(timer);
     document.removeEventListener('visibilitychange', back);
-    alertWatch.leave(turn);
   });
 
   /** Only while it is being voted, inside its hours when the election says them: at night, or once its day was closed, silence says nothing. */

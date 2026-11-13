@@ -128,8 +128,8 @@ Antes de empezar, bajá una copia en **Más cosas**, **Copias de seguridad**, y 
 
 Tocá «Abrir la votación». Desde ahí, «Ver cómo va» muestra primero las mesas que necesitan algo:
 
-- «aviso urgente»: un fiscal avisó que algo anda mal. Tocá la mesa, llamalo, y cuando esté resuelto tocá «Ya está resuelto». Mientras
-  «Ver cómo va» está en pantalla, un aviso nuevo hace vibrar el teléfono, suena y aparece en el ícono de la app;
+- «aviso urgente»: un fiscal avisó que algo anda mal. Tocá la mesa, llamalo, y cuando esté resuelto tocá «Ya está resuelto». Con la
+  app abierta, en cualquier pantalla, un aviso nuevo hace vibrar el teléfono, suena y aparece en el ícono de la app;
 - «los sobres no coinciden»: al contar los sobres, el número no dio con los tachados;
 - «sin datos»: la mesa no manda nada hace un rato. Puede ser falta de señal: llamá al fiscal.
 
@@ -245,4 +245,4 @@ No le digas a nadie que siga igual. Ese aviso puede ser alguien en el medio, y l
 
 Una versión nueva puede resolver alguno: fijate en sus notas.
 
-- Un aviso urgente suena y vibra solo con «Ver cómo va» en pantalla: desde otra pantalla, como el detalle de una mesa, no.
+- Con la app cerrada o el teléfono bloqueado, un aviso urgente no suena: mientras se vota, dejala abierta.

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import '../lib/tema.css';
   import '../lib/app.css';
+  import { pollAlerts } from '../lib/alerts.ts';
   import { app } from '../lib/app.svelte.ts';
   import { nav } from '../lib/nav.svelte.ts';
   import { pwa } from '../lib/pwa.svelte.ts';
@@ -64,6 +65,14 @@
   // Also when someone gets in without reloading, by typing a code.
   $effect(() => {
     if (session.ready && (app.practice || session.allows('table.work'))) void app.start();
+  });
+
+  // An alert rings on any screen of the app, not only on the district panel. Only a change of who it is starts it
+  // again: a refresh of the session must not forget which alerts already rang.
+  const watching = $derived(session.ready && session.allows('district.watch'));
+  $effect(() => {
+    if (!watching) return;
+    return pollAlerts(async () => (await session.api<{ elections: { id: string; open: string[] }[] }>('/district/alerts')).elections);
   });
 
   const Screen = $derived(SCREENS[nav.current.name] ?? Home);

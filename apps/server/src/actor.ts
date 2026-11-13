@@ -179,12 +179,14 @@ export async function mayInvite(pool: pg.Pool, actor: Actor, userId: string): Pr
 }
 
 /** The tables of an election this person looks after: all, if they run the election, or else those of their districts. */
-export async function tablesInScope(pool: pg.Pool, actor: Actor, election: string): Promise<string[]> {
-  if (can(actor, 'election.manage')) {
-    return (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1', [election])).rows.map((r) => r.id);
-  }
+/** Which tables someone looks after: every one, or those of their districts. */
+export function reach(actor: Actor): { everything: boolean; units: (string | null)[] } {
   const units = actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);
-  const everything = units.includes(null);
+  return { everything: can(actor, 'election.manage') || units.includes(null), units };
+}
+
+export async function tablesInScope(pool: pg.Pool, actor: Actor, election: string): Promise<string[]> {
+  const { everything, units } = reach(actor);
   return (await pool.query('SELECT id FROM polling_tables WHERE election_id = $1 AND ($2 OR unit_id = ANY($3))', [election, everything, units])).rows.map((r) => r.id);
 }
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, canReachTable, erasedId, getSetting, requires, rollKey, seal, tablesInScope, unseal, type Actor } from './actor.ts';
+import { audit, auditView, authenticated, can, canReachTable, erasedId, getSetting, reach, requires, rollKey, seal, tablesInScope, unseal, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
 import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
@@ -128,6 +128,24 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const rows = await pool.query(`SELECT id, name, status, days, categories, hours, time_zone FROM elections WHERE status NOT IN ('purgada') ORDER BY created_at DESC`);
     // The categories say when a table has tallied everything.
     return { elections: rows.rows.map((row) => ({ ...row, days: row.days.map((day: Date) => day.toISOString().slice(0, 10)), categories: row.categories.map((category: { id: string; name: string }) => ({ id: category.id, name: category.name })) })) };
+  });
+
+  /**
+   * The alerts still open in each election, only their ids: what lets the app ring on any screen while it is open,
+   * not only on the panel. Every election comes, also with none, so that the first alert of one rings too.
+   */
+  app.get('/api/district/alerts', { preHandler: watch }, async (request) => {
+    const { everything, units } = reach(request.actor);
+    const rows = await pool.query(
+      `SELECT e.id, coalesce(array_agg(o.id ORDER BY o.id) FILTER (WHERE o.id IS NOT NULL), '{}') AS open
+       FROM elections e
+       LEFT JOIN polling_tables t ON t.election_id = e.id AND ($1 OR t.unit_id = ANY($2))
+       LEFT JOIN operations o ON o.table_id = t.id AND o.type = 'incident.reported'
+         AND NOT EXISTS (SELECT 1 FROM incident_states s WHERE s.operation_id = o.id)
+       WHERE e.status <> 'purgada' GROUP BY e.id`,
+      [everything, units],
+    );
+    return { elections: rows.rows.map((row) => ({ id: row.id, open: row.open })) };
   });
 
   /** Not a dashboard: what needs someone now comes first, and the rest fits in one line. */

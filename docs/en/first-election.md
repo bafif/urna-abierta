@@ -128,8 +128,8 @@ Before starting, download a backup in **More**, **Backups**, and another one eac
 
 Tap “Open the vote”. From then on, “See how it goes” shows first the tables that need something:
 
-- “urgent alert”: a poll watcher said something is wrong. Tap the table, call them, and once it is solved tap “It is resolved”. While
-  “See how it goes” is on screen, a new alert makes the phone vibrate, beeps and shows on the app's icon;
+- “urgent alert”: a poll watcher said something is wrong. Tap the table, call them, and once it is solved tap “It is resolved”. With the
+  app open, on any screen, a new alert makes the phone vibrate, beeps and shows on the app's icon;
 - “envelopes do not match”: when counting the envelopes, the number did not match the crossed-out names;
 - “no data”: the table has not sent anything for a while. It may just be missing signal: call the poll watcher.
 
@@ -250,4 +250,4 @@ Do not tell anyone to go on anyway. That warning may be someone in the middle, a
 
 A new version may solve some of them: check its notes.
 
-- An urgent alert beeps and vibrates only with “See how it goes” on screen: from another screen, such as a table's detail, it does not.
+- With the app closed or the phone locked, an urgent alert does not beep: while people vote, keep it open.

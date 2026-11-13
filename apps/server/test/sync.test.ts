@@ -500,6 +500,25 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(detail.incidents).toEqual([]);
     });
 
+    it('the app asks for the open alerts of each election in reach, to ring on any screen', async () => {
+      const alerts = async (who: string) => (await call(who, 'GET', '/api/district/alerts')).json().elections;
+      // An election with none comes too: the first alert of it rings.
+      expect(await alerts('jefe')).toEqual([{ id: demo.election, open: [] }]);
+      const alert = { ...operation(table, 1), type: 'incident.reported', payload: { kind: 'urgent' } };
+      await push('fiscal', table, [alert]);
+      expect(await alerts('jefe')).toEqual([{ id: demo.election, open: [alert.id] }]);
+      expect(await alerts('coordinacion')).toEqual([{ id: demo.election, open: [alert.id] }]);
+      expect((await call('fiscal', 'GET', '/api/district/alerts')).statusCode).toBe(403);
+      // A chief of another district does not hear it.
+      const other = randomUUID();
+      await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [other, demo.election, 'Sur']);
+      const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Otra jefa', role: 'jefe', unit: other })).json();
+      tokens.otra = await redeem(invitation);
+      expect(await alerts('otra')).toEqual([{ id: demo.election, open: [] }]);
+      expect((await call('jefe', 'POST', `/api/incidents/${alert.id}/resolve`)).statusCode).toBe(200);
+      expect(await alerts('jefe')).toEqual([{ id: demo.election, open: [] }]);
+    });
+
     it('an alert that arrives after the close shows on the panel and on the table, said so, and can be resolved', async () => {
       for (const status of ['escrutinio', 'cerrada']) await call('coordinacion', 'POST', `/api/elections/${demo.election}/status`, { status });
       const alert = { ...operation(table, 1), type: 'incident.reported', payload: { kind: 'urgent' } };

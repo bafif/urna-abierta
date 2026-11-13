@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AlertWatch } from '../src/lib/alerts.ts';
+import { ALERT_POLL_MS, AlertWatch, pollAlerts } from '../src/lib/alerts.ts';
 
 describe('what tells the chief about an alert', () => {
   let badge: number;
@@ -8,7 +8,7 @@ describe('what tells the chief about an alert', () => {
   beforeEach(() => {
     badge = 0;
     rung = 0;
-    vi.stubGlobal('document', { title: 'Urna Abierta' });
+    vi.stubGlobal('document', { title: 'Urna Abierta', visibilityState: 'visible', addEventListener: () => undefined, removeEventListener: () => undefined });
     vi.stubGlobal('navigator', {
       setAppBadge: async (count: number) => {
         badge = count;
@@ -22,37 +22,59 @@ describe('what tells the chief about an alert', () => {
       },
     });
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
-  it('leaving the panel takes the count off the icon too, not only off the title', async () => {
+  it('what was open the first time makes no noise; a new one rings, once, wherever it is read', async () => {
     const watch = new AlertWatch();
-    const turn = watch.watch();
-    watch.update(turn, 'e-1', ['a-1']);
-    await Promise.resolve();
+    watch.update('e-1', ['a-1']);
+    expect(rung).toBe(0);
     expect(document.title).toBe('(1) Urna Abierta');
-    expect(badge).toBe(1);
-    watch.leave(turn);
+    watch.update('e-1', ['a-1', 'a-2']);
+    expect(rung).toBe(1);
+    // The panel reads the same alert after the poll did: it does not ring again.
+    watch.update('e-1', ['a-1', 'a-2']);
+    expect(rung).toBe(1);
+  });
+
+  it('the count adds up every election, and stopping takes it off the icon too', async () => {
+    const watch = new AlertWatch();
+    watch.update('e-1', ['a-1']);
+    watch.update('e-2', ['b-1', 'b-2']);
+    await Promise.resolve();
+    expect(document.title).toBe('(3) Urna Abierta');
+    expect(badge).toBe(3);
+    watch.update('e-2', []);
+    expect(document.title).toBe('(1) Urna Abierta');
+    watch.stop();
     await Promise.resolve();
     expect(document.title).toBe('Urna Abierta');
     expect(badge).toBe(0);
   });
 
-  it('a refresh that arrives after the panel left changes nothing, and neither does an earlier panel leaving late', async () => {
+  it('the poll rings on any screen when an alert arrives, keeps asking without signal, and stops', async () => {
+    vi.useFakeTimers();
+    const answers: ({ id: string; open: string[] }[] | Error)[] = [[{ id: 'e-1', open: [] }], new Error('sin señal'), [{ id: 'e-1', open: ['a-1'] }]];
+    let asked = 0;
     const watch = new AlertWatch();
-    const first = watch.watch();
-    watch.update(first, 'e-1', []);
-    watch.leave(first);
-    watch.update(first, 'e-1', ['a-1', 'a-2']);
-    await Promise.resolve();
-    expect(document.title).toBe('Urna Abierta');
-    expect(badge).toBe(0);
+    const stop = pollAlerts(async () => {
+      const answer = answers[Math.min(asked++, answers.length - 1)]!;
+      if (answer instanceof Error) throw answer;
+      return answer;
+    }, watch);
+    await vi.advanceTimersByTimeAsync(0);
     expect(rung).toBe(0);
-    // The panel opens again: the one that left before cannot undo what it shows.
-    const second = watch.watch();
-    watch.update(second, 'e-1', ['a-1']);
-    watch.leave(first);
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(ALERT_POLL_MS);
+    expect(rung).toBe(0);
+    await vi.advanceTimersByTimeAsync(ALERT_POLL_MS);
+    expect(rung).toBe(1);
     expect(document.title).toBe('(1) Urna Abierta');
-    expect(badge).toBe(1);
+    stop();
+    const before = asked;
+    await vi.advanceTimersByTimeAsync(ALERT_POLL_MS * 3);
+    expect(asked).toBe(before);
+    expect(document.title).toBe('Urna Abierta');
   });
 });
