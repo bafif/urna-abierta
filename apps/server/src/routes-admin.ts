@@ -284,7 +284,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
   // ---------- Backups ----------
   /** They are made on the server and already encrypted. From here they can be taken somewhere else. */
   const backupsDir = () => process.env.URNA_BACKUPS_DIR ?? '/copias';
-  const BACKUP_NAME = /^urna-\d{8}-\d{6}\.tar\.gpg$/;
+  const BACKUP_NAME = /^urna-\d{8}-\d{6}\.tar\.(age|gpg)$/;
 
   app.get('/api/backups', { preHandler: requires(pool, 'security.manage') }, async () => {
     const names = await readdir(backupsDir()).catch(() => [] as string[]);

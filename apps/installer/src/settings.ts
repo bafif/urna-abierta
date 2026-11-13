@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import ssh2 from 'ssh2';
+import { ageKeyPair } from '../../server/src/age.ts';
 import { assetText } from './assets.ts';
 
 export const VERSION = process.env.URNA_VERSION ?? 'latest';
@@ -23,8 +24,10 @@ export const images = (): Images => ({
 export interface Secrets {
   /** Shown once, to create the first administrator. The server keeps only its hash. */
   setupCode: string;
-  /** Opens the backups. It is shown once, and the party keeps it. */
+  /** Opens the backups («AGE-SECRET-KEY-1…»). It is shown once, the party keeps it, and the server never has it. */
   recoveryKey: string;
+  /** What the server encrypts each backup to («age1…»): with it alone, nobody opens them. */
+  backupKey: string;
   /**
    * To get into the server later, to update it or restore a copy, as `urna-admin`. The private half only goes in the
    * access file; the server gets the public one.
@@ -46,10 +49,11 @@ function readable(length: number): string {
 }
 
 export function newSecrets(): Secrets {
-  const group = () => readable(5);
+  const backups = ageKeyPair();
   return {
     setupCode: readable(12),
-    recoveryKey: [group(), group(), group(), group(), group()].join('-'),
+    recoveryKey: backups.identity,
+    backupKey: backups.recipient,
     // Without a passphrase, as approved: one thing less to keep, and the access file says to guard it.
     adminKey: ssh2.utils.generateKeyPairSync('ed25519', { comment: 'urna-abierta' }),
   };
@@ -123,9 +127,9 @@ export function withoutComments(script: string): string {
 /** One block that does the whole installation: what runs over SSH, and what gets pasted when creating a server. */
 export function renderScript({ secrets, site, cert, theme, images: chosen = images(), imagesTar, extraEnv = [], keysOnly = false, language }: ScriptSettings): string {
   if (extraEnv.some((line) => !/^[A-Z_]+=/.test(line) || !SAFE_VALUE.test(line.slice(line.indexOf('=') + 1)))) throw new Error('unsafe extra setting');
-  // The recovery key goes as it is: the server encrypts each backup with it. The servers' guide says what that means.
+  // Only the public key: the server and the cloud's copy of this text can make backups, never open them.
   const settings = [
-    assign('URNA_BACKUP_KEY', secrets.recoveryKey),
+    assign('URNA_BACKUP_PUBLIC_KEY', secrets.backupKey),
     assign('URNA_SETUP_CODE_HASH', createHash('sha256').update(secrets.setupCode).digest('hex')),
     assign('URNA_TEMA', theme),
     assign('URNA_SITE', site),

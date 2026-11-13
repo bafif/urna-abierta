@@ -75,27 +75,18 @@ Elegí **Prefiero pegar un texto**. Al final, el instalador te da un bloque. Cre
 
 El servidor se instala solo en unos minutos, y le pregunta a un servicio público cuál es su dirección. Volvé al instalador y escribila.
 
-El bloque trae la llave de recuperación de tu instalación. Queda guardado en la cuenta de esa nube: no lo compartas, y leé lo que
-sigue.
+El bloque queda guardado en la cuenta de esa nube. No trae nada que abra tus datos: lo explica lo que sigue.
 
 ## Lo que queda guardado en la nube
 
 Cuando el instalador crea el servidor, o cuando pegás el bloque, la nube guarda ese bloque como *user data* de la máquina, y no lo
-borra nunca. Ahí va la **llave de recuperación**, porque el servidor cifra cada copia con ella, y el código de instalación, pero solo
-como un resumen del que no se puede sacar. La clave de la base de datos y la de los campos sellados no pasan por ahí: se generan en el
-servidor.
+borra nunca. Ahí van la **llave pública** de las copias, que sirve para cifrarlas pero no para abrirlas, y el código de instalación,
+solo como un resumen del que no se puede sacar. La clave de la base de datos y la de los campos sellados no pasan por ahí: se generan
+en el servidor.
 
-Cualquiera con acceso a esa cuenta de la nube, aunque sea solo para mirar, puede leer el *user data*, y con la llave de recuperación
-abrir todas las copias: las del servidor y las del bucket. También lo puede leer cualquier programa que corra en el servidor, porque
-se lo pide a la nube. Por eso, después del primer arranque conviene una de estas dos cosas:
-
-- **Borrar el *user data*, donde la nube lo deja.** En Google Cloud, sacando la clave `user-data` de los metadatos de la VM. En AWS,
-  con la máquina apagada, en **Acciones**, **Configuración de la instancia**, **Editar datos de usuario**. Oracle Cloud no lo deja
-  cambiar después de crear la máquina.
-- **Cambiar la llave**, si no se puede borrar o si alguien más pudo verla. Poné una nueva en la línea `URNA_BACKUP_KEY=` de
-  `/opt/urna-abierta/.env` (sirve la que da `openssl rand -hex 16`), guardala junto a la anterior y corré `sudo urna copia`. Las
-  copias que se hagan desde ahí se abren con la nueva; las de antes, que siguen en el servidor y en el bucket hasta que se borran
-  solas, con la anterior.
+La **llave de recuperación**, la única que abre las copias, nunca llega al servidor ni a la nube: queda en tu archivo de acceso. Ni
+quien vea la cuenta de la nube ni un programa que corra en el servidor pueden abrir una copia, ni las del servidor ni las del bucket.
+La contracara: si perdés esa llave, nadie te la puede devolver. Guardá el archivo de acceso en dos lugares.
 
 ## Mantenerlo
 
@@ -159,11 +150,15 @@ En Windows ese mismo comando anda en PowerShell; también sirve [WinSCP](https:/
 usuario. Después, en el servidor:
 
 ```sh
-sudo urna restaurar urna-20270406-063000.tar.gpg TU-LLAVE-DE-RECUPERACION
+sudo urna restaurar urna-20270406-063000.tar.age TU-LLAVE-DE-RECUPERACION
 ```
 
-Restaurar reemplaza todos los datos de ese servidor. Va la llave de recuperación de la instalación que hizo la copia: si es otra, lo
-dice, y si el archivo no es una copia o se cortó al subirlo, también.
+Restaurar reemplaza todos los datos de ese servidor. Va la llave de recuperación de la instalación que hizo la copia, la del archivo de
+acceso, que empieza con `AGE-SECRET-KEY-1`: si es otra, lo dice, y si el archivo no es una copia o se cortó al subirlo, también. Una
+copia de una instalación anterior a la llave pública termina en `.tar.gpg` y se restaura igual, con la llave de entonces.
+
+Las copias son archivos de [age](https://age-encryption.org), un formato abierto: también se abren sin Urna Abierta, en cualquier
+computadora con ese programa, guardando la llave en un archivo: `age -d -i llave.txt urna-20270406-063000.tar.age > copia.tar`.
 
 Las copias que el servidor haga después se abren con **su** llave de recuperación, no con la de la copia restaurada. Guardá las dos.
 
@@ -179,7 +174,7 @@ el servidor, o la nube cierra la cuenta, se pierden con él. Para tener siempre 
 - **Bajalas desde la app**, en **Más cosas**, **Copias de seguridad**, cada tanto y sobre todo antes de la elección.
 - **Mandalas a un almacenamiento S3.** Si configurás uno para las fotos (abajo), cada copia va también al bucket, a la carpeta
   `backups/` dentro de la de las fotos (`fotos/backups/`, si no cambiaste `URNA_S3_PREFIX`), y ahí quedan las 28 más nuevas. Siguen
-  cifradas con la llave de recuperación: el proveedor guarda algo que no puede abrir.
+  cifradas: el proveedor guarda algo que no puede abrir.
   Para borrar las viejas, la clave de acceso necesita permiso de listar el bucket; sin él se mandan igual, pero se acumulan. Conviene un
   bucket de otro proveedor que el del servidor, así la copia sobrevive si se cierra esa cuenta. Una copia de más de 5 GB (por las fotos
   que quedaron en el disco de antes del bucket) no entra de una vez: queda solo en el servidor, y `urna estado` lo marca.

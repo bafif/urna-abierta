@@ -76,27 +76,17 @@ Choose **I prefer to paste a text**. At the end, the installer gives you a block
 
 The server installs itself in a few minutes, and asks a public service what its address is. Go back to the installer and type it.
 
-The block holds the recovery key of your installation. It stays stored in that cloud account: do not share it, and read what
-follows.
+The block stays stored in that cloud account. It holds nothing that opens your data: what follows explains it.
 
 ## What stays stored in the cloud
 
-When the installer creates the server, or when you paste the block, the cloud keeps that block as the machine's *user data*, and
-never deletes it. The **recovery key** goes there, because the server encrypts each backup with it, and so does the setup code, but
-only as a hash it cannot be read back from. The database password and the key of the sealed fields do not go there: the server makes
-them.
+When the installer creates the server, or when you paste the block, the cloud stores that block as the machine's *user data*, and
+never deletes it. It holds the backups' **public key**, which encrypts them but cannot open them, and the setup code, only as a digest
+it cannot be taken out of. The database password and the key of the sealed fields do not go through it: they are made on the server.
 
-Anyone with access to that cloud account, even read-only, can read the *user data*, and with the recovery key open every backup: those
-on the server and those in the bucket. So can any program running on the server, which asks the cloud for it. That is why, after the
-first boot, one of these two is advised:
-
-- **Delete the *user data*, where the cloud allows it.** On Google Cloud, by removing the `user-data` key from the VM's metadata. On
-  AWS, with the machine stopped, under **Actions**, **Instance settings**, **Edit user data**. Oracle Cloud does not allow changing it
-  once the machine exists.
-- **Change the key**, if it cannot be deleted or someone else may have seen it. Put a new one in the `URNA_BACKUP_KEY=` line of
-  `/opt/urna-abierta/.env` (the one `openssl rand -hex 16` gives will do), keep it next to the old one and run `sudo urna copia`.
-  Backups made from then on open with the new one; earlier ones, which stay on the server and in the bucket until they are deleted
-  on their own, with the old one.
+The **recovery key**, the only one that opens the backups, never reaches the server or the cloud: it stays in your access file.
+Neither someone who sees the cloud account nor a program running on the server can open a backup, neither the server's nor the
+bucket's. The other side of it: if you lose that key, nobody can give it back. Keep the access file in two places.
 
 ## Maintaining it
 
@@ -160,11 +150,16 @@ On Windows the same command works in PowerShell; [WinSCP](https://winscp.net/) a
 Then, on the server:
 
 ```sh
-sudo urna restaurar urna-20270406-063000.tar.gpg YOUR-RECOVERY-KEY
+sudo urna restaurar urna-20270406-063000.tar.age YOUR-RECOVERY-KEY
 ```
 
-Restoring replaces all the data on that server. It takes the recovery key of the installation that made the backup: if it is another
-one, it says so, and if the file is not a backup or got cut while uploading, it says that too.
+Restoring replaces all the data on that server. It takes the recovery key of the installation that made the backup, the one in the
+access file, which starts with `AGE-SECRET-KEY-1`: if it is another one, it says so, and if the file is not a backup or got cut while
+uploading, it says that too. A backup from an installation before the public key ends in `.tar.gpg` and restores the same way, with
+the key of back then.
+
+Backups are [age](https://age-encryption.org) files, an open format: they also open without Urna Abierta, on any computer with that
+program, keeping the key in a file: `age -d -i key.txt urna-20270406-063000.tar.age > backup.tar`.
 
 The backups the server makes afterwards open with **its own** recovery key, not with the one of the restored backup. Keep both.
 
@@ -179,7 +174,7 @@ server is lost, or the cloud closes the account, they are lost with it. To alway
 
 - **Download them from the app**, in **More**, **Backups**, now and then and above all before the election.
 - **Send them to S3 storage.** If you set one up for the photos (below), each backup also goes to the bucket, to a `backups/` folder
-  inside the photos one (`fotos/backups/`, unless you changed `URNA_S3_PREFIX`), and the 28 newest stay there. They are still encrypted with the recovery key: the provider keeps something it cannot open. To delete
+  inside the photos one (`fotos/backups/`, unless you changed `URNA_S3_PREFIX`), and the 28 newest stay there. They are still encrypted: the provider keeps something it cannot open. To delete
   the old ones, the access key needs permission to list the bucket; without it they are still sent, but they pile up. A bucket from a
   different provider than the server's is better, so the backup survives if that account closes. A backup over 5 GB (because of the
   photos left on disk from before the bucket) does not fit in one upload: it stays only on the server, and `urna estado` flags it.

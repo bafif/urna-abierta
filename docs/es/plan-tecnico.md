@@ -44,11 +44,11 @@ enlaza a las páginas oficiales.
 - **Datos y ley:** los servidores gratuitos suelen estar fuera de Argentina. La guía avisa, y decidir corre por cuenta del
   partido.
 
-**Pendiente: copias con clave pública.** Hoy el servidor cifra cada copia con la llave de recuperación, así que la tiene en su `.env`
-y en el *user data* de la nube, que puede leer quien tenga acceso a esa cuenta; la guía de servidores dice cómo borrarlo o cambiar la
-llave. La alternativa es cifrar las copias con una clave pública, por ejemplo con `age` o GPG, cuya mitad privada sea la llave que se
-le muestra al partido: el servidor y la nube guardarían solo la mitad pública, que no abre nada, y restaurar pediría la privada. Cambia
-el formato de las copias, cómo se restauran las de antes y qué hace el instalador, así que queda para decidir.
+**Copias con clave pública.** El servidor cifra cada copia en formato age con la mitad pública de un par que crea el instalador; la
+mitad privada es la llave de recuperación, que se le muestra al partido y va solo en el archivo de acceso. El servidor y la nube
+guardan la pública, que no abre nada, y restaurar pide la privada. El cifrado corre en un contenedor sin red de la imagen del
+servidor, así que la máquina no necesita otro programa, y una copia también se abre con `age` en cualquier computadora. Una instalación
+anterior, sin llave pública, sigue cifrando con gpg y la llave de su `.env`, y sus copias se restauran igual.
 
 ## Instalación y landing
 

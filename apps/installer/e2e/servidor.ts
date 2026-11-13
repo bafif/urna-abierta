@@ -11,9 +11,12 @@
  */
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { ageEncrypt } from '../../server/src/age.ts';
 import { EMPTY_SHA256, amzDate, s3Client, signS3 } from '../../server/src/s3.ts';
 import { newSecrets, renderScript, type Secrets } from '../src/settings.ts';
 import { checkSsh, runScript, type SshTarget } from '../src/ssh.ts';
@@ -113,9 +116,8 @@ const fromThePod = (m: { name: string }, password?: string) =>
 const raw = s3Client({ endpoint: bucket.endpoint, bucket: bucket.name, region: bucket.region, accessKeyId: bucket.accessKeyId, secretAccessKey: bucket.secretAccessKey });
 
 /** A backup made by hand, opened by `key`, whose photos would replace the commands and add a service, with that field key. */
-function craftedBackup(key: string, fieldKey: string): string {
+async function craftedBackup(recipient: string, fieldKey: string): Promise<string> {
   const folder = mkdtempSync(join(work, 'trucha-'));
-  const gnupg = mkdtempSync(join(work, 'gnupg-'));
   const stage = join(folder, 'stage');
   mkdirSync(join(stage, 'fotos'), { recursive: true });
   mkdirSync(join(stage, '.config/systemd/user'), { recursive: true });
@@ -126,8 +128,8 @@ function craftedBackup(key: string, fieldKey: string): string {
   writeFileSync(join(folder, 'base.dump'), 'no es una base');
   writeFileSync(join(folder, 'clave-campos'), fieldKey);
   execFileSync('tar', ['-C', folder, '-cf', join(folder, 'copia.tar'), 'base.dump', 'fotos.tar', 'clave-campos']);
-  const file = join(folder, 'copia.tar.gpg');
-  execFileSync('gpg', ['--batch', '--yes', '--quiet', '--pinentry-mode', 'loopback', '--passphrase', key, '--symmetric', '--cipher-algo', 'AES256', '-o', file, join(folder, 'copia.tar')], { env: { ...process.env, GNUPGHOME: gnupg } });
+  const file = join(folder, 'copia.tar.age');
+  await pipeline(Readable.from(ageEncrypt(recipient, createReadStream(join(folder, 'copia.tar')))), createWriteStream(file));
   return file;
 }
 
@@ -228,7 +230,7 @@ record('las dos también salen del servidor, al bucket, cifradas', sent.length =
 const state = attempt('exec', first.name, 'urna', 'estado').said;
 record('«urna estado» dice que está todo bien, y que las copias van al bucket', state.includes('Todo en orden') && state.includes(`bien   las copias también van al bucket ${bucket.name}`) && state.includes('versión: anterior'), state.split('\n'));
 
-const copy = join(work, 'copia.tar.gpg');
+const copy = join(work, 'copia.tar.age');
 podman('cp', `${first.name}:${backup}`, copy);
 
 // A database as installations from before have it, which trusts whoever connects from inside the pod.
@@ -286,25 +288,26 @@ record('con esa copia vuelve a andar la versión anterior, con sus datos y sus s
 // uploaded the usual way, to the home of the user that connects, which the user `urna` cannot read.
 const second = await machine(`${name}-2`, port + 1, port + 3);
 await installOn(second, newSecrets());
-podman('cp', copy, `${second.name}:/home/alpine/copia.tar.gpg`);
-podman('exec', second.name, 'sh', '-c', 'chown alpine:alpine /home/alpine/copia.tar.gpg && chmod 600 /home/alpine/copia.tar.gpg && chmod 750 /home/alpine');
+podman('cp', copy, `${second.name}:/home/alpine/copia.tar.age`);
+podman('exec', second.name, 'sh', '-c', 'chown alpine:alpine /home/alpine/copia.tar.age && chmod 600 /home/alpine/copia.tar.age && chmod 750 /home/alpine');
 const asAlpine = (...args: string[]) => attempt('exec', '--user', 'alpine', '-w', '/home/alpine', second.name, 'doas', 'urna', 'restaurar', ...args);
-const notThere = asAlpine('no-esta.tar.gpg', secrets.recoveryKey);
+const notThere = asAlpine('no-esta.tar.age', secrets.recoveryKey);
 const notBackup = asAlpine('/etc/hostname', secrets.recoveryKey);
-const wrongKey = asAlpine('copia.tar.gpg', 'LLAVE-EQUIVOCADA');
+const wrongKey = asAlpine('copia.tar.age', 'LLAVE-EQUIVOCADA');
 record('dice si el archivo no está, si no es una copia, o si la llave es otra', !notThere.ok && notThere.said.includes('No encuentro el archivo') && !notBackup.ok && notBackup.said.includes('no es una copia de Urna Abierta') && !wrongKey.ok && wrongKey.said.includes('Esa llave no abre esta copia'), [notThere.said, notBackup.said, wrongKey.said]);
 // A backup someone hands over, with the right key, made to write outside the photos: the commands of the server and
 // one of its services, and a field key that runs a command once .env is read. Nothing of it may land.
 const fingerprint = () => podman('exec', second.name, 'sh', '-c', 'cd /opt/urna-abierta && sha256sum urna .env .config/systemd/user/urna-copia.service && ls fotos | wc -l');
 const beforeCrafted = fingerprint();
-const crafted = ['x$(touch /tmp/marca-trucha-env)', 'ab'.repeat(32)].map((fieldKey, index) => {
-  podman('cp', craftedBackup(secrets.recoveryKey, fieldKey), `${second.name}:/home/alpine/trucha-${index}.tar.gpg`);
-  podman('exec', second.name, 'sh', '-c', `chown alpine:alpine /home/alpine/trucha-${index}.tar.gpg && chmod 600 /home/alpine/trucha-${index}.tar.gpg`);
-  return asAlpine(`trucha-${index}.tar.gpg`, secrets.recoveryKey);
-});
+const crafted: ReturnType<typeof asAlpine>[] = [];
+for (const [index, fieldKey] of ['x$(touch /tmp/marca-trucha-env)', 'ab'.repeat(32)].entries()) {
+  podman('cp', await craftedBackup(secrets.backupKey, fieldKey), `${second.name}:/home/alpine/trucha-${index}.tar.age`);
+  podman('exec', second.name, 'sh', '-c', `chown alpine:alpine /home/alpine/trucha-${index}.tar.age && chmod 600 /home/alpine/trucha-${index}.tar.age`);
+  crafted.push(asAlpine(`trucha-${index}.tar.age`, secrets.recoveryKey));
+}
 const marked = attempt('exec', second.name, 'sh', '-c', 'ls /tmp/marca-trucha* /opt/urna-abierta/marca-trucha* 2>/dev/null').said.trim();
 record('no restaura una copia que escribiría fuera de las fotos, y deja todo como estaba', crafted.every((each) => !each.ok && each.said.includes('no restauré nada')) && crafted[1]!.said.includes('fuera de la carpeta de las fotos') && fingerprint() === beforeCrafted && marked === '' && api(second, 'GET', '/health').ok === true, crafted.map((each) => each.said.trim()));
-const restored = asAlpine('copia.tar.gpg', secrets.recoveryKey);
+const restored = asAlpine('copia.tar.age', secrets.recoveryKey);
 record('restaura la copia desde la carpeta de quien entra, con su ruta corta', restored.ok && restored.said.includes('Copia restaurada') && restored.said.includes('URNA_S3_'), restored.said.split('\n'));
 const elections = api(second, 'GET', '/elections', { token }).elections;
 record('en el otro servidor está todo, y las mismas sesiones siguen valiendo', elections?.[0]?.name === 'Simulacro' && elections[0].people === 30 && elections[0].tables === 3, elections?.[0]);

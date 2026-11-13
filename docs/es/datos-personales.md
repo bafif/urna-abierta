@@ -163,7 +163,8 @@ marcas para siempre? Quedan solo los totales. No se puede deshacer.» La elecci�
 
 ## Las copias de seguridad
 
-El servidor hace una copia cada 6 horas, cifrada con la llave de recuperación, y guarda las últimas 28: una semana. Están en el mismo
+El servidor hace una copia cada 6 horas, cifrada con la llave pública de tu instalación, que solo abre la llave de recuperación que
+guardás vos, y guarda las últimas 28: una semana. Están en el mismo
 servidor, en `/opt/urna-abierta/copias`, y la app no las puede borrar. Si configuraste un almacenamiento S3, cada copia va también a la
 carpeta `backups/` del bucket, que guarda las 28 más nuevas (lo explica la [guía de servidores](servidores.md#copias-fuera-del-servidor)).
 Cada copia lleva toda la base, las fotos del disco y la clave que abre las categorías sensibles.

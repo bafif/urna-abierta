@@ -166,7 +166,8 @@ Only totals remain. This cannot be undone.” The election becomes “Finished, 
 
 ## Backups
 
-The server makes a backup every 6 hours, encrypted with the recovery key, and keeps the last 28: one week. They live on the same server,
+The server makes a backup every 6 hours, encrypted with your installation's public key, which only the recovery key you keep opens,
+and keeps the last 28: one week. They live on the same server,
 in `/opt/urna-abierta/copias`, and the app cannot delete them. If you set up S3 storage, each backup also goes to the `backups/` folder
 of the bucket, which keeps the newest 28 (the [servers guide](servers.md#backups-off-the-server) explains it). Each backup carries the
 whole database, the photos on disk and the key that opens the sensitive categories.

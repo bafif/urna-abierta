@@ -44,11 +44,11 @@ links to the official pages.
 - **Data and the law:** free servers are usually outside Argentina. The guide warns about it, and deciding is up to the
   party.
 
-**Pending: backups with a public key.** Today the server encrypts each backup with the recovery key, so it holds it in its `.env` and
-in the cloud's *user data*, which anyone with access to that account can read; the servers guide says how to delete it or change the
-key. The alternative is to encrypt backups to a public key, for instance with `age` or GPG, whose private half is the key shown to the
-party: the server and the cloud would keep only the public half, which opens nothing, and restoring would ask for the private one. It
-changes the backup format, how earlier backups are restored and what the installer does, so it is left to decide.
+**Backups with a public key.** The server encrypts each backup in the age format to the public half of a pair the installer makes;
+the private half is the recovery key, shown to the party and kept only in the access file. The server and the cloud keep the public
+one, which opens nothing, and restoring asks for the private one. The encryption runs in a container of the server's image with no
+network, so the machine needs no other program, and a backup also opens with `age` on any computer. An installation from before, with
+no public key, keeps encrypting with gpg and the key in its `.env`, and its backups restore the same way.
 
 ## Installation and landing page
 

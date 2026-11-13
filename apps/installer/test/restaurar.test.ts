@@ -3,16 +3,21 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { ageKeyPair } from '../../server/src/age.ts';
 
 const script = new URL('../../../deploy/server/urna', import.meta.url).pathname;
 const has = (tool: string) => spawnSync(tool, ['--version']).status === 0;
-const KEY = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE';
+const { identity: KEY, recipient: PUBLIC_KEY } = ageKeyPair();
+/** The key of an installation from before the public key, which encrypted with gpg. */
+const OLD_KEY = 'AAAAA-BBBBB-CCCCC-DDDDD-EEEEE';
+const repo = new URL('../../../', import.meta.url).pathname;
 const FIELD_KEY = 'ab'.repeat(32);
 const PHOTO = 'c'.repeat(64);
 
 /**
  * «urna restaurar» on the machine, with a backup that may come from someone else. Podman is a stand-in that does
- * nothing, so only what the script does on the machine itself runs, with the real gpg and tar.
+ * nothing but open the backup, as the server's image does, so only what the script does on the machine itself runs,
+ * with the real tar, and gpg for a backup from before the public key.
  */
 describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
   const root = mkdtempSync(join(tmpdir(), 'urna-restaurar-'));
@@ -27,6 +32,7 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     'case "$1" in',
     '  unshare) shift; exec "$@" ;;',
     '  inspect) echo 0 ;;',
+    '  run) while [ "$1" != node ]; do shift; done; shift; program=$1; shift; exec node "$PRUEBA_REPO/$program" "$@" ;;',
     '  exec)',
     '    case "$*" in',
     '      *pg_restore*) cat >"$PRUEBA_VOLCADO"; find "$TMPDIR" -type f >"$PRUEBA_VOLCADO.temporales" ;;',
@@ -39,7 +45,7 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
   afterAll(() => rmSync(root, { recursive: true, force: true }));
   let count = 0;
   // What it says is checked in Spanish; one test checks the English.
-  const env = { ...process.env, GNUPGHOME: gnupg, PATH: `${bin}:${process.env.PATH}`, URNA_HEALTH_URL: 'file:///etc/hostname', URNA_IDIOMA: 'es' };
+  const env = { ...process.env, PRUEBA_REPO: repo, GNUPGHOME: gnupg, PATH: `${bin}:${process.env.PATH}`, URNA_HEALTH_URL: 'file:///etc/hostname', URNA_IDIOMA: 'es' };
 
   /** A server as the installation leaves it, with a photo of its own. */
   function server() {
@@ -47,13 +53,13 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     mkdirSync(join(home, 'fotos'), { recursive: true });
     mkdirSync(join(home, '.config/systemd/user'), { recursive: true });
     copyFileSync(script, join(home, 'urna'));
-    writeFileSync(join(home, '.env'), ['POSTGRES_PASSWORD=inventada', `URNA_FIELD_KEY=${'0'.repeat(64)}`, `URNA_BACKUP_KEY=${KEY}`, 'URNA_SITE=https://192.0.2.10', 'URNA_CERT=ip', 'URNA_IMAGE_SERVER=localhost/urna-server:v1', 'URNA_IMAGE_WEB=localhost/urna-web:v1', 'URNA_IMAGE_DB=localhost/postgres:18', ''].join('\n'), { mode: 0o600 });
+    writeFileSync(join(home, '.env'), ['POSTGRES_PASSWORD=inventada', `URNA_FIELD_KEY=${'0'.repeat(64)}`, `URNA_BACKUP_PUBLIC_KEY=${PUBLIC_KEY}`, 'URNA_SITE=https://192.0.2.10', 'URNA_CERT=ip', 'URNA_IMAGE_SERVER=localhost/urna-server:v1', 'URNA_IMAGE_WEB=localhost/urna-web:v1', 'URNA_IMAGE_DB=localhost/postgres:18', ''].join('\n'), { mode: 0o600 });
     writeFileSync(join(home, 'fotos', 'propia'), 'foto de antes');
     const temporary = join(root, `tmp-${count}`);
     mkdirSync(temporary);
     const dump = join(root, `volcado-${count}`);
-    const restore = (file: string, more: Record<string, string> = {}) => {
-      const done = spawnSync('sh', [join(home, 'urna'), 'restaurar', file, KEY], { env: { ...env, URNA_HOME: home, TMPDIR: temporary, PRUEBA_VOLCADO: dump, ...more }, encoding: 'utf8' });
+    const restore = (file: string, more: Record<string, string> = {}, key = KEY) => {
+      const done = spawnSync('sh', [join(home, 'urna'), 'restaurar', file, key], { env: { ...env, URNA_HOME: home, TMPDIR: temporary, PRUEBA_VOLCADO: dump, ...more }, encoding: 'utf8' });
       return { ok: done.status === 0, said: `${done.stdout}${done.stderr}` };
     };
     const untouched = () =>
@@ -65,7 +71,7 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
   }
 
   /** A backup: its files as given, and fotos.tar made from what `photos` leaves in a folder. */
-  function backup({ fieldKey = FIELD_KEY, photos = (_stage: string) => undefined as void, outer = (_payload: string) => [] as string[], leave = [] as string[] } = {}): string {
+  function backup({ fieldKey = FIELD_KEY, photos = (_stage: string) => undefined as void, outer = (_payload: string) => [] as string[], leave = [] as string[], gpg = false } = {}): string {
     const payload = mkdtempSync(join(root, 'copia-'));
     const stage = join(payload, 'stage');
     mkdirSync(join(stage, 'fotos'), { recursive: true });
@@ -76,8 +82,14 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     writeFileSync(join(payload, 'clave-campos'), fieldKey);
     const members = [...['base.dump', 'fotos.tar', 'clave-campos'].filter((member) => !leave.includes(member)), ...outer(payload)];
     execFileSync('tar', ['-C', payload, '-cf', join(payload, 'copia.tar'), ...members]);
-    const file = join(payload, 'copia.tar.gpg');
-    execFileSync('gpg', ['--batch', '--yes', '--quiet', '--pinentry-mode', 'loopback', '--passphrase', KEY, '--symmetric', '--cipher-algo', 'AES256', '-o', file, join(payload, 'copia.tar')], { env });
+    if (gpg) {
+      const file = join(payload, 'copia.tar.gpg');
+      execFileSync('gpg', ['--batch', '--yes', '--quiet', '--pinentry-mode', 'loopback', '--passphrase', OLD_KEY, '--symmetric', '--cipher-algo', 'AES256', '-o', file, join(payload, 'copia.tar')], { env });
+      return file;
+    }
+    // As «urna copia» does it: to the public key, with the program of the server's image.
+    const file = join(payload, 'copia.tar.age');
+    writeFileSync(file, execFileSync('node', [join(repo, 'apps/server/src/backup-key.ts'), 'cifrar', PUBLIC_KEY], { input: readFileSync(join(payload, 'copia.tar')) }));
     return file;
   }
 
@@ -88,6 +100,21 @@ describe.skipIf(!has('gpg') || !has('tar'))('restoring a backup', () => {
     expect(readFileSync(join(home, '.env'), 'utf8')).toContain(`URNA_FIELD_KEY=${FIELD_KEY}\n`);
     expect(readFileSync(join(home, 'fotos', PHOTO), 'utf8')).toBe('foto de la copia');
     expect(existsSync(join(home, 'fotos', 'propia'))).toBe(false);
+  });
+
+  it('another key does not open it, and says which one does', () => {
+    const { restore, untouched } = server();
+    for (const key of [ageKeyPair().identity, OLD_KEY]) {
+      const done = restore(backup(), {}, key);
+      expect([done.ok, done.said.includes('Esa llave no abre esta copia'), done.said.includes('AGE-SECRET-KEY-1'), untouched()]).toEqual([false, true, true, true]);
+    }
+  });
+
+  it('a backup from before the public key, made with gpg, still opens with its key', () => {
+    const { home, restore } = server();
+    expect(restore(backup({ gpg: true }), {}, OLD_KEY).said).toContain('Copia restaurada');
+    expect(readFileSync(join(home, 'fotos', PHOTO), 'utf8')).toBe('foto de la copia');
+    expect(restore(backup({ gpg: true }), {}, 'OTRA-LLAVE').said).toContain('Esa llave no abre esta copia');
   });
 
   it('says the same in English when the server is in English', () => {

@@ -7,11 +7,11 @@ import { s3Client, type S3Client } from './s3.ts';
  * the newest, as many as the server keeps. «urna copia» runs it inside the server container, which already has the
  * bucket's keys:
  *
- *   node apps/server/src/backup-upload.ts /copias/urna-20270406-063000.tar.gpg 28
+ *   node apps/server/src/backup-upload.ts /copias/urna-20270406-063000.tar.age 28
  *
- * The backup is already encrypted with the recovery key: the provider keeps something it cannot open.
+ * The backup is already encrypted to the public key: the provider keeps something it cannot open.
  */
-const NAME = /^urna-\d{8}-\d{6}\.tar\.gpg$/;
+const NAME = /^urna-\d{8}-\d{6}\.tar\.(age|gpg)$/;
 
 /** What it says ends up in what «urna copia» says, so it goes in the language «urna» passes as URNA_IDIOMA. */
 const say = (es: string, en: string): string => (process.env.URNA_IDIOMA === 'en' ? en : es);

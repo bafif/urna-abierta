@@ -8,6 +8,7 @@ import { oracleCloud, signOracle } from '../src/clouds/oracle.ts';
 import { CloudFailure, createInCloud, uploadTheme, waitForHealth } from '../src/job.ts';
 import { newSecrets, renderScript, siteFor, withoutComments } from '../src/settings.ts';
 import { installerTexts } from './texts.ts';
+import { ageRecipientOf } from '../../server/src/age.ts';
 
 const noWait = async () => undefined;
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
@@ -19,7 +20,9 @@ describe('the script that installs a server', () => {
     const script = renderScript(settings);
     expect(script.startsWith('#!/bin/sh\n')).toBe(true);
     expect(script).toContain('URNA_SITE=https://203.0.113.24');
-    expect(script).toContain(settings.secrets.recoveryKey);
+    // The server gets what encrypts the backups, never what opens them.
+    expect(script).toContain(`URNA_BACKUP_PUBLIC_KEY=${settings.secrets.backupKey}`);
+    expect(script).not.toContain(settings.secrets.recoveryKey);
     expect(Buffer.byteLength(script)).toBeLessThan(16 * 1024);
   });
 
@@ -72,7 +75,8 @@ describe('the script that installs a server', () => {
     expect(installer).toMatch(/run_as_urna "\$home\/urna" arrancar \|\| answered=\$\?\ncase "\$answered" in\n  0\) say "ready \$URNA_SITE" ;;\n  3\) say "still_waiting \$URNA_SITE" ;;\n  \*\) exit 1 ;;\n/);
     expect(urna).toMatch(/\[ "\$answered" = 2 \] \|\| first_backup\n/);
     // A backup is only one under its own name once it is whole.
-    expect(urna).toContain('mv "$partial" "$home/copias/urna-$stamp.tar.gpg"');
+    expect(urna).toContain('partial="$home/copias/$name.parcial"');
+    expect(urna).toContain('mv "$partial" "$home/copias/$name"');
   });
 
   it('leaves out comment lines, but keeps the top block and what goes inside files', () => {
@@ -99,9 +103,10 @@ describe('the script that installs a server', () => {
     expect(() => renderScript({ ...settings, site: 'https://x$(reboot)' })).toThrow(/unsafe/);
   });
 
-  it('makes keys that are long and hard to confuse', () => {
+  it('makes a new pair of backup keys each time, the one that opens and the one that encrypts', () => {
     const a = newSecrets();
-    expect(a.recoveryKey).toMatch(/^[A-HJKMNP-Z2-9]{5}(-[A-HJKMNP-Z2-9]{5}){4}$/);
+    expect(a.recoveryKey).toMatch(/^AGE-SECRET-KEY-1[A-Z0-9]{58}$/);
+    expect(a.backupKey).toBe(ageRecipientOf(a.recoveryKey));
     expect(a.recoveryKey).not.toBe(newSecrets().recoveryKey);
   });
 
