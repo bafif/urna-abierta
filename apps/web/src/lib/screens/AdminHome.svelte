@@ -11,19 +11,24 @@
   import { app } from '../app.svelte.ts';
 
   const TEAM_SKIPPED = 'urna-abierta-equipo-despues';
+  const LONE_SEEN = 'urna-abierta-coordinacion-otro-aparato';
 
   let elections = $state.raw<ElectionSummary[] | null>(null);
   let people = $state(0);
+  /** How many have «Coordinar conmigo»: with only one, losing that access leaves the party out of its own election. */
+  let coordinators = $state(0);
+  let loneSeen = $state(localStorage.getItem(LONE_SEEN) !== null);
   let problem = $state(false);
 
   onMount(async () => {
     try {
       const [listed, team] = await Promise.all([
         session.api<{ elections: ElectionSummary[] }>('/elections'),
-        session.allows('users.manage') ? session.api<{ users: unknown[] }>('/users') : { users: [] },
+        session.allows('users.manage') ? session.api<{ users: { roles: { role: string }[] }[] }>('/users') : { users: [] },
       ]);
       elections = listed.elections;
       people = team.users.length;
+      coordinators = team.users.filter((user) => user.roles.some((task) => task.role === 'coordinacion')).length;
       await session.refresh();
     } catch {
       problem = true;
@@ -78,6 +83,14 @@
         </button>
       {/if}
     {/each}
+    {#if coordinators === 1 && !loneSeen}
+      <div class="tarjeta" data-testid="lone-coordinator">
+        <strong>{t('admin.lone')}</strong>
+        <span>{t('admin.lone.text')}</span>
+        <button class="enlace" onclick={() => nav.go('team')}>{t('admin.team')}</button>
+        <button class="enlace" onclick={() => { localStorage.setItem(LONE_SEEN, '1'); loneSeen = true; }}>{t('admin.lone.done')}</button>
+      </div>
+    {/if}
     <div class="tarjetas">
       {#each elections as election (election.id)}
         <button class="tarjeta eleccion" class:apagada={['cerrada', 'purgada'].includes(election.status)} data-testid="election" onclick={() => nav.go('election', { id: election.id })}>

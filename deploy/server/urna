@@ -9,6 +9,7 @@
 #   urna actualizar [versión]          makes a backup and moves to the newest version, or to the one given
 #   urna reiniciar           creates the containers again with what .env says, keeping the data
 #   urna direccion <ip o dominio>      changes the address of the site
+#   urna invitar ["nombre"]  a new invitation for someone with «Coordinar conmigo», or someone new with that task
 #   urna alpine              moves the system to the newest version of Alpine, after a backup (as root)
 #
 # It answers in Spanish or in English: «urna --idioma en estado» chooses for one run (see language below).
@@ -492,6 +493,28 @@ status() {
   return "$problems"
 }
 
+# The way back in when nobody with «Coordinar conmigo» can get in. Whoever can run this can already read the whole
+# database, so it gives them nothing new; it goes in the log. The server prints the invitation on its last line.
+invite() {
+  podman container exists "$pod-server" || { t 'El servidor no está andando: corré «urna arrancar».' 'The server is not running: run “urna arrancar”.' >&2; exit 1; }
+  code=0
+  answer=$(podman exec -e URNA_IDIOMA="$lang" "$pod-server" node apps/server/src/invite-from-server.ts "$*") || code=$?
+  case $code in
+    0)
+      printf '%s\n' "$answer" | sed '$d'
+      echo
+      printf '  %s/#invitacion=%s\n' "${URNA_SITE%/}" "$(printf '%s\n' "$answer" | tail -n 1)"
+      echo
+      t 'Abrila en el teléfono de esa persona, o mandásela por un medio en el que confíes: con ella entra cualquiera.' 'Open it on that person'"'"'s phone, or send it through a channel you trust: anyone gets in with it.'
+      ;;
+    3)
+      printf '%s\n' "$answer"
+      t 'Para darle una invitación nueva a una de esas personas, o sumar a alguien nuevo con esa tarea: urna invitar "nombre"' 'To give one of them a new invitation, or to add someone new with that task: urna invitar "name"'
+      ;;
+    *) exit 1 ;;
+  esac
+}
+
 usage() {
   if [ "$lang" = es ]; then
     cat <<'EOF'
@@ -503,6 +526,7 @@ urna restaurar <archivo> <llave>   reemplaza los datos por los de una copia
 urna actualizar [versión]          hace una copia y pasa a la última versión, o a la que se pida
 urna reiniciar           vuelve a crear los contenedores con lo que dice .env, sin tocar los datos
 urna direccion <ip o dominio>      cambia la dirección del sitio
+urna invitar ["nombre"]  una invitación nueva para alguien con «Coordinar conmigo», o alguien nuevo con esa tarea
 urna alpine              pasa el sistema a la última versión de Alpine, después de una copia (como root)
 
 Con --idioma en o --idioma es antes del comando, contesta en ese idioma.
@@ -517,6 +541,7 @@ urna restaurar <file> <key>        replaces the data with a backup
 urna actualizar [version]          makes a backup and moves to the newest version, or to the one given
 urna reiniciar           creates the containers again with what .env says, keeping the data
 urna direccion <ip or domain>      changes the address of the site
+urna invitar ["name"]    a new invitation for someone with “Coordinate with me”, or someone new with that task
 urna alpine              moves the system to the newest version of Alpine, after a backup (as root)
 
 With --idioma es or --idioma en before the command, it answers in that language.
@@ -560,6 +585,7 @@ case "${1:-estado}" in
     URNA_SITE=$site URNA_CERT=$cert start
     t "Ahora está en $site. Cada fiscal va a tener que volver a preparar la mesa." "It is now at $site. Every poll watcher will have to prepare their table again."
     ;;
+  invitar) shift; invite "$@" ;;
   estado) status ;;
   *) usage; exit 2 ;;
 esac

@@ -108,7 +108,14 @@ sudo urna copia       # makes an encrypted backup now
 sudo urna actualizar  # makes a backup and moves to the latest version
 sudo urna reiniciar   # creates the containers again with what /opt/urna-abierta/.env says, keeping the data
 sudo urna alpine      # on Alpine: makes a backup and moves to its new version
+sudo urna invitar "Laura Méndez"   # if nobody in coordination can get into the app: see below
 ```
+
+If the only person with “Coordinate with me” loses their phone or their browser's data is wiped, `sudo urna invitar` on its own says
+who has that task. With the name of one of them, it gives them a new invitation, closes their other accesses (the lost phone's too, in
+less than a minute) and lets them set up the second step again. With another name, it adds that person with the task. The invitation
+works only once, expires in 14 days and goes in the log. Whoever gets into the server can already read the whole database, so this
+gives them nothing new.
 
 What was running comes back by itself after a reboot.
 

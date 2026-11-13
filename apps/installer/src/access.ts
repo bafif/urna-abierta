@@ -35,6 +35,7 @@ export function readme(access: Access, language: 'es' | 'en'): string {
         `   ${login}`,
         '   En macOS y Linux, la primera vez escribí antes: chmod 600 urna-abierta.key',
         '3. Adentro: sudo urna estado · sudo urna actualizar · sudo urna restaurar',
+        '4. Si nadie de coordinación puede entrar a la app: sudo urna invitar "tu nombre" da una invitación nueva y cierra los otros accesos.',
       ]
     : [
         'URNA ABIERTA · ACCESS TO YOUR SERVER',
@@ -52,6 +53,7 @@ export function readme(access: Access, language: 'es' | 'en'): string {
         `   ${login}`,
         '   On macOS and Linux, the first time type this before: chmod 600 urna-abierta.key',
         '3. Inside: sudo urna estado · sudo urna actualizar · sudo urna restaurar',
+        '4. If nobody in coordination can get into the app: sudo urna invitar "your name" gives a new invitation and closes the other accesses.',
       ];
   // Windows' Notepad also reads plain line ends, but older ones did not.
   return `${lines.join('\r\n')}\r\n`;

@@ -8,7 +8,7 @@ import { rollRevision, tableRoll } from './routes-sync.ts';
 
 /** The theme chosen when installing is the one everyone sees until the party says otherwise. */
 const defaultParty = () => ({ name: '', theme: process.env.URNA_TEMA ?? 'aula' });
-const INVITATION_DAYS = 14;
+export const INVITATION_DAYS = 14;
 const GUESSES_ALLOWED = 10;
 const GUESS_WINDOW_MS = 15 * 60_000;
 /** Wrong 8-digit codes from anywhere in that window: guessing one of a hundred million takes far more than this. */

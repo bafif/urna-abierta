@@ -207,6 +207,13 @@ const people = api(first, 'GET', `/elections/${election}/people?q=90000001`, { t
 const noted = api(first, 'PUT', `/elections/${election}/people/${encodeURIComponent(people[0].id)}/semaphore`, { token, body: { category: category.id } });
 record('se puede cargar una elección de verdad', proposed.created === 3 && people.length > 0 && noted.ok === true, { mesas: proposed.created });
 
+// If nobody in coordination can get in, the server gives a way back.
+const coordination = urna(first, 'invitar');
+const invited = urna(first, 'invitar', 'Segunda Coordinadora');
+const link = invited.split('\n').map((line) => line.trim()).find((line) => line.includes('/#invitacion=')) ?? '';
+const backIn = api(first, 'POST', '/auth/redeem', { body: { token: link.split('#invitacion=')[1] ?? '' } });
+record('«urna invitar» dice quién coordina y suma a otra persona con un link que sirve para entrar', coordination.includes('Con «Coordinar conmigo»') && link.startsWith('https://') && typeof backIn.token === 'string', invited.split('\n').filter((line) => !line.includes('#invitacion=')));
+
 const backup = urna(first, 'copia').split('\n').at(-1)!;
 const backupName = backup.split('/').pop()!;
 const encrypted = podman('exec', first.name, 'head', '-c', '2000000', backup);

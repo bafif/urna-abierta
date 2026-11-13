@@ -241,7 +241,8 @@ No le digas a nadie que siga igual. Ese aviso puede ser alguien en el medio, y l
   app instalada.
 - **«Ese código no es»** al confirmar con la app de códigos: casi siempre es la hora del teléfono. Que la ponga automática.
 - **Perdiste tu propio acceso:** otra persona con «Coordinar conmigo» te manda una invitación nueva. Si no hay nadie más con esa tarea,
-  desde la app no hay forma de volver a entrar.
+  entrá al servidor y corré `sudo urna invitar "tu nombre"` (detalle en la [guía de servidores](servidores.md#mantenerlo)). Para no
+  llegar a eso, sumá a otra persona de coordinación, o entrá también desde tu teléfono.
 
 ## Límites de esta versión
 

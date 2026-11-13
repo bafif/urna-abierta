@@ -107,7 +107,14 @@ sudo urna copia       # hace una copia cifrada ahora
 sudo urna actualizar  # hace una copia y pasa a la última versión
 sudo urna reiniciar   # vuelve a crear los contenedores con lo que dice /opt/urna-abierta/.env, sin borrar datos
 sudo urna alpine      # en Alpine: hace una copia y pasa a su versión nueva
+sudo urna invitar "Laura Méndez"   # si nadie de coordinación puede entrar a la app: ver abajo
 ```
+
+Si la única persona con «Coordinar conmigo» pierde el teléfono o se le borran los datos del navegador, `sudo urna invitar` sin nada
+más dice quién tiene esa tarea. Con el nombre de una de esas personas, le da una invitación nueva, cierra sus otros accesos (también el
+del teléfono perdido, en menos de un minuto) y le deja configurar de nuevo el segundo paso. Con otro nombre, suma a esa persona con la
+tarea. La invitación sirve una sola vez, vence en 14 días y queda en el registro. Quien entra al servidor ya puede leer la base entera,
+así que esto no le da nada nuevo.
 
 Lo que estaba andando vuelve solo después de un reinicio.
 

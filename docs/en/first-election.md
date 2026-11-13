@@ -245,8 +245,9 @@ Do not tell anyone to go on anyway. That warning may be someone in the middle, a
   installed app.
 - **“That code is not right”** when confirming with the authenticator app: it is almost always the phone's time. Have them set it to
   automatic.
-- **You lost your own access:** another person with “Coordinate with me” sends you a new invitation. If nobody else has that task, there
-  is no way back in from the app.
+- **You lost your own access:** another person with “Coordinate with me” sends you a new invitation. If nobody else has that task, get
+  into the server and run `sudo urna invitar "your name"` (details in the [servers guide](servers.md#maintaining-it)). So as not to get
+  there, add someone else to coordination, or get in from your phone too.
 
 ## Limits of this version
 

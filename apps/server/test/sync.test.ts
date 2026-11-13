@@ -10,6 +10,7 @@ import { forgetActors, totpCode } from '../src/actor.ts';
 import { buildApp, migrate, seedDemo } from '../src/app.ts';
 import { clock } from '../src/clock.ts';
 import { eraseElector } from '../src/routes-work.ts';
+import { inviteFromServer } from '../src/invite-from-server.ts';
 import { diskPhotoStore, photoStoreFromEnv, PhotoStoreUnavailable, s3PhotoStore, type PhotoStore } from '../src/photo-store.ts';
 import { fakeS3 } from './fake-s3.ts';
 
@@ -544,6 +545,23 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect((await call('jefe', 'POST', `/api/incidents/${alert.id}/resolve`)).statusCode).toBe(200);
       expect((await call('jefe', 'GET', `/api/tables/${table}/detail`)).json().incidents).toEqual([]);
       expect((await panel()).incidents).toEqual([]);
+    });
+
+    it('«urna invitar» lets coordination back in: the lost phone stops working, and someone new can get the task', async () => {
+      expect(await inviteFromServer(pool)).toEqual({ kind: 'list', names: ['Coordinación'] });
+      const again = await inviteFromServer(pool, '  coordinación ');
+      expect(again).toMatchObject({ kind: 'again', name: 'Coordinación', days: 14 });
+      forgetActors();
+      expect((await call('coordinacion', 'GET', '/api/me')).statusCode).toBe(401);
+      tokens.coordinacion = await redeem((again as { token: string }).token);
+      expect((await call('coordinacion', 'GET', '/api/elections')).statusCode).toBe(200);
+      const added = await inviteFromServer(pool, 'Nueva Coordinadora');
+      expect(added).toMatchObject({ kind: 'new', name: 'Nueva Coordinadora' });
+      tokens.nueva = await redeem((added as { token: string }).token);
+      expect((await call('nueva', 'GET', '/api/me')).json().roles).toContain('coordinacion');
+      expect(await inviteFromServer(pool)).toEqual({ kind: 'list', names: ['Coordinación', 'Nueva Coordinadora'] });
+      const logged = (await pool.query(`SELECT action, user_id FROM audit_log WHERE action LIKE 'server.%' ORDER BY id DESC LIMIT 2`)).rows;
+      expect(logged).toEqual([{ action: 'server.invited_new', user_id: null }, { action: 'server.invited_again', user_id: null }]);
     });
 
     it('the plan B goes to someone with a phone: the chief of the table, one of the whole election, then coordination', async () => {
