@@ -5,18 +5,29 @@
 Antes de usar Urna Abierta en una elección, hacé un simulacro con personas de verdad y datos inventados. Cada uno de estos puntos es algo
 que una prueba automática no puede contestar.
 
-Hace falta: un servidor instalado, un padrón inventado, y al menos seis personas con sus propios teléfonos, entre ellas dos que no hayan
-visto nunca la app. Reservá dos horas.
+Hace falta: un padrón inventado, y al menos seis personas con sus propios teléfonos, entre ellas dos que no hayan visto nunca la app.
+Reservá dos horas.
+
+Se hace dos veces, siempre con el padrón inventado: nunca con datos reales.
+
+1. **Primer ensayo, en tu computadora.** En el instalador, «Probar en esta computadora» con «También desde los teléfonos», que abre una
+   dirección para los teléfonos por un túnel de Cloudflare. Se arma en minutos, sin cuenta en ninguna nube. No prueba la nube, el
+   certificado ni el desastre, y si cerrás el instalador la dirección cambia y todos vuelven a preparar la mesa: saltá lo que dice
+   «solo en el segundo».
+2. **Segundo ensayo, en un servidor gratuito.** En el instalador, «Crear un servidor nuevo» en Oracle Cloud. Es el que prueba la
+   nube, el certificado para la dirección y el desastre de verdad. Hace falta una cuenta de Oracle, y preparar la máquina puede
+   tardar media hora o más.
 
 ## Preparar
 
-- [ ] Instalá en un servidor nuevo, con el instalador. Anotá cuánto tardó.
+- [ ] Instalá con el instalador, como dice arriba para cada ensayo. Anotá cuánto tardó, y guardá el archivo de acceso.
 - [ ] Armá el padrón inventado: `node deploy/padron-inventado.mjs 350 > padron.csv`. No uses `deploy/serve.sh`, que es una base de prueba.
 - [ ] Creá la elección completa desde la app: partido, equipo, días, listas, padrón, mesas.
 - [ ] Corregí lo armado: mové el corte de una mesa por apellido, pasá a una persona sola a otra mesa y revisá las filas dudosas.
 - [ ] En **Cambiar los datos**, poné el horario de votación. Desde la ficha de un fiscal, dale un turno, una hora de llegada y un punto de
       encuentro, y mirá el **Cronograma**: ¿se entiende impreso?
 - [ ] Mandá las invitaciones por el medio que uses de verdad.
+- [ ] El día anterior, en **Fiscales** y en **Ver cómo va** del jefe: ¿se ve quién todavía no entró y quién no preparó la mesa?
 
 ## Primer uso
 
@@ -34,8 +45,9 @@ visto nunca la app. Reservá dos horas.
 - [ ] Reinicien un teléfono sin señal: tiene que seguir todo.
 - [ ] Alguien manda un aviso sin señal: ¿entiende qué hacer? ¿Llama?
 - [ ] Vuelve la señal. El jefe de distrito ve el aviso, y lo resuelve.
+- [ ] Con el jefe en otra pantalla de la app, como el detalle de una mesa o el cronograma, un fiscal manda otro aviso: ¿suena y vibra?
 - [ ] Una mesa queda sin señal media hora: el jefe tiene que verla como «sin datos».
-- [ ] Apagá el servidor 10 minutos en medio de la votación, y volvelo a prender. Nadie tendría que notarlo, salvo por lo que falta enviar.
+- [ ] Solo en el segundo: apagá el servidor 10 minutos en medio de la votación, y volvelo a prender. Nadie tendría que notarlo, salvo por lo que falta enviar.
 
 ## Cierre
 
@@ -50,14 +62,17 @@ visto nunca la app. Reservá dos horas.
 
 ## Recuperarse de un desastre
 
-Lo más importante de todo el simulacro.
+Lo más importante de todo el simulacro. Solo en el segundo.
 
 - [ ] Bajá una copia de seguridad desde la app.
 - [ ] Borrá el servidor, de verdad.
-- [ ] Instalá uno nuevo y restaurá la copia con la llave de recuperación.
+- [ ] Instalá uno nuevo y restaurá la copia con la llave de recuperación del archivo de acceso, la que empieza con `AGE-SECRET-KEY-1`:
+      el servidor no la tiene.
 - [ ] Comprobá que estén la elección, los tachados, las fotos y los permisos. Medí cuánto tardó todo: ese es tu tiempo real de
       recuperación.
 - [ ] Si la dirección cambió, cada fiscal tiene que volver a preparar la mesa. Medí cuánto tarda eso con todo el equipo.
+- [ ] La persona de coordinación pierde su acceso: borrá los datos del navegador de su teléfono. Volvé a entrar con
+      `sudo urna invitar "su nombre"` desde el servidor, y comprobá que el acceso viejo ya no sirva.
 
 ## Ley y seguridad
 

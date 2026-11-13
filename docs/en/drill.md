@@ -5,18 +5,29 @@
 Before using Urna Abierta in an election, run a drill with real people and invented data. Each of these points is something an automated
 test cannot answer.
 
-You need: an installed server, an invented roll, and at least six people with their own phones, two of whom have never seen the app.
-Set aside two hours.
+You need: an invented roll, and at least six people with their own phones, two of whom have never seen the app. Set aside two hours.
+
+It is done twice, always with the invented roll: never with real data.
+
+1. **First run, on your computer.** In the installer, “Try it on this computer” with “From phones too”, which opens an address for
+   phones through a Cloudflare tunnel. It is ready in minutes, with no account in any cloud. It does not test the cloud, the
+   certificate or the disaster, and if you close the installer the address changes and everyone prepares their table again: skip
+   what says “only in the second”.
+2. **Second run, on a free server.** In the installer, “Create a new server” on Oracle Cloud. This one tests the cloud, the
+   certificate for the address and the disaster for real. It needs an Oracle account, and preparing the machine may take half an hour
+   or more.
 
 ## Prepare
 
-- [ ] Install on a new server, with the installer. Note how long it took.
+- [ ] Install with the installer, as said above for each run. Note how long it took, and keep the access file.
 - [ ] Build the invented roll: `node deploy/padron-inventado.mjs 350 > roll.csv`. Do not use `deploy/serve.sh`, which is a test database.
 - [ ] Create the whole election from the app: party, team, days, lists, roll, tables.
 - [ ] Correct what was set up: move where a table ends by surname, move one person alone to another table, and review the doubtful rows.
 - [ ] In **Change the details**, set the voting hours. From a poll watcher's card, give them a shift, an arrival time and a meeting point,
       and look at the **Schedule**: does it read well printed?
 - [ ] Send the invitations through the channel you actually use.
+- [ ] The day before, in **Poll watchers** and in the chief's **See how it goes**: can you see who has not joined yet and who has not
+      prepared the table?
 
 ## First use
 
@@ -34,8 +45,10 @@ Set aside two hours.
 - [ ] Reboot a phone with no signal: everything has to still be there.
 - [ ] Someone sends an alert with no signal: do they understand what to do? Do they call?
 - [ ] Signal returns. The district chief sees the alert and resolves it.
+- [ ] With the chief on another screen of the app, such as a table's detail or the schedule, a poll watcher sends another alert: does
+      it beep and vibrate?
 - [ ] A table stays with no signal for half an hour: the chief has to see it as "no data".
-- [ ] Turn off the server for 10 minutes in the middle of the vote, and turn it back on. Nobody should notice, except for what is left to send.
+- [ ] Only in the second: turn off the server for 10 minutes in the middle of the vote, and turn it back on. Nobody should notice, except for what is left to send.
 
 ## Closing
 
@@ -50,13 +63,16 @@ Set aside two hours.
 
 ## Recovering from a disaster
 
-The most important part of the whole drill.
+The most important part of the whole drill. Only in the second.
 
 - [ ] Download a backup from the app.
 - [ ] Delete the server, for real.
-- [ ] Install a new one and restore the backup with the recovery key.
+- [ ] Install a new one and restore the backup with the recovery key in the access file, the one that starts with `AGE-SECRET-KEY-1`:
+      the server does not have it.
 - [ ] Check that the election, the crossed-out names, the photos and the permissions are there. Measure how long it all took: that is your real recovery time.
 - [ ] If the address changed, each poll watcher has to prepare the table again. Measure how long that takes with the whole team.
+- [ ] The coordination person loses their access: wipe the browser data on their phone. Get back in with
+      `sudo urna invitar "their name"` from the server, and check that the old access no longer works.
 
 ## Law and security
 
