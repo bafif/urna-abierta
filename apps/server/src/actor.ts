@@ -179,6 +179,13 @@ export async function mayInvite(pool: pg.Pool, actor: Actor, userId: string): Pr
 }
 
 /** The tables of an election this person looks after: all, if they run the election, or else those of their districts. */
+/**
+ * For a poll watcher `u` at a table `t`, inside a json_build_object: whether they got in (a device still valid, as in
+ * the team) and whether they prepared that table (they downloaded its roll). Whether they practised stays on the phone.
+ */
+export const FISCAL_READY = `'joined', EXISTS (SELECT 1 FROM devices d WHERE d.user_id = u.id AND d.revoked_at IS NULL),
+  'prepared', EXISTS (SELECT 1 FROM audit_log l WHERE l.user_id = u.id AND l.action = 'roll.downloaded' AND l.target = t.id::text)`;
+
 /** Which tables someone looks after: every one, or those of their districts. */
 export function reach(actor: Actor): { everything: boolean; units: (string | null)[] } {
   const units = actor.assignments.filter((a) => a.role === 'jefe').map((a) => a.unit_id);

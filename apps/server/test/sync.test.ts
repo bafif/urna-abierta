@@ -500,6 +500,21 @@ describe.skipIf(!url)('against a real Postgres', () => {
       expect(detail.incidents).toEqual([]);
     });
 
+    it('before voting, coordination and the chief see which poll watcher got in and who prepared their table', async () => {
+      const ready = async (who: string, path: string) => (await call(who, 'GET', path)).json();
+      const fiscales = async () => (await ready('coordinacion', `/api/elections/${demo.election}/tables`)).tables.find((t: { id: string }) => t.id === table).fiscales;
+      const panel = async () => (await ready('jefe', `/api/district/${demo.election}`)).tables.find((t: { id: string }) => t.id === table).fiscales;
+      // The demo's poll watchers already got in, and nobody downloaded a roll yet.
+      expect((await fiscales()).map((f: { joined: boolean; prepared: boolean }) => [f.joined, f.prepared])).toEqual([[true, false], [true, false]]);
+      expect((await call('fiscal', 'GET', `/api/tables/${table}/bundle`)).statusCode).toBe(200);
+      expect((await fiscales()).map((f: { prepared: boolean }) => f.prepared).sort()).toEqual([false, true]);
+      // The chief's panel sees every one of them, the same way.
+      expect((await panel()).map((f: { prepared: boolean }) => f.prepared).sort()).toEqual([false, true]);
+      // Someone new, invited and not in yet.
+      await call('coordinacion', 'POST', '/api/users', { name: 'Nueva', role: 'fiscal', table });
+      expect((await fiscales()).find((f: { name: string }) => f.name === 'Nueva')).toMatchObject({ joined: false, prepared: false });
+    });
+
     it('the app asks for the open alerts of each election in reach, to ring on any screen', async () => {
       const alerts = async (who: string) => (await call(who, 'GET', '/api/district/alerts')).json().elections;
       // An election with none comes too: the first alert of it rings.
@@ -513,8 +528,8 @@ describe.skipIf(!url)('against a real Postgres', () => {
       const other = randomUUID();
       await pool.query('INSERT INTO units (id, election_id, name) VALUES ($1, $2, $3)', [other, demo.election, 'Sur']);
       const { invitation } = (await call('coordinacion', 'POST', '/api/users', { name: 'Otra jefa', role: 'jefe', unit: other })).json();
-      tokens.otra = await redeem(invitation);
-      expect(await alerts('otra')).toEqual([{ id: demo.election, open: [] }]);
+      tokens.sur = await redeem(invitation);
+      expect(await alerts('sur')).toEqual([{ id: demo.election, open: [] }]);
       expect((await call('jefe', 'POST', `/api/incidents/${alert.id}/resolve`)).statusCode).toBe(200);
       expect(await alerts('jefe')).toEqual([{ id: demo.election, open: [] }]);
     });

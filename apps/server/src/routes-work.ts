@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { foldText } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, canReachTable, erasedId, getSetting, reach, requires, rollKey, seal, tablesInScope, unseal, type Actor } from './actor.ts';
+import { audit, auditView, authenticated, can, canReachTable, erasedId, FISCAL_READY, getSetting, reach, requires, rollKey, seal, tablesInScope, unseal, type Actor } from './actor.ts';
 import { clock } from './clock.ts';
 import { correctElector } from './routes-admin.ts';
 import { forgetStatuses } from './routes-sync.ts';
@@ -160,7 +160,10 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
         `SELECT t.id, t.name, t.place, t.last_seq,
                 t.last_contact AS last_sync,
                 (SELECT json_build_object('name', u.name, 'phone', u.phone) FROM role_assignments a JOIN users u ON u.id = a.user_id
-                 WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR ($2::timestamptz AT TIME ZONE e.time_zone)::date = ANY(a.days)) DESC LIMIT 1) AS fiscal
+                 WHERE a.table_id = t.id AND a.role = 'fiscal' ORDER BY (a.days IS NULL OR ($2::timestamptz AT TIME ZONE e.time_zone)::date = ANY(a.days)) DESC LIMIT 1) AS fiscal,
+                -- Before voting: whether each of its poll watchers got in and prepared it.
+                COALESCE((SELECT json_agg(json_build_object('name', u.name, ${FISCAL_READY}) ORDER BY a.created_at) FROM role_assignments a JOIN users u ON u.id = a.user_id
+                 WHERE a.table_id = t.id AND a.role = 'fiscal' AND u.removed_at IS NULL), '[]') AS fiscales
          FROM polling_tables t JOIN elections e ON e.id = t.election_id WHERE t.id = ANY($1) ORDER BY t.position`,
         [scope, clock.now()],
       ),
@@ -217,7 +220,7 @@ export function workRoutes(app: FastifyInstance, pool: pg.Pool) {
     const sizeOf = new Map(sizes.rows.map((row) => [row.table_id, row.total]));
     const value = {
       tables: tables.rows.map((t) => ({
-        id: t.id, name: t.name, place: t.place, total: sizeOf.get(t.id) ?? 0, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal, ...needsReview(t.id, sizeOf.get(t.id) ?? 0),
+        id: t.id, name: t.name, place: t.place, total: sizeOf.get(t.id) ?? 0, voted: votes.get(t.id) ?? 0, lastSync: t.last_sync, fiscal: t.fiscal, fiscales: t.fiscales, ...needsReview(t.id, sizeOf.get(t.id) ?? 0),
         incidents: incidents.rows.filter((i) => i.table_id === t.id).map((i) => ({ id: i.id, at: i.device_time, kind: i.payload.kind })),
       })),
     };

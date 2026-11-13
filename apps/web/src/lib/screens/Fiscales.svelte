@@ -15,6 +15,9 @@
     days: string[] | null;
     /** Their task at this table, to take them off it. */
     assignment: string;
+    /** They got in, and they prepared this table on their phone. */
+    joined: boolean;
+    prepared: boolean;
   }
   interface Table {
     id: string;
@@ -73,7 +76,11 @@
     return electionDays.filter((day) => !covered.has(day));
   };
   const missing = $derived(tables.filter((table) => missingDays(table).length > 0));
-  const complete = $derived(tables.filter((table) => missingDays(table).length === 0));
+  /** What is missing first: a poll watcher who did not get in, then one who did not prepare the table. */
+  const readiness = (table: Table) => (table.fiscales.some((fiscal) => !fiscal.joined) ? 0 : table.fiscales.some((fiscal) => !fiscal.prepared) ? 1 : 2);
+  const complete = $derived(tables.filter((table) => missingDays(table).length === 0).sort((a, b) => readiness(a) - readiness(b)));
+  const unready = $derived(complete.filter((table) => readiness(table) < 2).length);
+  const fiscalState = (fiscal: Fiscal) => `${fiscal.name} · ${t(fiscal.prepared ? 'fiscales.state.ready' : fiscal.joined ? 'fiscales.state.joined' : 'fiscales.state.out')}`;
   const manyDays = $derived(electionDays.length > 1);
 
   function add(table: Table) {
@@ -231,6 +238,7 @@
 {:else}
   <Pantalla accion="equipo" volver ojo={t('fiscales.eyebrow')} titulo={!loaded ? '' : missing.length ? t('fiscales.missing', { count: missing.length }) : t('fiscales.complete')} bajada={manyDays && loaded ? t('fiscales.days') : ''} desliza>
     {#if done}<p class="resultado bien" role="status" data-testid="fiscal-assigned"><Ic name="tilde" />{done}</p>{/if}
+    {#if unready > 0}<p class="aviso-suave" data-testid="tables-unready">{t('fiscales.unready', { count: unready })}</p>{/if}
     <div class="tarjetas compactas">
       {#each missing as table (table.id)}
         <button class="tarjeta falta" data-testid="table-missing" onclick={() => fill(table)}>
@@ -239,7 +247,7 @@
         </button>
       {/each}
       {#each complete as table (table.id)}
-        <button class="tarjeta fila-mesa" data-testid="table-covered" onclick={() => fill(table)}><strong>{table.name}</strong><span>{table.fiscales.map((fiscal) => fiscal.name).join(', ')}</span></button>
+        <button class="tarjeta fila-mesa" data-testid="table-covered" onclick={() => fill(table)}><strong>{table.name}</strong><span>{table.fiscales.map(fiscalState).join(', ')}</span></button>
       {/each}
     </div>
     {#snippet pie()}

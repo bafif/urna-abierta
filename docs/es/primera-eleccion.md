@@ -120,7 +120,9 @@ Pediles a los fiscales que, uno o dos días antes y con señal:
 - en iPhone, agreguen la app a la pantalla de inicio y entren con el número que les da **Ajustes**, «Instalar en el iPhone». Vale por 15
   minutos y una sola vez.
 
-En «Tu equipo» ves quién «todavía no entró».
+En «Fiscales», cada mesa dice si su fiscal «todavía no entró», si entró y falta que prepare la mesa, o si ya la preparó, con las que
+faltan primero. Cada jefe ve lo mismo para sus mesas en «Ver cómo va» hasta el primer día de votación. Si practicó, no se ve: eso queda
+en su teléfono.
 
 ## 7. El día de la votación
 

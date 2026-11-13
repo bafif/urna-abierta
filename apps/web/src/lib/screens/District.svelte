@@ -26,6 +26,8 @@
     voted: number;
     lastSync: string | null;
     fiscal: { name: string; phone: string | null } | null;
+    /** Every poll watcher of the table: before voting, whether they got in and prepared it. */
+    fiscales: { name: string; joined: boolean; prepared: boolean }[];
     incidents: { id: string; at: string; kind: string }[];
     countedDays: string[];
     envelopesDiffer: boolean;
@@ -126,14 +128,22 @@
   };
   const noTally = (table: Table) => !complete(table) && !table.talliesDiffer && overdue(table);
   const noPhoto = (table: Table) => complete(table) && !table.photo && overdue(table);
+  /** Before the first day of voting, a table whose poll watcher did not prepare it is worth a call. */
+  const beforeVoting = $derived(Boolean(election) && (election!.status === 'preparacion' || (election!.status === 'jornada' && localDay() < (election!.days[0] ?? ''))));
+  /** 0 nobody there, 1 someone did not get in, 2 someone did not prepare it, 3 ready: what is missing comes first. */
+  const readiness = (table: Table) =>
+    table.fiscales.length === 0 ? 0 : table.fiscales.some((fiscal) => !fiscal.joined) ? 1 : table.fiscales.some((fiscal) => !fiscal.prepared) ? 2 : 3;
+  const unprepared = (table: Table) => beforeVoting && readiness(table) < 3;
   const needsSomeone = (table: Table) =>
+    unprepared(table) ||
     table.incidents.length > 0 || table.envelopesDiffer || table.talliesDiffer || table.tallyOverRoll || table.tallyUnknown || silent(table) || (counting && (noTally(table) || noPhoto(table)));
-  const needing = $derived(tables.filter(needsSomeone));
+  // An alert first, as always; the tables to prepare after, the ones missing the most first.
+  const needing = $derived(tables.filter(needsSomeone).sort((a, b) => (a.incidents.length > 0 ? -1 : unprepared(a) ? readiness(a) : 3) - (b.incidents.length > 0 ? -1 : unprepared(b) ? readiness(b) : 3)));
   const fine = $derived(tables.filter((table) => !needsSomeone(table)));
   const done = $derived(tables.filter(complete).length);
   const fineDone = $derived(fine.filter(complete).length);
   const title = $derived(
-    !loaded ? '' : !election ? t('district.noElection') : needing.length > 0 ? t('district.need', { count: needing.length }) : counting && done === tables.length ? t('district.counting.all') : t('district.allGood'),
+    !loaded ? '' : !election ? t('district.noElection') : needing.length > 0 ? t('district.need', { count: needing.length }) : beforeVoting ? t('district.allPrepared') : counting && done === tables.length ? t('district.counting.all') : t('district.allGood'),
   );
 </script>
 
@@ -153,6 +163,9 @@
         {#if table.incidents.length > 0}
           <strong>{t('district.urgent', { table: table.name })}</strong>
           <span>{table.fiscal?.name ?? ''} · {timeAgo(table.incidents[0]!.at)}</span>
+        {:else if unprepared(table)}
+          <strong>{t('district.unprepared', { table: table.name })}</strong>
+          <span>{table.fiscales.length === 0 ? t('fiscales.none') : table.fiscales.filter((fiscal) => !fiscal.prepared).map((fiscal) => `${fiscal.name} · ${t(fiscal.joined ? 'fiscales.state.joined' : 'fiscales.state.out')}`).join(', ')}</span>
         {:else if table.talliesDiffer}
           <strong>{t('district.talliesDiffer', { table: table.name })}</strong>
           <span>{t('district.talliesDiffer.text')}</span>

@@ -120,7 +120,9 @@ Ask poll watchers, one or two days before and with signal, to:
 - on iPhone, add the app to the home screen and get in with the number they get from **Settings**, “Install on the iPhone”. It works for
   15 minutes and only once.
 
-In “Your team” you see who “has not joined yet”.
+In “Poll watchers”, each table says whether its poll watcher “has not joined yet”, joined and still has to prepare the table, or
+already prepared it, with the ones missing something first. Each chief sees the same for their tables in “See how it goes” until the
+first day of voting. Whether they practised does not show: that stays on their phone.
 
 ## 7. Election day
 

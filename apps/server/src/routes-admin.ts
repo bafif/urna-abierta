@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import { BUILT_IN_THEMES, DEFAULT_TIME_ZONE, foldText, MAX_PARTY_THEMES, THEME_ID, isRole, isSecurityProfile, isTimeZone, storedPhone, MAX_ROLL_BYTES, PERMISSIONS, PERMISSIONS_KEPT, readCsvRoll, readPadron, ROLES, SECURITY_PROFILES, stricterProfile, themeProblems, type PadronElector, type PadronRead, type Permission, type Role, type RoleOverrides } from '@urna-abierta/domain';
-import { audit, auditView, authenticated, can, erasedId, forgetActors, getSetting, inTransaction, mayInvite, requires, rollKey, securityProfile, setSetting, tablesInScope, type Actor } from './actor.ts';
+import { audit, auditView, authenticated, can, erasedId, FISCAL_READY, forgetActors, getSetting, inTransaction, mayInvite, requires, rollKey, securityProfile, setSetting, tablesInScope, type Actor } from './actor.ts';
 import { forgetStatuses } from './routes-sync.ts';
 import { addTheme, createInvitation, MAX_THEME_BYTES, themeFits } from './routes-auth.ts';
 
@@ -705,7 +705,7 @@ export function adminRoutes(app: FastifyInstance, pool: pg.Pool) {
       `SELECT t.id, t.name, t.place, t.unit_id, count(x.id)::int AS people,
               (SELECT min(x2.search) FROM electors x2 WHERE x2.table_id = t.id) AS first,
               (SELECT max(x2.search) FROM electors x2 WHERE x2.table_id = t.id) AS last,
-              COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'days', a.days, 'assignment', a.id) ORDER BY a.created_at) FROM role_assignments a JOIN users u ON u.id = a.user_id
+              COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name, 'days', a.days, 'assignment', a.id, ${FISCAL_READY}) ORDER BY a.created_at) FROM role_assignments a JOIN users u ON u.id = a.user_id
                WHERE a.table_id = t.id AND a.role = 'fiscal' AND u.removed_at IS NULL), '[]') AS fiscales
        FROM polling_tables t LEFT JOIN electors x ON x.table_id = t.id
        WHERE t.election_id = $1 GROUP BY t.id ORDER BY t.position`,
