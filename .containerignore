@@ -3,9 +3,9 @@
 **/.svelte-kit
 **/test-results
 **/dist
-.git
-# Work folders of editors and tools can live inside the repo, with files of other users.
-.claude
+# Hidden files and folders at the root: git, and the work folders of editors and tools, which can hold files of
+# other users.
+.*
 # Nothing private goes to a build, wherever it is.
 **/privado
 *.pdf

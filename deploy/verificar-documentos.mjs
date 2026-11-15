@@ -3,7 +3,7 @@
 //
 // The pair of a document: X.en.md next to X.md, or, when the name changes with the language (docs/es/instalacion.md
 // and docs/en/installation.md), the one its [English] or [Español] link names at the top; the two must name each
-// other. CLAUDE.md, licenses and the templates in .github/, which carry both languages inside, are left out.
+// other. What git ignores, licenses and the templates in .github/, which carry both languages inside, are left out.
 //
 // In every .md it also checks that each relative link (Markdown, or an HTML src or href) leads to a file that exists,
 // and to a heading of it when it has an anchor, and that a document does not send its reader to the other language
@@ -29,7 +29,7 @@ const texts = new Map(documents.map((path) => [path, readFileSync(join(root, pat
 
 const leftOut = (path) => {
   const name = posix.basename(path);
-  return path.startsWith('.github/') || name === 'CLAUDE.md' || name.startsWith('LICENSE') || name.startsWith('CHANGELOG');
+  return path.startsWith('.github/') || name.startsWith('LICENSE') || name.startsWith('CHANGELOG');
 };
 
 /** The lines where a link is a link: without code blocks and inline code. */
